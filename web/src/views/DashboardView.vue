@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { dashboardApi } from '@/api'
-import type { DashboardLayout, DashboardRender } from '@/types'
+import type { DashboardRender, DashboardLayout } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
+import DashboardParameterBar from '@/components/DashboardParameterBar.vue'
+import {
+  applyClickToParameterValues,
+  defaultParameterValues,
+  parseClickAction,
+  parseDashboardConfig,
+} from '@/dashboard/config'
 
+const { t } = useI18n()
 const route = useRoute()
 const dashboard = ref<DashboardRender>()
+const parameterValues = ref<Record<string, unknown>>({})
 const loading = ref(false)
 let loadVersion = 0
 let mounted = true
@@ -45,24 +55,54 @@ function chartOption(configJson: string) {
   }
 }
 
-async function load() {
+async function load(forceRefresh = false) {
   const version = ++loadVersion
   loading.value = true
-  dashboard.value = undefined
   try {
-    const data = await dashboardApi.render(String(route.params.id))
+    const data = await dashboardApi.render(String(route.params.id), {
+      forceRefresh,
+      parameterValues: parameterValues.value,
+    })
     if (!mounted || version !== loadVersion) return
     dashboard.value = data
+    const config = parseDashboardConfig(data.configJson)
+    if (!Object.keys(parameterValues.value).length) {
+      parameterValues.value = defaultParameterValues(config.parameters || [])
+    }
   } catch (error) {
     if (!mounted || version !== loadVersion) return
-    ElMessage.error(error instanceof Error ? error.message : '仪表盘加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dashboard.loadFailed'))
   } finally {
     if (mounted && version === loadVersion) loading.value = false
   }
 }
 
-onMounted(load)
-watch(() => route.params.id, load)
+async function applyParameters() {
+  await load(true)
+}
+
+async function onCardClick(cardId: string, label: string) {
+  const card = dashboard.value?.cards.find((item) => String(item.cardId) === cardId)
+  if (!card) return
+  const action = parseClickAction(card.clickActionJson)
+  if (!action?.enabled) return
+  const config = parseDashboardConfig(dashboard.value?.configJson)
+  const parameter = config.parameters?.find((item) => item.id === action.setParameterId)
+  parameterValues.value = applyClickToParameterValues(
+    parameterValues.value,
+    action,
+    label,
+    parameter?.type,
+  )
+  await load(true)
+}
+
+onMounted(() => load(false))
+watch(() => route.params.id, () => {
+  parameterValues.value = {}
+  dashboard.value = undefined
+  load(false)
+})
 onBeforeUnmount(() => {
   mounted = false
   loadVersion++
@@ -72,13 +112,20 @@ onBeforeUnmount(() => {
 <template>
   <div v-loading="loading" class="page dashboard-view">
     <div class="page-header">
-      <h1 class="page-title">{{ dashboard?.name || '仪表盘' }}</h1>
+      <h1 class="page-title">{{ dashboard?.name || t('dashboard.title') }}</h1>
       <div class="toolbar" style="margin:0">
-        <el-button @click="$router.push(`/dashboards/${$route.params.id}/edit`)">编辑</el-button>
-        <el-button @click="$router.push('/')">返回首页</el-button>
+        <el-button @click="load(true)">{{ t('dashboard.refresh') }}</el-button>
+        <el-button @click="$router.push(`/dashboards/${$route.params.id}/edit`)">{{ t('common.edit') }}</el-button>
+        <el-button @click="$router.push('/')">{{ t('dashboard.backHome') }}</el-button>
       </div>
     </div>
-    <el-empty v-if="!loading && dashboard && !dashboard.cards.length" description="该仪表盘暂无卡片" />
+    <DashboardParameterBar
+      v-if="dashboard"
+      v-model="parameterValues"
+      :parameters="parseDashboardConfig(dashboard.configJson).parameters || []"
+      @apply="applyParameters"
+    />
+    <el-empty v-if="!loading && dashboard && !dashboard.cards.length" :description="t('dashboard.noCards')" />
     <div v-if="dashboard?.cards.length" class="dashboard-grid">
       <el-card
         v-for="card in dashboard.cards"
@@ -93,6 +140,8 @@ onBeforeUnmount(() => {
           :type="card.chartType"
           :result="card.result"
           :option="chartOption(card.configJson)"
+          :interactive="!!parseClickAction(card.clickActionJson)?.enabled"
+          @click="onCardClick(String(card.cardId), $event.label)"
         />
       </el-card>
     </div>
@@ -104,7 +153,6 @@ onBeforeUnmount(() => {
 .dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 90px; gap: 16px; }
 .dashboard-card { display: flex; flex-direction: column; overflow: hidden; }
 .dashboard-card :deep(.el-card__body) { flex: 1; min-height: 0; }
-.chart-box { height: 100%; min-height: 220px; }
 @media (max-width: 900px) {
   .dashboard-card { grid-column: 1 / -1 !important; }
 }

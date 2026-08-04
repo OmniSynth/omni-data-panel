@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirmBox } from '@/i18n/dialog'
+import { useI18n } from 'vue-i18n'
 import { roleApi, userApi } from '@/api'
 import type { AdminUser, Id, Permission, Role } from '@/types'
 
+const { t, te } = useI18n()
 const roles = ref<Role[]>([])
 const users = ref<AdminUser[]>([])
 const catalog = ref<Permission[]>([])
@@ -16,11 +19,98 @@ const editingId = ref<Id>()
 const activeRole = ref<Role>()
 const selectedPermissions = ref<string[]>([])
 const updatingUserId = ref('')
+const memberKeyword = ref('')
 const emptyForm = () => ({ code: '', name: '', description: '', enabled: true })
 const form = reactive(emptyForm())
+
 const currentMembers = computed(() => activeRole.value
   ? users.value.filter((user) => user.roleIds.some((id) => String(id) === String(activeRole.value!.id)))
   : [])
+
+const filteredUsers = computed(() => {
+  const q = memberKeyword.value.trim().toLowerCase()
+  if (!q) return users.value
+  return users.value.filter((user) =>
+    user.username.toLowerCase().includes(q) || user.displayName.toLowerCase().includes(q))
+})
+
+const permissionGroups = computed(() => {
+  const map = new Map<string, Permission[]>()
+  for (const permission of catalog.value) {
+    const key = permission.code.includes(':') ? permission.code.split(':')[0]! : 'other'
+    const list = map.get(key)
+    if (list) list.push(permission)
+    else map.set(key, [permission])
+  }
+  return [...map.entries()].map(([key, items]) => ({
+    key,
+    items,
+    codes: items.map((item) => item.code),
+  }))
+})
+
+const catalogNameMap = computed(() =>
+  Object.fromEntries(catalog.value.map((item) => [item.code, item.name])))
+
+function isLockedRole(role: Role) {
+  return role.builtIn || role.code === 'ADMIN'
+}
+
+function memberCount(role: Role) {
+  return users.value.filter((user) =>
+    user.roleIds.some((id) => String(id) === String(role.id))).length
+}
+
+function permissionTooltip(codes: string[]) {
+  return codes.map((code) => catalogNameMap.value[code] || code).join('、')
+}
+
+function groupLabel(key: string) {
+  const i18nKey = `roles.groups.${key}`
+  return te(i18nKey) ? t(i18nKey) : key
+}
+
+function isGroupChecked(codes: string[]) {
+  return codes.length > 0 && codes.every((code) => selectedPermissions.value.includes(code))
+}
+
+function isGroupIndeterminate(codes: string[]) {
+  const selected = codes.filter((code) => selectedPermissions.value.includes(code)).length
+  return selected > 0 && selected < codes.length
+}
+
+function toggleGroup(codes: string[], checked: boolean) {
+  if (checked) {
+    selectedPermissions.value = [...new Set([...selectedPermissions.value, ...codes])]
+  } else {
+    const drop = new Set(codes)
+    selectedPermissions.value = selectedPermissions.value.filter((code) => !drop.has(code))
+  }
+}
+
+function togglePermission(code: string, checked: boolean) {
+  if (checked) {
+    if (!selectedPermissions.value.includes(code)) {
+      selectedPermissions.value = [...selectedPermissions.value, code]
+    }
+  } else {
+    selectedPermissions.value = selectedPermissions.value.filter((item) => item !== code)
+  }
+}
+
+function selectAllPermissions() {
+  selectedPermissions.value = catalog.value.map((item) => item.code)
+}
+
+function clearAllPermissions() {
+  selectedPermissions.value = []
+}
+
+function onRoleAction(command: string, role: Role) {
+  if (command === 'permissions') openPermissions(role)
+  else if (command === 'members') openMembers(role)
+  else if (command === 'delete') removeRole(role)
+}
 
 async function load() {
   loading.value = true
@@ -29,7 +119,7 @@ async function load() {
       roleApi.list(), roleApi.permissions(), userApi.list(),
     ])
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '角色加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('roles.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -48,7 +138,7 @@ function openForm(role?: Role) {
 
 async function saveRole() {
   if (!form.name.trim() || (editingId.value === undefined && !form.code.trim())) {
-    return ElMessage.warning('请填写角色编码和名称')
+    return ElMessage.warning(t('roles.needCodeName'))
   }
   saving.value = true
   try {
@@ -62,10 +152,10 @@ async function saveRole() {
       })
     }
     formVisible.value = false
-    ElMessage.success('角色已保存')
+    ElMessage.success(t('roles.saved'))
     await load()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '角色保存失败')
+    ElMessage.error(error instanceof Error ? error.message : t('roles.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -83,10 +173,10 @@ async function savePermissions() {
   try {
     await roleApi.savePermissions(activeRole.value.id, selectedPermissions.value)
     permissionVisible.value = false
-    ElMessage.success('功能权限已保存')
+    ElMessage.success(t('roles.permsSaved'))
     await load()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '功能权限保存失败')
+    ElMessage.error(error instanceof Error ? error.message : t('roles.permsFailed'))
   } finally {
     saving.value = false
   }
@@ -94,6 +184,7 @@ async function savePermissions() {
 
 function openMembers(role: Role) {
   activeRole.value = role
+  memberKeyword.value = ''
   memberVisible.value = true
 }
 
@@ -112,9 +203,9 @@ async function setMembership(user: AdminUser, selected: boolean) {
       roleIds,
     })
     Object.assign(user, updated)
-    ElMessage.success(selected ? '成员已加入角色' : '成员已移出角色')
+    ElMessage.success(selected ? t('roles.memberAdded') : t('roles.memberRemoved'))
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '成员更新失败')
+    ElMessage.error(error instanceof Error ? error.message : t('roles.memberFailed'))
   } finally {
     updatingUserId.value = ''
   }
@@ -122,12 +213,12 @@ async function setMembership(user: AdminUser, selected: boolean) {
 
 async function removeRole(role: Role) {
   try {
-    await ElMessageBox.confirm(`确认删除角色“${role.name}”？`, '删除确认', { type: 'warning' })
+    await confirmBox(t('roles.deleteConfirm', { name: role.name }), t('common.deleteConfirmTitle'), { type: 'warning' })
     await roleApi.remove(role.id)
-    ElMessage.success('角色已删除')
+    ElMessage.success(t('roles.deleted'))
     await load()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '角色删除失败')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('roles.deleteFailed'))
   }
 }
 
@@ -142,67 +233,143 @@ onMounted(load)
 <template>
   <div class="page">
     <div class="page-header">
-      <h1 class="page-title">角色管理</h1>
-      <el-button type="primary" @click="openForm()">新增角色</el-button>
+      <h1 class="page-title">{{ t('roles.title') }}</h1>
+      <el-button type="primary" @click="openForm()">{{ t('roles.create') }}</el-button>
     </div>
-    <el-table v-loading="loading" :data="roles" empty-text="暂无角色">
-      <el-table-column prop="name" label="名称" />
-      <el-table-column prop="code" label="编码" />
-      <el-table-column prop="description" label="说明" min-width="180" show-overflow-tooltip />
-      <el-table-column label="状态" width="90">
-        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '禁用' }}</el-tag></template>
-      </el-table-column>
-      <el-table-column label="功能权限" min-width="180">
-        <template #default="{ row }">{{ row.permissions.length ? row.permissions.join('、') : '无' }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="260">
+    <el-table v-loading="loading" :data="roles" :empty-text="t('roles.empty')">
+      <el-table-column prop="name" :label="t('common.name')" min-width="120" />
+      <el-table-column prop="code" :label="t('roles.code')" min-width="120" />
+      <el-table-column prop="description" :label="t('roles.remark')" min-width="180" show-overflow-tooltip />
+      <el-table-column :label="t('common.status')" width="90">
         <template #default="{ row }">
-          <el-button link :disabled="row.builtIn || row.code === 'ADMIN'" @click="openForm(row)">编辑</el-button>
-          <el-button link type="primary" :disabled="row.builtIn || row.code === 'ADMIN'" @click="openPermissions(row)">权限</el-button>
-          <el-button link :disabled="row.builtIn || row.code === 'ADMIN'" @click="openMembers(row)">成员</el-button>
-          <el-button link type="danger" :disabled="row.builtIn || row.code === 'ADMIN'" @click="removeRole(row)">删除</el-button>
+          <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? t('common.enabled') : t('common.disabled') }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('roles.featurePerms')" width="110">
+        <template #default="{ row }">
+          <el-tooltip
+            v-if="row.permissions.length"
+            :content="permissionTooltip(row.permissions)"
+            placement="top"
+          >
+            <el-tag type="info">{{ t('roles.permCount', { n: row.permissions.length }) }}</el-tag>
+          </el-tooltip>
+          <span v-else class="muted">{{ t('roles.none') }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('roles.members')" width="90">
+        <template #default="{ row }">{{ memberCount(row) }}</template>
+      </el-table-column>
+      <el-table-column :label="t('common.actions')" width="140" fixed="right">
+        <template #default="{ row }">
+          <el-button link :disabled="isLockedRole(row)" @click="openForm(row)">{{ t('common.edit') }}</el-button>
+          <el-dropdown
+            trigger="click"
+            :disabled="isLockedRole(row)"
+            @command="(command: string) => onRoleAction(command, row)"
+          >
+            <el-button link :disabled="isLockedRole(row)">{{ t('common.more') }}</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="permissions">{{ t('roles.featurePerms') }}</el-dropdown-item>
+                <el-dropdown-item command="members">{{ t('roles.members') }}</el-dropdown-item>
+                <el-dropdown-item divided command="delete">
+                  <span class="danger">{{ t('common.delete') }}</span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
 
     <el-dialog
       v-model="formVisible"
-      :title="editingId === undefined ? '新增角色' : '编辑角色'"
+      :title="editingId === undefined ? t('roles.createTitle') : t('roles.editTitle')"
       width="520px"
       destroy-on-close
       @closed="resetForm"
     >
       <el-form label-width="90px">
-        <el-form-item label="角色编码"><el-input v-model="form.code" :disabled="editingId !== undefined" placeholder="大写字母、数字或下划线" /></el-form-item>
-        <el-form-item label="角色名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="说明"><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="启用"><el-switch v-model="form.enabled" /></el-form-item>
+        <el-form-item :label="t('roles.roleCode')">
+          <el-input v-model="form.code" :disabled="editingId !== undefined" :placeholder="t('roles.codeHint')" />
+        </el-form-item>
+        <el-form-item :label="t('roles.roleName')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="t('roles.remark')">
+          <el-input v-model="form.description" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item :label="t('common.enabled')"><el-switch v-model="form.enabled" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="formVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveRole">保存</el-button>
+        <el-button @click="formVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="saveRole">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="permissionVisible" :title="`功能权限：${activeRole?.name || ''}`" width="620px" destroy-on-close>
-      <el-checkbox-group v-model="selectedPermissions" class="permission-list">
-        <el-checkbox v-for="permission in catalog" :key="permission.id" :value="permission.code">
-          {{ permission.name }}（{{ permission.code }}）
-        </el-checkbox>
-      </el-checkbox-group>
-      <el-empty v-if="!catalog.length" description="暂无功能权限" />
+    <el-dialog
+      v-model="permissionVisible"
+      :title="`${t('roles.featurePermsTitle')}${activeRole?.name || ''}`"
+      width="640px"
+      destroy-on-close
+    >
+      <div v-if="catalog.length" class="perm-toolbar">
+        <span class="perm-summary">{{ t('roles.permSelected', { n: selectedPermissions.length, total: catalog.length }) }}</span>
+        <div class="perm-actions">
+          <el-button link type="primary" @click="selectAllPermissions">{{ t('roles.selectAll') }}</el-button>
+          <el-button link @click="clearAllPermissions">{{ t('roles.clearAll') }}</el-button>
+        </div>
+      </div>
+      <div v-if="catalog.length" class="permission-list">
+        <div v-for="group in permissionGroups" :key="group.key" class="perm-group">
+          <div class="perm-group-head">
+            <el-checkbox
+              :model-value="isGroupChecked(group.codes)"
+              :indeterminate="isGroupIndeterminate(group.codes)"
+              @change="(checked: boolean | string | number) => toggleGroup(group.codes, Boolean(checked))"
+            >
+              {{ groupLabel(group.key) }}
+            </el-checkbox>
+          </div>
+          <div class="perm-group-body">
+            <el-checkbox
+              v-for="permission in group.items"
+              :key="permission.id"
+              :model-value="selectedPermissions.includes(permission.code)"
+              @change="(checked: boolean | string | number) => togglePermission(permission.code, Boolean(checked))"
+            >
+              {{ permission.name }}
+              <span class="perm-code">{{ permission.code }}</span>
+            </el-checkbox>
+          </div>
+        </div>
+      </div>
+      <el-empty v-else :description="t('roles.noFeaturePerms')" />
       <template #footer>
-        <el-button @click="permissionVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="savePermissions">保存</el-button>
+        <el-button @click="permissionVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="savePermissions">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="memberVisible" :title="`成员管理：${activeRole?.name || ''}`" width="700px" destroy-on-close>
-      <el-table :data="users" empty-text="暂无用户">
-        <el-table-column prop="username" label="用户名" />
-        <el-table-column prop="displayName" label="显示名称" />
-        <el-table-column label="当前角色" min-width="180"><template #default="{ row }">{{ row.roles.join('、') }}</template></el-table-column>
-        <el-table-column label="成员" width="100">
+    <el-dialog
+      v-model="memberVisible"
+      :title="`${t('roles.membersTitle')}${activeRole?.name || ''}`"
+      width="700px"
+      destroy-on-close
+      @closed="memberKeyword = ''"
+    >
+      <el-input
+        v-model="memberKeyword"
+        clearable
+        class="member-search"
+        :placeholder="t('roles.memberSearchPlaceholder')"
+      />
+      <el-table :data="filteredUsers" :empty-text="t('roles.noUsers')">
+        <el-table-column prop="username" :label="t('roles.username')" />
+        <el-table-column prop="displayName" :label="t('roles.displayName')" />
+        <el-table-column :label="t('roles.currentRoles')" min-width="180">
+          <template #default="{ row }">{{ row.roles.join('、') }}</template>
+        </el-table-column>
+        <el-table-column :label="t('roles.members')" width="100">
           <template #default="{ row }">
             <el-switch
               :model-value="currentMembers.includes(row)"
@@ -213,11 +380,35 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
-      <template #footer><el-button @click="memberVisible = false">关闭</el-button></template>
+      <template #footer><el-button @click="memberVisible = false">{{ t('common.close') }}</el-button></template>
     </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.permission-list { display: flex; flex-direction: column; gap: 10px; }
+.muted { color: var(--el-text-color-secondary); }
+.danger { color: var(--el-color-danger); }
+.perm-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.perm-summary { color: var(--el-text-color-secondary); font-size: 13px; }
+.perm-actions { display: flex; gap: 4px; }
+.permission-list { display: flex; flex-direction: column; gap: 14px; max-height: 420px; overflow: auto; }
+.perm-group {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.perm-group-head { margin-bottom: 8px; font-weight: 600; }
+.perm-group-body { display: flex; flex-direction: column; gap: 8px; padding-left: 22px; }
+.perm-code {
+  margin-left: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.member-search { margin-bottom: 12px; }
 </style>

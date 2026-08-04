@@ -1,6 +1,6 @@
 # Omni Data Panel
 
-Omni Data Panel 是基于 Spring Boot 3、Vue 3、Vite 6 与 ECharts 6 的 Metabase 式数据分析平台：集合组织内容、首页续看、模型/指标、问题与仪表盘、废纸篓、公开分享与嵌入，并保留多角色 RBAC 与数据源/仪表盘角色授权。
+Omni Data Panel 是基于 Spring Boot 3、Vue 3、Vite 6 与 ECharts 6 的 Metabase 式数据分析平台：集合组织内容、首页续看、模型/指标、图表与仪表盘、废纸篓、公开分享与嵌入，并保留多角色 RBAC 与数据源/仪表盘角色授权。
 
 > 默认账号 `admin`、密码 `admin123` 仅用于本地开发。生产部署必须通过 `ADMIN_INITIAL_PASSWORD` 设置至少10位的非默认初始密码，并替换 `deploy/.env` 中的全部密码和密钥。
 
@@ -20,6 +20,8 @@ Browser -> nginx/web -> server
 - `server/`：Java 21、Spring Boot 3 后端及 Maven Wrapper
 - `web/`：Vue 3、Vite 6、ECharts 6 前端
 - `deploy/`：Docker Compose 与环境变量示例
+
+后端 Java 包按技术层划分：`controller`（接口）、`service`（实现）、`mapper`（持久化）、`entity`（实体）、`config`（安全等配置）；查询引擎、方言等基础设施仍保留在 `query`、`datasource` 等包。
 
 ## 前置条件
 
@@ -165,9 +167,15 @@ MinIO：
 
 ## 产品导览
 
-- **分析壳**：首页续看、集合树、数据源浏览、模型、指标、问题、仪表盘、搜索、废纸篓；顶栏「+ 创建」。
+- **分析壳**：首页续看、集合树、数据源浏览、模型、指标、图表、仪表盘、搜索、废纸篓；顶栏「+ 创建」；顶栏/登录页可切换中英文（`localStorage` 键 `omni.locale`）。
 - **管理壳** `/admin`：通用设置、数据源连接维护、用户、角色、数据权限、订阅（仅 ADMIN）。
-- **概念映射**：数据源=`data-sources`；模型=`datasets`；问题=`charts`；指标=`metrics`；集合=`collections`。
+- **概念映射**：数据源=`data-sources`；模型=`datasets`；图表=`charts`；指标=`metrics`；集合=`collections`。
+- **分析库方言**：运行时已注册 `MYSQL`、`MARIADB`、`POSTGRESQL`、`MSSQL`、`ORACLE`、`CLICKHOUSE`、`HIVE`（插件扩展点 `DialectPlugin`）。
+  - MySQL/MariaDB/ClickHouse/Hive：库名即可选命名空间；跨库用 `库.表`。
+  - PostgreSQL/SQL Server/Oracle：连接须填库名/服务名（写入 JDBC URL）；元数据同步枚举其下业务 schema，SQL 使用 `schema.table`。
+  - 默认已内置 MySQL/MariaDB/PostgreSQL/SQL Server/Oracle 驱动；**ClickHouse / Hive 需自行将 JDBC 驱动加入运行时 classpath**（避免有缺陷的驱动经 SPI 拖垮 Flyway/元数据库启动）。ClickHouse 推荐 `com.clickhouse:clickhouse-jdbc:0.9.8:all` 并 exclusion 全部传递依赖。
+- **通用设置键**：`site.name`、`embed.enabled`；查询结果缓存 `cache.query.enabled`（默认关闭）、`cache.query.ttl-seconds`（默认 300，范围 30–86400）。开启后仪表盘/公开图表渲染可复用 Redis 中的图表结果；编辑页「刷新卡片」与定时刷新会强制重新查询并回写缓存。
+- **仪表盘参数**：在 `configJson.parameters` 定义文本/数字/日期/区间/单选/多选控件；卡片 `bindings_json` 可绑定到语义 filter 或 SQL `?` 占位；`click_action_json` 支持点击图表类目写入参数并重渲染。登录查看使用 `POST /api/dashboards/{id}/render` 传参；公开/嵌入仅使用默认值。单选/多选可配置 `optionsFrom`（模型字段 DISTINCT，接口 `GET /api/datasets/{id}/fields/{field}/distinct`），也可使用静态 `options`。图表 `configJson.encoding` 可显式映射类目/数值列，并支持 `combo` 组合图；仪表盘多卡渲染并行执行且保持卡片顺序。
 
 ## API 模块
 
@@ -175,14 +183,15 @@ MinIO：
 
 - `/api/auth`：登录、当前用户与修改密码
 - `/api/collections`、`/api/recents`、`/api/search`、`/api/trash`：集合、续看、搜索、废纸篓
-- `/api/metrics`：指标
+- `/api/metrics`：指标（可按 `modelId` 过滤；语义查询通过 `query.metricIds` 引用）
 - `/api/roles`、`/api/permissions`：角色管理与功能权限目录（仅 ADMIN）
 - `/api/users`：用户、多角色绑定与密码重置（仅 ADMIN）
 - `/api/data-sources`：数据源管理与连通性测试
 - `/api/data-sources/{sourceId}/metadata`：元数据同步与浏览
 - `/api/datasets`：模型（原数据集）及字段、行权限策略
+- `/api/datasets/{id}/fields/{field}/distinct`：模型字段去重取值（参数动态选项）
 - `/api/queries`：查询提交、状态与取消
-- `/api/charts`、`/api/dashboards`：问题与仪表盘
+- `/api/charts`、`/api/dashboards`：图表与仪表盘
 - `/api/exports`：同步及异步导出
 - `/api/schedules`、`/api/subscriptions`：调度与订阅
 - `/api/resources/{resourceType}/{resourceId}/permissions`：角色资源授权

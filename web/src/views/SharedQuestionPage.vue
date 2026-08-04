@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { embedApi, publicApi } from '@/api'
 import type { PublicQuestion } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
 
 const props = defineProps<{ mode: 'public' | 'embed' }>()
+const { t } = useI18n()
 const route = useRoute()
 const loading = ref(false)
 const question = ref<PublicQuestion>()
@@ -28,7 +30,7 @@ async function load() {
       ? await publicApi.question(token.value)
       : await embedApi.question(token.value)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '问题加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('chart.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -41,7 +43,7 @@ onMounted(load)
   <div v-loading="loading" class="page standalone">
     <div class="page-header">
       <div>
-        <h1 class="page-title">{{ question?.name || '问题' }}</h1>
+        <h1 class="page-title">{{ question?.name || t('chart.title') }}</h1>
         <p class="muted">{{ question?.description || '' }}</p>
       </div>
     </div>

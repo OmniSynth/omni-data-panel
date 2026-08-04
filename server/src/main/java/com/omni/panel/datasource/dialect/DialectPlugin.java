@@ -93,6 +93,30 @@ public abstract class DialectPlugin {
     public abstract Set<String> systemNamespaces();
 
     /**
+     * 连接配置中的 defaultDatabase 是否同时作为唯一同步命名空间。
+     * <p>MySQL/MariaDB 为 true（库名即命名空间）；PostgreSQL 为 false（库名写入 JDBC URL，同步枚举 schema）。</p>
+     */
+    public boolean defaultDatabaseIsNamespace() {
+        return true;
+    }
+
+    /**
+     * JDBC {@link DatabaseMetaData} 调用使用的 catalog 参数。
+     * <p>MySQL 传入命名空间；PostgreSQL 返回 {@code null}（库已在 URL 中选定）。</p>
+     */
+    public String metaCatalog(String namespace) {
+        return namespace;
+    }
+
+    /**
+     * JDBC {@link DatabaseMetaData} 调用使用的 schema 参数。
+     * <p>MySQL 返回 {@code null}；PostgreSQL 传入命名空间。</p>
+     */
+    public String metaSchema(String namespace) {
+        return null;
+    }
+
+    /**
      * DatabaseMetaData 拿不到表时的回退列表；无回退时返回空列表。
      */
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)

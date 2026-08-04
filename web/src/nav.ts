@@ -1,4 +1,5 @@
 import type { ResourceType } from './types'
+import { t } from '@/i18n'
 
 export function resourcePath(type: ResourceType, id: string | number): string {
   const key = String(id)
@@ -19,12 +20,7 @@ export function resourcePath(type: ResourceType, id: string | number): string {
 }
 
 export function resourceTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    QUESTION: '问题',
-    DASHBOARD: '仪表盘',
-    MODEL: '模型',
-    METRIC: '指标',
-    COLLECTION: '集合',
-  }
-  return labels[type] || type
+  const keys = ['QUESTION', 'DASHBOARD', 'MODEL', 'METRIC', 'COLLECTION'] as const
+  if ((keys as readonly string[]).includes(type)) return t(`nav.${type}`)
+  return type
 }

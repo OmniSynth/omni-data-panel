@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { confirmBox } from '@/i18n/dialog'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { chartApi, collectionApi, publicLinkApi, queryApi } from '@/api'
 import { displayLabel } from '@/display'
 import { useUserStore } from '@/stores/user'
 import type { Chart, Collection, Id, QueryResult, QuerySubmission } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
+import ChartEncodingForm from '@/components/ChartEncodingForm.vue'
+import { chartTypeOptions, mergeChartConfig, parseChartConfig, type ChartEncoding } from '@/dashboard/config'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const router = useRouter()
 const rows = ref<Chart[]>([])
@@ -15,10 +20,16 @@ const collections = ref<Collection[]>([])
 const visible = ref(false)
 const preview = ref<Chart>()
 const previewResult = ref<QueryResult>()
+const previewEncoding = ref<ChartEncoding>({})
+const previewDrillPath = ref<string[]>([])
+const previewSaving = ref(false)
+const chartTypeOptionList = computed(() => chartTypeOptions())
 const form = reactive<Chart>({
   id: '', name: '', datasetId: '', queryJson: '{}', chartType: 'bar', configJson: '{}',
   description: '', collectionId: '',
 })
+
+const previewColumns = computed(() => previewResult.value?.columns || [])
 
 function flatten(nodes: Collection[], acc: Collection[] = []): Collection[] {
   for (const node of nodes) {
@@ -34,7 +45,7 @@ async function load() {
     rows.value = chartList
     collections.value = flatten(tree)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '问题加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('chart.loadFailed'))
   }
 }
 
@@ -56,26 +67,29 @@ async function save() {
       collectionId: form.collectionId,
     })
     visible.value = false
-    ElMessage.success('问题已保存')
+    ElMessage.success(t('chart.saved'))
     await load()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败')
+    ElMessage.error(error instanceof Error ? error.message : t('common.saveFailed'))
   }
 }
 
 async function remove(id: Id) {
   try {
-    await ElMessageBox.confirm('确认将该问题移入废纸篓？', '删除确认')
+    await confirmBox(t('chart.moveToTrash'), t('common.deleteConfirmTitle'))
     await chartApi.remove(id)
     await load()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '删除失败')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
   }
 }
 
 async function showPreview(chart: Chart) {
   preview.value = chart
   previewResult.value = undefined
+  const parsed = parseChartConfig(chart.configJson)
+  previewEncoding.value = parsed.encoding || {}
+  previewDrillPath.value = parsed.drillPath || []
   try {
     const { queryId } = await queryApi.submit(JSON.parse(chart.queryJson) as QuerySubmission)
     while (true) {
@@ -85,12 +99,41 @@ async function showPreview(chart: Chart) {
         return
       }
       if (snapshot.status === 'FAILED' || snapshot.status === 'CANCELLED') {
-        throw new Error(snapshot.error || '问题查询未成功')
+        throw new Error(snapshot.error || t('chart.queryFailed'))
       }
       await new Promise((resolve) => window.setTimeout(resolve, 500))
     }
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '问题预览失败')
+    ElMessage.error(error instanceof Error ? error.message : t('chart.previewFailed'))
+  }
+}
+
+async function savePreviewEncoding() {
+  if (!preview.value) return
+  previewSaving.value = true
+  try {
+    const configJson = mergeChartConfig(
+      parseChartConfig(preview.value.configJson),
+      previewEncoding.value,
+      previewDrillPath.value,
+    )
+    const updated = await chartApi.update(preview.value.id, {
+      name: preview.value.name,
+      datasetId: preview.value.datasetId,
+      dataSourceId: preview.value.dataSourceId,
+      queryJson: preview.value.queryJson,
+      chartType: preview.value.chartType,
+      configJson,
+      description: preview.value.description,
+      collectionId: preview.value.collectionId,
+    })
+    preview.value = updated
+    ElMessage.success(t('chart.encodingSaved'))
+    await load()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('common.saveFailed'))
+  } finally {
+    previewSaving.value = false
   }
 }
 
@@ -98,14 +141,14 @@ async function share(chart: Chart) {
   try {
     const link = await publicLinkApi.create({ resourceType: 'QUESTION', resourceId: chart.id })
     await navigator.clipboard.writeText(`${location.origin}/public/question/${link.token}`)
-    ElMessage.success('公开链接已复制')
+    ElMessage.success(t('chart.linkCopied'))
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '创建公开链接失败')
+    ElMessage.error(error instanceof Error ? error.message : t('chart.linkCreateFailed'))
   }
 }
 
 function collectionName(id?: Id) {
-  if (id === undefined || id === null || id === '') return '-'
+  if (id === undefined || id === null || id === '') return t('common.emptyDash')
   return collections.value.find((item) => String(item.id) === String(id))?.name || String(id)
 }
 
@@ -115,63 +158,82 @@ onMounted(load)
 <template>
   <div class="page">
     <div class="page-header">
-      <h1 class="page-title">问题</h1>
-      <el-button v-if="userStore.hasPermission('chart:create')" type="primary" @click="router.push('/query')">新建问题</el-button>
+      <h1 class="page-title">{{ t('chart.title') }}</h1>
+      <el-button v-if="userStore.hasPermission('chart:create')" type="primary" @click="router.push('/query')">{{ t('chart.create') }}</el-button>
     </div>
-    <el-table :data="rows" empty-text="暂无问题">
-      <el-table-column prop="name" label="名称" min-width="180">
+    <el-table :data="rows" :empty-text="t('chart.empty')">
+      <el-table-column prop="name" :label="t('common.name')" min-width="180">
         <template #default="{ row }">
           <el-button link type="primary" @click="router.push(`/questions/${row.id}`)">{{ row.name }}</el-button>
         </template>
       </el-table-column>
-      <el-table-column prop="description" label="描述" show-overflow-tooltip />
-      <el-table-column label="类型" width="100">
+      <el-table-column prop="description" :label="t('common.description')" show-overflow-tooltip />
+      <el-table-column :label="t('common.type')" width="100">
         <template #default="{ row }">{{ displayLabel(row.chartType) }}</template>
       </el-table-column>
-      <el-table-column label="集合" width="160">
+      <el-table-column :label="t('common.collection')" width="160">
         <template #default="{ row }">{{ collectionName(row.collectionId) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="280">
+      <el-table-column :label="t('common.actions')" width="320">
         <template #default="{ row }">
-          <el-button link @click="showPreview(row)">预览</el-button>
-          <el-button link @click="edit(row)">编辑</el-button>
-          <el-button link type="primary" @click="share(row)">分享</el-button>
-          <el-button link type="danger" @click="remove(row.id)">删除</el-button>
+          <el-button link @click="showPreview(row)">{{ t('common.preview') }}</el-button>
+          <el-button link type="primary" @click="router.push({ path: '/query', query: { questionId: String(row.id) } })">{{ t('common.edit') }}</el-button>
+          <el-button link @click="edit(row)">{{ t('chart.properties') }}</el-button>
+          <el-button link @click="share(row)">{{ t('common.share') }}</el-button>
+          <el-button link type="danger" @click="remove(row.id)">{{ t('common.delete') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="visible" title="编辑问题" width="560px">
+    <el-dialog v-model="visible" :title="t('chart.properties')" width="560px">
       <el-form label-width="80px">
-        <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="类型">
+        <el-form-item :label="t('common.name')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="t('common.description')"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
+        <el-form-item :label="t('common.type')">
           <el-select v-model="form.chartType" class="full-width">
-            <el-option label="表格" value="table" />
-            <el-option label="柱状图" value="bar" />
-            <el-option label="折线图" value="line" />
-            <el-option label="饼图" value="pie" />
+            <el-option
+              v-for="option in chartTypeOptionList"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
           </el-select>
         </el-form-item>
-        <el-form-item label="集合">
+        <el-form-item :label="t('common.collection')">
           <el-select v-model="form.collectionId" class="full-width" clearable>
             <el-option v-for="item in collections" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="visible=false">取消</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <el-button @click="visible=false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="save">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog :model-value="!!preview" title="问题预览" width="800px" @close="preview=undefined">
-      <ChartPreview
-        v-if="preview"
-        :type="preview.chartType"
-        :result="previewResult"
-        :option="JSON.parse(preview.configJson || '{}')"
-      />
+    <el-dialog :model-value="!!preview" :title="t('chart.preview')" width="800px" @close="preview=undefined">
+      <template v-if="preview">
+        <ChartEncodingForm
+          v-if="previewColumns.length"
+          v-model="previewEncoding"
+          v-model:drill-path="previewDrillPath"
+          :columns="previewColumns"
+          :chart-type="preview.chartType"
+        />
+        <div v-if="previewColumns.length" class="preview-actions">
+          <el-button type="primary" :loading="previewSaving" @click="savePreviewEncoding">{{ t('chart.saveEncoding') }}</el-button>
+        </div>
+        <ChartPreview
+          :type="preview.chartType"
+          :result="previewResult"
+          :option="JSON.parse(mergeChartConfig(parseChartConfig(preview.configJson), previewEncoding, previewDrillPath))"
+        />
+      </template>
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.preview-actions { margin: 8px 0 12px; }
+.full-width { width: 100%; }
+</style>

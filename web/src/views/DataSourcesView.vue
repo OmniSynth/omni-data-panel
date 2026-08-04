@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
+import { confirmBox } from '@/i18n/dialog'
 import { dataSourceApi } from '@/api'
 import { displayLabel } from '@/display'
 import { useUserStore } from '@/stores/user'
 import type { DataSource, DialectInfo, Id } from '@/types'
 import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
+import DataSourceObjectAclPanel from '@/components/DataSourceObjectAclPanel.vue'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const rows = ref<DataSource[]>([])
 const dialects = ref<DialectInfo[]>([])
@@ -14,6 +18,8 @@ const loading = ref(false)
 const visible = ref(false)
 const permissionVisible = ref(false)
 const permissionSource = ref<DataSource>()
+const objectAclVisible = ref(false)
+const objectAclSource = ref<DataSource>()
 const saving = ref(false)
 const editingId = ref<Id>()
 
@@ -47,6 +53,11 @@ async function loadDialects() {
     dialects.value = [
       { code: 'MYSQL', label: 'MySQL', defaultPort: 3306 },
       { code: 'MARIADB', label: 'MariaDB', defaultPort: 3306 },
+      { code: 'POSTGRESQL', label: 'PostgreSQL', defaultPort: 5432 },
+      { code: 'MSSQL', label: 'SQL Server', defaultPort: 1433 },
+      { code: 'ORACLE', label: 'Oracle', defaultPort: 1521 },
+      { code: 'CLICKHOUSE', label: 'ClickHouse', defaultPort: 8123 },
+      { code: 'HIVE', label: 'Hive', defaultPort: 10000 },
     ]
   }
 }
@@ -54,7 +65,7 @@ async function loadDialects() {
 async function load() {
   loading.value = true
   try { rows.value = await dataSourceApi.list() }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : '数据源加载失败') }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : t('dataSource.loadFailed')) }
   finally { loading.value = false }
 }
 
@@ -81,10 +92,10 @@ function onDialectChange(code: string) {
 }
 
 async function save() {
-  if (!form.name || !form.host || !form.username) return ElMessage.warning('请填写名称、主机与用户名')
-  if (!form.port || form.port < 1 || form.port > 65535) return ElMessage.warning('端口须在 1–65535 之间')
-  if (!form.dialect) return ElMessage.warning('请选择方言')
-  if (editingId.value === undefined && !form.password) return ElMessage.warning('请输入密码')
+  if (!form.name || !form.host || !form.username) return ElMessage.warning(t('dataSource.needFields'))
+  if (!form.port || form.port < 1 || form.port > 65535) return ElMessage.warning(t('dataSource.portRange'))
+  if (!form.dialect) return ElMessage.warning(t('dataSource.needDialect'))
+  if (editingId.value === undefined && !form.password) return ElMessage.warning(t('dataSource.needPassword'))
   const data: Partial<DataSource> = {
     name: form.name.trim(),
     host: form.host.trim(),
@@ -99,9 +110,9 @@ async function save() {
     if (editingId.value !== undefined) await dataSourceApi.update(editingId.value, data)
     else await dataSourceApi.create(data)
     visible.value = false
-    ElMessage.success('数据源已保存')
+    ElMessage.success(t('dataSource.saved'))
     await load()
-  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存失败') }
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : t('common.saveFailed')) }
   finally { saving.value = false }
 }
 
@@ -110,37 +121,42 @@ function authorize(row: DataSource) {
   permissionVisible.value = true
 }
 
+function configureObjectAcl(row: DataSource) {
+  objectAclSource.value = row
+  objectAclVisible.value = true
+}
+
 async function test(id: Id) {
   try {
     await dataSourceApi.test(id)
-    ElMessage.success('连接测试成功')
-  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '连接测试失败') }
+    ElMessage.success(t('dataSource.testOk'))
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : t('dataSource.testFailed')) }
 }
 
 async function sync(id: Id) {
-  try { await dataSourceApi.sync(id); ElMessage.success('元数据同步完成') }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : '同步失败') }
+  try { await dataSourceApi.sync(id); ElMessage.success(t('dataSource.syncOk')) }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : t('dataSource.syncFailed')) }
 }
 
 async function remove(id: Id) {
   try {
-    await ElMessageBox.confirm('删除后不可恢复，确认删除该数据源？', '删除确认', { type: 'warning' })
+    await confirmBox(t('dataSource.deleteConfirm'), t('common.deleteConfirmTitle'), { type: 'warning' })
     await dataSourceApi.remove(id)
-    ElMessage.success('数据源已删除')
+    ElMessage.success(t('dataSource.deleted'))
     await load()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '删除失败')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
   }
 }
 
 function endpointText(row: DataSource) {
-  if (!row.host) return '—'
-  const db = row.defaultDatabase ? ` / ${row.defaultDatabase}` : '（全部业务库）'
+  if (!row.host) return t('common.emptyDash')
+  const db = row.defaultDatabase ? ` / ${row.defaultDatabase}` : ` ${t('dataSource.allDatabases')}`
   return `${row.host}:${row.port ?? defaultPortFor(row.dialect || 'MYSQL')}${db}`
 }
 
 function dialectLabel(code?: string) {
-  if (!code) return '—'
+  if (!code) return t('common.emptyDash')
   return dialects.value.find((item) => item.code === code)?.label || displayLabel(code)
 }
 
@@ -153,39 +169,40 @@ onMounted(async () => {
 <template>
   <div class="page">
     <div class="page-header">
-      <h1 class="page-title">数据源</h1>
-      <el-button v-if="userStore.isAdmin" type="primary" @click="open()">新增数据源</el-button>
+      <h1 class="page-title">{{ t('dataSource.title') }}</h1>
+      <el-button v-if="userStore.isAdmin" type="primary" @click="open()">{{ t('dataSource.create') }}</el-button>
     </div>
-    <el-table v-loading="loading" :data="rows" empty-text="暂无可访问的数据源">
-      <el-table-column prop="name" label="名称" />
-      <el-table-column label="方言" width="110">
+    <el-table v-loading="loading" :data="rows" :empty-text="t('dataSource.empty')">
+      <el-table-column prop="name" :label="t('common.name')" />
+      <el-table-column :label="t('dataSource.dialect')" width="110">
         <template #default="{ row }">{{ dialectLabel(row.dialect) }}</template>
       </el-table-column>
-      <el-table-column label="连接" min-width="260">
+      <el-table-column :label="t('dataSource.connection')" min-width="260">
         <template #default="{ row }">{{ endpointText(row) }}</template>
       </el-table-column>
-      <el-table-column prop="username" label="用户名" />
-      <el-table-column label="状态" width="100">
+      <el-table-column prop="username" :label="t('dataSource.username')" />
+      <el-table-column :label="t('common.status')" width="100">
         <template #default="{ row }">{{ displayLabel(row.status) }}</template>
       </el-table-column>
-      <el-table-column v-if="userStore.isAdmin" label="操作" width="390">
+      <el-table-column v-if="userStore.isAdmin" :label="t('common.actions')" width="460">
         <template #default="{ row }">
-          <el-button link type="primary" @click="test(row.id)">测试</el-button>
-          <el-button link type="primary" @click="sync(row.id)">同步元数据</el-button>
-          <el-button link @click="open(row)">编辑</el-button>
-          <el-button link type="primary" @click="authorize(row)">角色授权</el-button>
-          <el-button link type="danger" @click="remove(row.id)">删除</el-button>
+          <el-button link type="primary" @click="test(row.id)">{{ t('dataSource.test') }}</el-button>
+          <el-button link type="primary" @click="sync(row.id)">{{ t('dataSource.syncMeta') }}</el-button>
+          <el-button link @click="open(row)">{{ t('common.edit') }}</el-button>
+          <el-button link type="primary" @click="authorize(row)">{{ t('dataSource.roleAuth') }}</el-button>
+          <el-button link type="primary" @click="configureObjectAcl(row)">{{ t('objectAcl.action') }}</el-button>
+          <el-button link type="danger" @click="remove(row.id)">{{ t('common.delete') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
-    <el-dialog v-model="visible" :title="editingId === undefined ? '新增数据源' : '编辑数据源'" width="640px">
+    <el-dialog v-model="visible" :title="editingId === undefined ? t('dataSource.createTitle') : t('dataSource.editTitle')" width="640px">
       <el-form label-width="100px">
-        <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="方言">
+        <el-form-item :label="t('common.name')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="t('dataSource.dialect')">
           <el-select
             :model-value="form.dialect"
             class="full-width"
-            placeholder="选择可连接的数据库方言"
+            :placeholder="t('dataSource.dialectHint')"
             @change="onDialectChange"
           >
             <el-option
@@ -196,32 +213,32 @@ onMounted(async () => {
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="主机"><el-input v-model="form.host" placeholder="例如 127.0.0.1" /></el-form-item>
-        <el-form-item label="端口">
+        <el-form-item :label="t('dataSource.host')"><el-input v-model="form.host" placeholder="127.0.0.1" /></el-form-item>
+        <el-form-item :label="t('dataSource.port')">
           <el-input-number v-model="form.port" :min="1" :max="65535" controls-position="right" class="full-width" />
         </el-form-item>
-        <el-form-item label="库名">
-          <el-input v-model="form.defaultDatabase" placeholder="选填" />
+        <el-form-item :label="t('dataSource.database')">
+          <el-input v-model="form.defaultDatabase" :placeholder="t('dataSource.optional')" />
           <div class="field-hint">
-            未填库名时将同步该账号可见的全部业务库，SQL 可用 <code>库名.表名</code> 跨库查询。
+            {{ t('dataSource.databaseHint') }}
           </div>
         </el-form-item>
-        <el-form-item label="用户名"><el-input v-model="form.username" /></el-form-item>
-        <el-form-item label="密码">
+        <el-form-item :label="t('dataSource.username')"><el-input v-model="form.username" /></el-form-item>
+        <el-form-item :label="t('dataSource.password')">
           <el-input
             v-model="form.password"
             type="password"
             show-password
-            :placeholder="editingId === undefined ? '请输入密码' : '留空表示不修改'"
+            :placeholder="editingId === undefined ? t('dataSource.passwordPlaceholder') : t('dataSource.passwordKeep')"
           />
         </el-form-item>
-        <el-form-item v-if="form.jdbcUrl" label="连接串">
+        <el-form-item v-if="form.jdbcUrl" :label="t('dataSource.jdbcUrl')">
           <el-input :model-value="form.jdbcUrl" readonly />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="visible=false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        <el-button @click="visible=false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="save">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
     <RoleResourcePermissionPanel
@@ -229,7 +246,12 @@ onMounted(async () => {
       resource-type="DATA_SOURCE"
       :resource-id="permissionSource?.id"
       :allowed-permissions="['READ']"
-      :title="`数据源角色授权：${permissionSource?.name || ''}`"
+      :title="`${t('dataSource.roleAuthTitle')}${permissionSource?.name || ''}`"
+    />
+    <DataSourceObjectAclPanel
+      v-model="objectAclVisible"
+      :source-id="objectAclSource?.id"
+      :source-name="objectAclSource?.name"
     />
   </div>
 </template>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
+import { promptBox } from '@/i18n/dialog'
 import { useRoute, useRouter } from 'vue-router'
 import { chartApi, collectionApi, dataSourceApi, exportApi, queryApi } from '@/api'
 import { displayLabel } from '@/display'
@@ -19,8 +21,13 @@ import {
 import { resolveSqlDialect } from '@/sql/dialects'
 import { QUERY_RESULT_DISPLAY_LIMIT } from '@/query/limits'
 import { formatDuration } from '@/query/duration'
+import { alignSqlParameters } from '@/sql/parameters'
+import { chartTypeOptions, mergeChartConfig, type ChartEncoding } from '@/dashboard/config'
+import ChartEncodingForm from '@/components/ChartEncodingForm.vue'
 
+const { t } = useI18n()
 const userStore = useUserStore()
+const chartTypeOptionList = computed(() => chartTypeOptions())
 const route = useRoute()
 const router = useRouter()
 
@@ -29,7 +36,9 @@ const collections = ref<Collection[]>([])
 const sourceId = ref<Id | undefined>(
   typeof route.query.sourceId === 'string' ? route.query.sourceId : undefined,
 )
-const sql = ref('SELECT 1')
+const sql = ref('')
+const sqlParameters = ref<string[]>([])
+const sqlEditorRef = ref<{ format: () => boolean }>()
 const editorSchema = ref<EditorSqlSchema>({})
 const completionPayload = ref<CompletionSchemaPayload | null>(null)
 const schemaLoading = ref(false)
@@ -38,6 +47,8 @@ const collectionId = ref<Id | undefined>(
 )
 const questionName = ref(typeof route.query.name === 'string' ? route.query.name : '')
 const chartType = ref('table')
+const chartEncoding = ref<ChartEncoding>({})
+const chartDrillPath = ref<string[]>([])
 const saving = ref(false)
 const task = ref<QuerySnapshot>()
 const result = ref<QueryResult>()
@@ -48,15 +59,11 @@ const currentSource = computed(() => sources.value.find((item) => String(item.id
 const currentDialect = computed(() => resolveSqlDialect(currentSource.value?.dialect, currentSource.value?.jdbcUrl).id)
 const catalogHint = computed(() => {
   const database = currentSource.value?.defaultDatabase?.trim()
-  if (database) return `未限定表名使用默认库 \`${database}\`；也可用 库名.表名 跨库查询。`
-  if (currentSource.value) return '当前数据源未设置默认库，请使用 `库名.表名` 编写 SQL。'
-  return '选择数据源后，可按默认库或 库名.表名 编写跨库 SQL。'
+  if (database) return t('sql.defaultDbHint', { db: database })
+  if (currentSource.value) return t('sql.noDefaultDb')
+  return t('sql.selectSourceHint')
 })
-const editorPlaceholder = computed(() => {
-  const database = currentSource.value?.defaultDatabase?.trim()
-  if (database) return `在此编写 SQL，例如 SELECT * FROM your_table LIMIT 100（默认库 ${database}）`
-  return '在此编写 SQL，例如 SELECT * FROM db_name.your_table LIMIT 100'
-})
+const editorPlaceholder = computed(() => t('sql.editorPlaceholder'))
 const schemaTableCount = computed(() => countCompletionTables(completionPayload.value))
 const editorDefaultSchema = computed(() =>
   inferDefaultSchema(completionPayload.value, currentSource.value?.defaultDatabase))
@@ -137,26 +144,26 @@ async function load() {
     }
     if (sourceId.value !== undefined) await loadCompletionSchema(sourceId.value)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : 'SQL 查询页加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('sql.loadFailed'))
   }
 }
 
 async function run() {
-  if (!sourceId.value) return ElMessage.warning('请选择数据源')
-  if (!sql.value.trim()) return ElMessage.warning('请输入 SQL')
+  if (!sourceId.value) return ElMessage.warning(t('sql.needSource'))
+  if (!sql.value.trim()) return ElMessage.warning(t('sql.needSql'))
   result.value = undefined
   try {
     const submitted = await queryApi.submit({
       sourceId: sourceId.value,
       sql: sql.value,
-      parameters: [],
+      parameters: alignSqlParameters(sql.value, sqlParameters.value),
     })
     task.value = { queryId: submitted.queryId, status: 'QUEUED', startedAtMs: Date.now() }
     startClock()
     await poll()
   } catch (error) {
     stopClock()
-    ElMessage.error(error instanceof Error ? error.message : '查询提交失败')
+    ElMessage.error(error instanceof Error ? error.message : t('sql.submitFailed'))
   }
 }
 
@@ -169,7 +176,7 @@ async function poll() {
       stopClock()
     } else if (task.value.status === 'FAILED') {
       stopClock()
-      ElMessage.error(task.value.error || '查询执行失败')
+      ElMessage.error(task.value.error || t('sql.execFailed'))
     } else if (task.value.status === 'CANCELLED') {
       stopClock()
     } else {
@@ -177,7 +184,7 @@ async function poll() {
     }
   } catch (error) {
     stopClock()
-    ElMessage.error(error instanceof Error ? error.message : '查询状态获取失败')
+    ElMessage.error(error instanceof Error ? error.message : t('sql.statusFailed'))
   }
 }
 
@@ -187,9 +194,9 @@ async function cancel() {
     await queryApi.cancel(task.value.queryId)
     task.value = { ...task.value, status: 'CANCELLED', durationMs: elapsedMs.value }
     stopClock()
-    ElMessage.info('查询已取消')
+    ElMessage.info(t('sql.cancelled'))
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '取消失败')
+    ElMessage.error(error instanceof Error ? error.message : t('sql.cancelFailed'))
   }
 }
 
@@ -204,19 +211,19 @@ async function createExport(format: 'CSV' | 'XLSX') {
     anchor.click()
     URL.revokeObjectURL(url)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '导出失败')
+    ElMessage.error(error instanceof Error ? error.message : t('sql.exportFailed'))
   }
 }
 
 async function saveQuestion() {
-  if (!sourceId.value || !sql.value.trim()) return ElMessage.warning('请完成数据源与 SQL 配置')
-  if (!canSave.value) return ElMessage.warning('无创建问题权限')
-  if (collectionId.value === undefined) return ElMessage.warning('请选择要保存到的集合')
+  if (!sourceId.value || !sql.value.trim()) return ElMessage.warning(t('sql.needConfig'))
+  if (!canSave.value) return ElMessage.warning(t('chart.noCreatePermission'))
+  if (collectionId.value === undefined) return ElMessage.warning(t('sql.needCollection'))
   let name = questionName.value.trim()
   if (!name) {
-    const { value } = await ElMessageBox.prompt('请输入问题名称', '保存到集合', {
+    const { value } = await promptBox(t('chart.namePrompt'), t('sql.saveToCollection'), {
       inputPattern: /\S+/,
-      inputErrorMessage: '名称不能为空',
+      inputErrorMessage: t('common.nameRequired'),
     })
     name = value
     questionName.value = value
@@ -224,18 +231,22 @@ async function saveQuestion() {
   const data: Partial<Chart> = {
     name,
     collectionId: collectionId.value,
-    queryJson: JSON.stringify({ sourceId: sourceId.value, sql: sql.value, parameters: [] }),
+    queryJson: JSON.stringify({
+      sourceId: sourceId.value,
+      sql: sql.value,
+      parameters: alignSqlParameters(sql.value, sqlParameters.value),
+    }),
     chartType: chartType.value || 'table',
-    configJson: '{}',
+    configJson: mergeChartConfig({}, chartEncoding.value, chartDrillPath.value),
     dataSourceId: sourceId.value,
   }
   saving.value = true
   try {
     const created = await chartApi.create(data)
-    ElMessage.success(`已保存到集合「${selectedCollectionName.value || collectionId.value}」`)
+    ElMessage.success(t('sql.savedTo', { name: selectedCollectionName.value || collectionId.value }))
     await router.push(`/questions/${created.id}`)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败')
+    ElMessage.error(error instanceof Error ? error.message : t('common.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -248,6 +259,15 @@ function onEditorKeydown(event: KeyboardEvent) {
   }
 }
 
+function formatSqlInEditor() {
+  if (!sqlEditorRef.value?.format()) {
+    ElMessage.warning(t('sqlEditor.formatFailed'))
+  }
+}
+
+watch(sql, () => {
+  sqlParameters.value = alignSqlParameters(sql.value, sqlParameters.value).map((item) => String(item ?? ''))
+})
 watch(() => route.query.sourceId, (value) => {
   if (typeof value === 'string') sourceId.value = value
 })
@@ -277,28 +297,28 @@ onBeforeUnmount(() => {
   <div class="page sql-page">
     <div class="page-header">
       <div class="title-block">
-        <h1 class="page-title">SQL 查询</h1>
+        <h1 class="page-title">{{ t('sql.title') }}</h1>
         <p class="page-subtitle">
-          对已授权数据源执行只读 SQL；可将查询保存为问题并放入集合
-          <template v-if="selectedCollectionName">（当前集合：{{ selectedCollectionName }}）</template>
+          {{ t('sql.subtitle') }}
+          <template v-if="selectedCollectionName">{{ t('sql.currentCollection', { name: selectedCollectionName }) }}</template>
         </p>
       </div>
       <div class="header-actions">
-        <el-button @click="$router.push('/databases')">数据源浏览</el-button>
+        <el-button @click="$router.push('/databases')">{{ t('sql.browse') }}</el-button>
         <el-button
           v-if="canSave"
           :loading="saving"
           :disabled="!sourceId || !sql.trim()"
           @click="saveQuestion"
-        >保存到集合</el-button>
+        >{{ t('sql.saveToCollection') }}</el-button>
         <el-button
           v-if="userStore.hasPermission('query:raw')"
           type="primary"
           :loading="running"
           :disabled="!sourceId"
           @click="run"
-        >执行查询</el-button>
-        <el-button v-if="running" type="danger" @click="cancel">取消</el-button>
+        >{{ t('sql.run') }}</el-button>
+        <el-button v-if="running" type="danger" @click="cancel">{{ t('common.cancel') }}</el-button>
       </div>
     </div>
 
@@ -308,43 +328,43 @@ onBeforeUnmount(() => {
       type="warning"
       :closable="false"
       show-icon
-      title="当前角色缺少「执行原生 SQL」权限（query:raw）"
-      description="请联系管理员在角色管理中授予该权限后再使用数据源 SQL 查询。"
+      :title="t('sql.noPermissionTitle')"
+      :description="t('sql.noPermissionHint')"
     />
 
     <template v-else>
       <section class="tip-panel">
         <div class="tip-head">
           <div>
-            <strong>使用提示</strong>
-            <span class="tip-head-meta">只读查询 · 最多展示 {{ QUERY_RESULT_DISPLAY_LIMIT }} 行</span>
+            <strong>{{ t('sql.tips') }}</strong>
+            <span class="tip-head-meta">{{ t('sql.readonlyLimit', { n: QUERY_RESULT_DISPLAY_LIMIT }) }}</span>
           </div>
           <el-button link type="primary" @click="tipsCollapsed = !tipsCollapsed">
-            {{ tipsCollapsed ? '展开' : '收起' }}
+            {{ tipsCollapsed ? t('sql.expand') : t('sql.collapse') }}
           </el-button>
         </div>
         <div v-show="!tipsCollapsed" class="tip-grid">
           <div class="tip-card tip-info">
-            <div class="tip-label">联想补全</div>
-            <p>输入时自动提示 SQL 关键字、表名与字段；也可按 <kbd>Ctrl</kbd> + <kbd>Space</kbd> 手动触发。</p>
+            <div class="tip-label">{{ t('sql.autocomplete') }}</div>
+            <p>{{ t('sql.autocompleteHint') }}</p>
           </div>
           <div class="tip-card tip-ok">
-            <div class="tip-label">快捷执行</div>
-            <p>编辑器内按 <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 提交查询。仅支持单条 <code>SELECT</code> / <code>WITH</code> 只读语句。</p>
+            <div class="tip-label">{{ t('sql.shortcut') }}</div>
+            <p>{{ t('sql.shortcutHint') }}</p>
           </div>
           <div class="tip-card tip-warn">
-            <div class="tip-label">元数据</div>
+            <div class="tip-label">{{ t('sql.metadata') }}</div>
             <p>
-              <template v-if="schemaLoading">正在加载当前数据源的表字段目录…</template>
-              <template v-else-if="!sourceId">选择数据源后会加载可联想的表与字段。</template>
+              <template v-if="schemaLoading">{{ t('sql.loadingMeta') }}</template>
+              <template v-else-if="!sourceId">{{ t('sql.selectSourceMeta') }}</template>
               <template v-else-if="schemaTableCount === 0">
-                当前没有可用表字段联想，请先到管理后台对该数据源执行「同步元数据」。
+                {{ t('sql.noMeta') }}
               </template>
-              <template v-else>已加载约 {{ schemaTableCount }} 张表的字段目录，可直接输入表名开始联想。</template>
+              <template v-else>{{ t('sql.metaReady', { n: schemaTableCount }) }}</template>
             </p>
           </div>
           <div class="tip-card tip-info">
-            <div class="tip-label">跨库 SQL</div>
+            <div class="tip-label">{{ t('sql.crossDb') }}</div>
             <p>{{ catalogHint }}</p>
           </div>
         </div>
@@ -353,11 +373,11 @@ onBeforeUnmount(() => {
       <section class="editor-panel">
         <div class="panel-toolbar">
           <div class="source-row">
-            <span class="field-label">数据源</span>
+            <span class="field-label">{{ t('dataSource.title') }}</span>
             <el-select
               v-model="sourceId"
               filterable
-              placeholder="选择有权限的数据源"
+              :placeholder="t('sql.selectSource')"
               class="source-select"
             >
               <el-option
@@ -373,21 +393,25 @@ onBeforeUnmount(() => {
             <el-tag v-if="currentSource" size="small" effect="plain" type="info">
               {{ currentDialect }}
             </el-tag>
-            <el-tag v-if="schemaLoading" size="small" type="warning">加载联想中</el-tag>
+            <el-tag v-if="schemaLoading" size="small" type="warning">{{ t('sql.loadingSuggest') }}</el-tag>
             <el-tag v-else-if="sourceId && schemaTableCount > 0" size="small" type="success" effect="plain">
-              {{ schemaTableCount }} 表可联想
+              {{ t('sql.tablesSuggest', { n: schemaTableCount }) }}
             </el-tag>
           </div>
           <div class="run-row">
             <el-tag v-if="task" :type="statusType" effect="light">{{ displayLabel(task.status) }}</el-tag>
-            <span v-if="elapsedText" class="elapsed">耗时 {{ elapsedText }}</span>
-            <el-button type="primary" :loading="running" :disabled="!sourceId" @click="run">执行</el-button>
-            <el-button v-if="running" type="danger" plain @click="cancel">取消</el-button>
+            <span v-if="elapsedText" class="elapsed">{{ t('sql.duration') }} {{ elapsedText }}</span>
+            <el-button plain :disabled="!sql.trim()" :title="t('sql.formatHint')" @click="formatSqlInEditor">
+              {{ t('sql.format') }}
+            </el-button>
+            <el-button type="primary" :loading="running" :disabled="!sourceId" @click="run">{{ t('sql.execute') }}</el-button>
+            <el-button v-if="running" type="danger" plain @click="cancel">{{ t('common.cancel') }}</el-button>
           </div>
         </div>
 
         <div class="editor-box" @keydown="onEditorKeydown">
           <SqlEditor
+            ref="sqlEditorRef"
             v-model="sql"
             :dialect="currentDialect"
             :jdbc-url="currentSource?.jdbcUrl"
@@ -396,28 +420,36 @@ onBeforeUnmount(() => {
             :placeholder-text="editorPlaceholder"
           />
         </div>
+        <div v-if="sqlParameters.length" class="sql-params">
+          <div class="sql-params-title">{{ t('sql.sqlParams') }}</div>
+          <div v-for="(_, index) in sqlParameters" :key="index" class="sql-param-row">
+            <el-input v-model="sqlParameters[index]" :placeholder="t('sql.paramN', { n: index + 1 })" />
+          </div>
+        </div>
       </section>
 
       <section v-if="canSave" class="save-panel-block">
         <div class="save-head">
           <div>
-            <h2 class="section-title">保存到集合</h2>
-            <p class="section-meta">将当前 SQL 保存为问题，可在集合、首页续看与仪表盘中使用；无需先执行查询。</p>
+            <h2 class="section-title">{{ t('sql.saveToCollection') }}</h2>
+            <p class="section-meta">{{ t('sql.saveHint') }}</p>
           </div>
           <el-button type="primary" :loading="saving" :disabled="!sourceId || !sql.trim()" @click="saveQuestion">
-            保存
+            {{ t('common.save') }}
           </el-button>
         </div>
         <div class="save-row">
-          <el-input v-model="questionName" placeholder="问题名称" class="save-name" />
-          <el-select v-model="collectionId" filterable placeholder="选择集合" class="save-collection">
+          <el-input v-model="questionName" :placeholder="t('sql.chartName')" class="save-name" />
+          <el-select v-model="collectionId" filterable :placeholder="t('sql.selectCollection')" class="save-collection">
             <el-option v-for="item in collections" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
           <el-select v-model="chartType" class="save-chart">
-            <el-option label="表格" value="table" />
-            <el-option label="柱状图" value="bar" />
-            <el-option label="折线图" value="line" />
-            <el-option label="饼图" value="pie" />
+            <el-option
+              v-for="option in chartTypeOptionList"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
           </el-select>
         </div>
       </section>
@@ -425,23 +457,44 @@ onBeforeUnmount(() => {
       <section v-if="result" class="result-panel">
         <div class="result-head">
           <div>
-            <h2 class="section-title">查询结果</h2>
+            <h2 class="section-title">{{ t('sql.result') }}</h2>
             <p class="section-meta">
-              展示 {{ resultCount }} 行
-              <template v-if="elapsedText"> · 耗时 {{ elapsedText }}</template>
+              {{ t('sql.showRows', { n: resultCount }) }}
+              <template v-if="elapsedText"> · {{ t('sql.duration') }} {{ elapsedText }}</template>
               <template v-if="result.rows.length > QUERY_RESULT_DISPLAY_LIMIT">
-                （已截断至 {{ QUERY_RESULT_DISPLAY_LIMIT }}）
+                {{ t('sql.truncatedTo', { n: QUERY_RESULT_DISPLAY_LIMIT }) }}
               </template>
             </p>
           </div>
           <div class="result-actions">
-            <el-button @click="createExport('CSV')">导出 CSV</el-button>
-            <el-button @click="createExport('XLSX')">导出 XLSX</el-button>
+            <el-button @click="createExport('CSV')">{{ t('sql.exportCsv') }}</el-button>
+            <el-button @click="createExport('XLSX')">{{ t('sql.exportXlsx') }}</el-button>
           </div>
         </div>
 
         <QueryResultTable :result="result" :max-height="420" />
-        <ChartPreview v-if="chartType !== 'table'" :result="result" :type="chartType" />
+        <div v-if="canSave" class="encoding-block">
+          <el-select v-model="chartType" style="width:150px;margin-right:8px">
+            <el-option
+              v-for="option in chartTypeOptionList"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <ChartEncodingForm
+            v-model="chartEncoding"
+            v-model:drill-path="chartDrillPath"
+            :columns="result.columns"
+            :chart-type="chartType"
+          />
+        </div>
+        <ChartPreview
+          v-if="chartType !== 'table'"
+          :result="result"
+          :type="chartType"
+          :option="JSON.parse(mergeChartConfig({}, chartEncoding, chartDrillPath))"
+        />
       </section>
     </template>
   </div>
@@ -463,6 +516,7 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   padding: 16px;
 }
+.encoding-block { margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
 
 .tip-head {
   display: flex;
@@ -609,6 +663,9 @@ code {
 .save-name { width: 240px; }
 .save-collection { width: 220px; }
 .save-chart { width: 140px; }
+.sql-params { margin-top: 12px; }
+.sql-params-title { font-size: 13px; margin-bottom: 8px; color: var(--omni-muted); }
+.sql-param-row { margin-bottom: 8px; max-width: 420px; }
 
 @media (max-width: 1100px) {
   .tip-grid { grid-template-columns: 1fr; }

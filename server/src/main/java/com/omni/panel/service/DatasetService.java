@@ -50,13 +50,15 @@ public class DatasetService {
     private final DataPolicyMapper dataPolicyMapper;
     private final DataSourceObjectAclService objectAclService;
     private final SqlObjectAccessGuard sqlObjectAccessGuard;
+    private final DatasetAuditService datasetAuditService;
 
     public DatasetService(DatasetMapper datasetMapper, DatasetFieldMapper fieldMapper, MetadataMapper metadataMapper,
                           DataSourceService dataSourceService, PermissionService permissionService,
                           SqlPolicyGuard sqlPolicyGuard, @Lazy CollectionService collectionService,
                           QueryCompiler queryCompiler, DialectRegistry dialectRegistry,
                           JdbcQueryExecutor jdbcQueryExecutor, DataPolicyMapper dataPolicyMapper,
-                          DataSourceObjectAclService objectAclService, SqlObjectAccessGuard sqlObjectAccessGuard) {
+                          DataSourceObjectAclService objectAclService, SqlObjectAccessGuard sqlObjectAccessGuard,
+                          DatasetAuditService datasetAuditService) {
         this.datasetMapper = datasetMapper;
         this.fieldMapper = fieldMapper;
         this.metadataMapper = metadataMapper;
@@ -70,6 +72,7 @@ public class DatasetService {
         this.dataPolicyMapper = dataPolicyMapper;
         this.objectAclService = objectAclService;
         this.sqlObjectAccessGuard = sqlObjectAccessGuard;
+        this.datasetAuditService = datasetAuditService;
     }
 
     /**
@@ -303,6 +306,7 @@ public class DatasetService {
         applyModelFields(dataset, modelType, input);
         datasetMapper.insert(dataset);
         saveFields(dataset, input.fields(), modelType);
+        datasetAuditService.record(dataset, "CREATE", summary(dataset));
         return dataset;
     }
 
@@ -332,6 +336,7 @@ public class DatasetService {
                 .eq(DatasetFieldEntity::getDatasetId, id));
         saveFields(dataset, input.fields(), modelType);
         datasetMapper.updateById(dataset);
+        datasetAuditService.record(dataset, "UPDATE", summary(dataset));
         return dataset;
     }
 
@@ -346,6 +351,7 @@ public class DatasetService {
         dataset.setDeletedAt(LocalDateTime.now());
         dataset.setUpdatedAt(dataset.getDeletedAt());
         datasetMapper.updateById(dataset);
+        datasetAuditService.record(dataset, "SOFT_DELETE", summary(dataset));
     }
 
     /**
@@ -359,6 +365,7 @@ public class DatasetService {
         dataset.setDeletedAt(null);
         dataset.setUpdatedAt(LocalDateTime.now());
         datasetMapper.updateById(dataset);
+        datasetAuditService.record(dataset, "RESTORE", summary(dataset));
     }
 
     /**
@@ -369,8 +376,16 @@ public class DatasetService {
     @Transactional
     public void purge(long id) {
         DatasetEntity dataset = requireTrashed(id);
+        String detail = summary(dataset);
         permissionService.deleteResource("DATASET", id);
         datasetMapper.deleteById(dataset.getId());
+        datasetAuditService.record(dataset, "PURGE", detail);
+    }
+
+    private static String summary(DatasetEntity dataset) {
+        return "modelType=" + dataset.getModelType()
+                + ", dataSourceId=" + dataset.getDataSourceId()
+                + ", collectionId=" + dataset.getCollectionId();
     }
 
     /**

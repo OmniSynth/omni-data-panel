@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import AuditCleanupActions from '@/components/AuditCleanupActions.vue'
 import { dataSourceApi, queryAuditApi, userApi } from '@/api'
@@ -7,6 +8,7 @@ import { displayLabel, formatDateTime } from '@/display'
 import { formatDuration } from '@/query/duration'
 import type { AdminUser, DataSource, Id, QueryAudit, QueryAuditPreview } from '@/types'
 
+const { t } = useI18n()
 const loading = ref(false)
 const rows = ref<QueryAudit[]>([])
 const total = ref(0)
@@ -27,13 +29,13 @@ const filters = reactive({
   sourceId: undefined as Id | undefined,
 })
 
-const statusOptions = [
-  { label: '全部状态', value: '' },
-  { label: '执行中', value: 'RUNNING' },
-  { label: '成功', value: 'SUCCEEDED' },
-  { label: '失败', value: 'FAILED' },
-  { label: '已取消', value: 'CANCELLED' },
-]
+const statusOptions = computed(() => [
+  { label: t('queryAudit.allStatus'), value: '' },
+  { label: displayLabel('RUNNING'), value: 'RUNNING' },
+  { label: displayLabel('SUCCEEDED'), value: 'SUCCEEDED' },
+  { label: displayLabel('FAILED'), value: 'FAILED' },
+  { label: displayLabel('CANCELLED'), value: 'CANCELLED' },
+])
 
 const detailSql = computed(() => detail.value?.sqlText || '')
 const browserText = computed(() => summarizeUserAgent(detail.value?.userAgent))
@@ -62,7 +64,7 @@ async function load() {
     rows.value = result.items
     total.value = result.total
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '审计加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('queryAudit.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -91,7 +93,7 @@ async function openDetail(row: QueryAudit) {
     detail.value = full
     preview.value = parsePreview(full.resultPreview)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '审计详情加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('queryAudit.detailFailed'))
   } finally {
     detailLoading.value = false
   }
@@ -109,7 +111,7 @@ function parsePreview(raw?: string | null): QueryAuditPreview | null {
 }
 
 function summarizeUserAgent(ua?: string | null) {
-  if (!ua) return '—'
+  if (!ua) return t('common.emptyDash')
   if (/Edg\//i.test(ua)) return 'Microsoft Edge'
   if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) return 'Google Chrome'
   if (/Firefox\//i.test(ua)) return 'Mozilla Firefox'
@@ -129,10 +131,10 @@ async function onCleanup(payload: { mode: 'ALL' | 'BEFORE_DAYS' | 'BEFORE_DATE';
   cleaning.value = true
   try {
     const result = await queryAuditApi.cleanup(payload)
-    ElMessage.success(`已删除 ${result.deleted} 条查询审计`)
+    ElMessage.success(t('queryAudit.deleted', { n: result.deleted }))
     await load()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '清理失败')
+    ElMessage.error(error instanceof Error ? error.message : t('queryAudit.cleanupFailed'))
   } finally {
     cleaning.value = false
   }
@@ -147,7 +149,7 @@ onMounted(async () => {
 <template>
   <div class="page">
     <div class="page-header">
-      <h1 class="page-title">查询审计</h1>
+      <h1 class="page-title">{{ t('queryAudit.title') }}</h1>
       <AuditCleanupActions :cleaning="cleaning" @cleanup="onCleanup" />
     </div>
 
@@ -155,14 +157,14 @@ onMounted(async () => {
       <el-input
         v-model="filters.keyword"
         clearable
-        placeholder="搜索 SQL / 用户 / IP / 数据源"
+        :placeholder="t('queryAudit.searchPlaceholder')"
         style="width: 260px"
         @keyup.enter="search"
       />
-      <el-select v-model="filters.status" clearable placeholder="状态" style="width: 140px">
+      <el-select v-model="filters.status" clearable :placeholder="t('common.status')" style="width: 140px">
         <el-option v-for="item in statusOptions" :key="item.value || 'all'" :label="item.label" :value="item.value" />
       </el-select>
-      <el-select v-model="filters.userId" clearable filterable placeholder="用户" style="width: 180px">
+      <el-select v-model="filters.userId" clearable filterable :placeholder="t('queryAudit.user')" style="width: 180px">
         <el-option
           v-for="item in users"
           :key="item.id"
@@ -170,44 +172,44 @@ onMounted(async () => {
           :value="item.id"
         />
       </el-select>
-      <el-select v-model="filters.sourceId" clearable filterable placeholder="数据源" style="width: 200px">
+      <el-select v-model="filters.sourceId" clearable filterable :placeholder="t('queryAudit.dataSource')" style="width: 200px">
         <el-option v-for="item in sources" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>
-      <el-button type="primary" @click="search">查询</el-button>
-      <el-button @click="resetFilters">重置</el-button>
+      <el-button type="primary" @click="search">{{ t('common.search') }}</el-button>
+      <el-button @click="resetFilters">{{ t('common.reset') }}</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" empty-text="暂无审计记录" @row-click="openDetail">
-      <el-table-column label="时间" width="170">
+    <el-table v-loading="loading" :data="rows" :empty-text="t('queryAudit.empty')" @row-click="openDetail">
+      <el-table-column :label="t('queryAudit.time')" width="170">
         <template #default="{ row }">{{ formatDateTime(row.startedAt) }}</template>
       </el-table-column>
-      <el-table-column label="用户" min-width="120">
+      <el-table-column :label="t('queryAudit.user')" min-width="120">
         <template #default="{ row }">{{ row.displayName || row.username }}</template>
       </el-table-column>
-      <el-table-column prop="dataSourceName" label="数据源" min-width="120" show-overflow-tooltip />
+      <el-table-column prop="dataSourceName" :label="t('queryAudit.dataSource')" min-width="120" show-overflow-tooltip />
       <el-table-column label="SQL" min-width="240" show-overflow-tooltip>
         <template #default="{ row }">
           <code class="sql-cell">{{ row.sqlText }}</code>
         </template>
       </el-table-column>
       <el-table-column prop="clientIp" label="IP" width="130" show-overflow-tooltip />
-      <el-table-column label="浏览器" min-width="120" show-overflow-tooltip>
+      <el-table-column :label="t('queryAudit.userAgent')" min-width="120" show-overflow-tooltip>
         <template #default="{ row }">{{ summarizeUserAgent(row.userAgent) }}</template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column :label="t('common.status')" width="90">
         <template #default="{ row }">
           <el-tag size="small" :type="statusType(row.status)">{{ displayLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="行数" width="80">
-        <template #default="{ row }">{{ row.rowCount ?? '—' }}</template>
+      <el-table-column :label="t('queryAudit.rows')" width="80">
+        <template #default="{ row }">{{ row.rowCount ?? t('common.emptyDash') }}</template>
       </el-table-column>
-      <el-table-column label="耗时" width="90">
-        <template #default="{ row }">{{ formatDuration(row.durationMs) || '—' }}</template>
+      <el-table-column :label="t('queryAudit.duration')" width="90">
+        <template #default="{ row }">{{ formatDuration(row.durationMs) || t('common.emptyDash') }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="80" fixed="right">
+      <el-table-column :label="t('common.actions')" width="80" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click.stop="openDetail(row)">详情</el-button>
+          <el-button link type="primary" @click.stop="openDetail(row)">{{ t('queryAudit.detail') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -225,41 +227,41 @@ onMounted(async () => {
       />
     </div>
 
-    <el-drawer v-model="detailVisible" title="审计详情" size="720px">
+    <el-drawer v-model="detailVisible" :title="t('queryAudit.detailTitle')" size="720px">
       <div v-loading="detailLoading" class="detail">
         <template v-if="detail">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="用户">{{ detail.displayName || detail.username }}（{{ detail.username }}）</el-descriptions-item>
-            <el-descriptions-item label="状态">
+            <el-descriptions-item :label="t('queryAudit.user')">{{ detail.displayName || detail.username }}（{{ detail.username }}）</el-descriptions-item>
+            <el-descriptions-item :label="t('common.status')">
               <el-tag size="small" :type="statusType(detail.status)">{{ displayLabel(detail.status) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="数据源">{{ detail.dataSourceName }}</el-descriptions-item>
-            <el-descriptions-item label="查询 ID">{{ detail.queryId }}</el-descriptions-item>
-            <el-descriptions-item label="开始时间">{{ formatDateTime(detail.startedAt) }}</el-descriptions-item>
-            <el-descriptions-item label="结束时间">{{ formatDateTime(detail.finishedAt) }}</el-descriptions-item>
-            <el-descriptions-item label="耗时">{{ formatDuration(detail.durationMs) || '—' }}</el-descriptions-item>
-            <el-descriptions-item label="返回行数">{{ detail.rowCount ?? '—' }}</el-descriptions-item>
-            <el-descriptions-item label="IP">{{ detail.clientIp || '—' }}</el-descriptions-item>
-            <el-descriptions-item label="浏览器">{{ browserText }}</el-descriptions-item>
+            <el-descriptions-item :label="t('queryAudit.dataSource')">{{ detail.dataSourceName }}</el-descriptions-item>
+            <el-descriptions-item :label="t('queryAudit.queryId')">{{ detail.queryId }}</el-descriptions-item>
+            <el-descriptions-item :label="t('queryAudit.startedAt')">{{ formatDateTime(detail.startedAt) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('queryAudit.finishedAt')">{{ formatDateTime(detail.finishedAt) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('queryAudit.duration')">{{ formatDuration(detail.durationMs) || t('common.emptyDash') }}</el-descriptions-item>
+            <el-descriptions-item :label="t('queryAudit.rowCount')">{{ detail.rowCount ?? t('common.emptyDash') }}</el-descriptions-item>
+            <el-descriptions-item label="IP">{{ detail.clientIp || t('common.emptyDash') }}</el-descriptions-item>
+            <el-descriptions-item :label="t('queryAudit.userAgent')">{{ browserText }}</el-descriptions-item>
             <el-descriptions-item label="User-Agent" :span="2">
-              <span class="ua">{{ detail.userAgent || '—' }}</span>
+              <span class="ua">{{ detail.userAgent || t('common.emptyDash') }}</span>
             </el-descriptions-item>
-            <el-descriptions-item v-if="detail.errorMessage" label="错误" :span="2">
+            <el-descriptions-item v-if="detail.errorMessage" :label="t('queryAudit.error')" :span="2">
               <span class="error">{{ detail.errorMessage }}</span>
             </el-descriptions-item>
           </el-descriptions>
 
-          <h3 class="block-title">执行 SQL</h3>
+          <h3 class="block-title">{{ t('queryAudit.sql') }}</h3>
           <pre class="sql-block">{{ detailSql }}</pre>
 
           <h3 class="block-title">
-            数据预览
+            {{ t('queryAudit.preview') }}
             <span v-if="preview" class="muted">
-              （预览 {{ preview.previewRowCount }} / 共 {{ preview.totalRowCount }} 行）
+              {{ t('queryAudit.previewMeta', { shown: preview.previewRowCount, total: preview.totalRowCount }) }}
             </span>
           </h3>
-          <el-empty v-if="!preview?.rows?.length" description="无预览数据" :image-size="64" />
-          <el-table v-else :data="preview.rows" max-height="360" stripe empty-text="无预览数据" size="small">
+          <el-empty v-if="!preview?.rows?.length" :description="t('queryAudit.noPreview')" :image-size="64" />
+          <el-table v-else :data="preview.rows" max-height="360" stripe :empty-text="t('queryAudit.noPreview')" size="small">
             <el-table-column
               v-for="column in preview.columns"
               :key="column"

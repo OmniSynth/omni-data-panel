@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { dataSourceHealthApi } from '@/api'
 import { formatDateTime } from '@/display'
@@ -7,6 +8,7 @@ import type { DataSourceHealthItem, DataSourceHealthOverview, DataSourceHealthSt
 
 const REFRESH_MS = 10_000
 
+const { t } = useI18n()
 const loading = ref(false)
 const autoRefresh = ref(true)
 const overview = ref<DataSourceHealthOverview>()
@@ -15,28 +17,28 @@ let timer: ReturnType<typeof setInterval> | undefined
 
 const checkedLabel = computed(() => {
   const raw = overview.value?.checkedAt
-  return raw ? formatDateTime(raw) : '—'
+  return raw ? formatDateTime(raw) : t('common.emptyDash')
 })
 
 const cards = computed(() => {
   const data = overview.value
   if (!data) return []
   return [
-    { key: 'up', label: '正常', value: data.up, tone: 'ok' },
-    { key: 'degraded', label: '亚健康', value: data.degraded, tone: 'warn' },
-    { key: 'down', label: '不可用', value: data.down, tone: 'danger' },
-    { key: 'cold', label: '未建池', value: data.cold, tone: 'cold' },
-    { key: 'total', label: '数据源', value: data.total, tone: 'neutral' },
+    { key: 'up', label: t('health.ok'), value: data.up, tone: 'ok' },
+    { key: 'degraded', label: t('health.degraded'), value: data.degraded, tone: 'warn' },
+    { key: 'down', label: t('health.down'), value: data.down, tone: 'danger' },
+    { key: 'cold', label: t('health.noPool'), value: data.cold, tone: 'cold' },
+    { key: 'total', label: t('health.dataSource'), value: data.total, tone: 'neutral' },
   ]
 })
 
 function healthLabel(status: DataSourceHealthStatus) {
   switch (status) {
-    case 'UP': return '正常'
-    case 'DEGRADED': return '亚健康'
-    case 'DOWN': return '不可用'
-    case 'COLD': return '未建池'
-    case 'DISABLED': return '已停用'
+    case 'UP': return t('health.ok')
+    case 'DEGRADED': return t('health.degraded')
+    case 'DOWN': return t('health.down')
+    case 'COLD': return t('health.noPool')
+    case 'DISABLED': return t('health.disabled')
     default: return status
   }
 }
@@ -52,13 +54,13 @@ function healthType(status: DataSourceHealthStatus) {
 }
 
 function endpoint(row: DataSourceHealthItem) {
-  if (!row.host) return '—'
+  if (!row.host) return t('common.emptyDash')
   const base = `${row.host}:${row.port ?? 3306}`
   return row.defaultDatabase ? `${base}/${row.defaultDatabase}` : base
 }
 
 function poolUsage(row: DataSourceHealthItem) {
-  if (row.activeConnections == null || row.maximumPoolSize == null) return '—'
+  if (row.activeConnections == null || row.maximumPoolSize == null) return t('common.emptyDash')
   return `${row.activeConnections} / ${row.maximumPoolSize}`
 }
 
@@ -68,7 +70,7 @@ async function load(silent = false) {
     overview.value = await dataSourceHealthApi.overview()
     lastError.value = ''
   } catch (error) {
-    lastError.value = error instanceof Error ? error.message : '健康状态加载失败'
+    lastError.value = error instanceof Error ? error.message : t('health.loadFailed')
     if (!silent) ElMessage.error(lastError.value)
   } finally {
     loading.value = false
@@ -103,19 +105,19 @@ onUnmounted(() => {
   <div v-loading="loading" class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">连接池监控</h1>
-        <p class="subtitle">实时探测分析数据源可用性、延迟与 HikariCP 连接池占用。</p>
+        <h1 class="page-title">{{ t('health.title') }}</h1>
+        <p class="subtitle">{{ t('health.subtitle') }}</p>
       </div>
       <div class="actions">
-        <span class="meta">上次刷新：{{ checkedLabel }}</span>
+        <span class="meta">{{ t('health.lastRefresh') }}{{ checkedLabel }}</span>
         <el-switch
           :model-value="autoRefresh"
           inline-prompt
-          active-text="自动"
-          inactive-text="手动"
+          :active-text="t('health.auto')"
+          :inactive-text="t('health.manual')"
           @change="onAutoRefreshChange"
         />
-        <el-button type="primary" :loading="loading" @click="load()">立即刷新</el-button>
+        <el-button type="primary" :loading="loading" @click="load()">{{ t('health.refreshNow') }}</el-button>
       </div>
     </div>
 
@@ -135,47 +137,47 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <el-table :data="overview?.items || []" stripe empty-text="暂无数据源">
-      <el-table-column prop="name" label="数据源" min-width="140" show-overflow-tooltip />
-      <el-table-column label="健康" width="100">
+    <el-table :data="overview?.items || []" stripe :empty-text="t('health.empty')">
+      <el-table-column prop="name" :label="t('health.dataSource')" min-width="140" show-overflow-tooltip />
+      <el-table-column :label="t('health.health')" width="100">
         <template #default="{ row }">
           <el-tag size="small" :type="healthType(row.health)">{{ healthLabel(row.health) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="延迟" width="100">
+      <el-table-column :label="t('health.latency')" width="100">
         <template #default="{ row }">
           <span :class="{ slow: (row.latencyMs ?? 0) >= 1000 }">
-            {{ row.latencyMs == null ? '—' : `${row.latencyMs} ms` }}
+            {{ row.latencyMs == null ? t('common.emptyDash') : `${row.latencyMs} ms` }}
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="连接池" width="100">
+      <el-table-column :label="t('health.pool')" width="100">
         <template #default="{ row }">
           <el-tag size="small" :type="row.poolReady ? 'success' : 'info'" effect="plain">
-            {{ row.poolReady ? '已建池' : '未建池' }}
+            {{ row.poolReady ? t('health.pooled') : t('health.noPool') }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="活跃/最大" width="110">
+      <el-table-column :label="t('health.activeMax')" width="110">
         <template #default="{ row }">{{ poolUsage(row) }}</template>
       </el-table-column>
-      <el-table-column label="空闲" width="80">
-        <template #default="{ row }">{{ row.idleConnections ?? '—' }}</template>
+      <el-table-column :label="t('health.idle')" width="80">
+        <template #default="{ row }">{{ row.idleConnections ?? t('common.emptyDash') }}</template>
       </el-table-column>
-      <el-table-column label="总数" width="80">
-        <template #default="{ row }">{{ row.totalConnections ?? '—' }}</template>
+      <el-table-column :label="t('health.total')" width="80">
+        <template #default="{ row }">{{ row.totalConnections ?? t('common.emptyDash') }}</template>
       </el-table-column>
-      <el-table-column label="等待" width="80">
+      <el-table-column :label="t('health.waiting')" width="80">
         <template #default="{ row }">
           <span :class="{ warn: (row.threadsAwaitingConnection ?? 0) > 0 }">
-            {{ row.threadsAwaitingConnection ?? '—' }}
+            {{ row.threadsAwaitingConnection ?? t('common.emptyDash') }}
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="地址" min-width="180" show-overflow-tooltip>
+      <el-table-column :label="t('health.address')" min-width="180" show-overflow-tooltip>
         <template #default="{ row }">{{ endpoint(row) }}</template>
       </el-table-column>
-      <el-table-column prop="message" label="说明" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="message" :label="t('health.remark')" min-width="180" show-overflow-tooltip />
     </el-table>
   </div>
 </template>

@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { formatDateTime } from '@/display'
 import type { QueryResult } from '@/types'
 import { QUERY_RESULT_DISPLAY_LIMIT, QUERY_RESULT_PAGE_SIZES } from '@/query/limits'
 
+const { t } = useI18n()
+
 const ISO_LIKE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/
 
+/** 单元格展示：ISO 时间走东八区格式化，其余原样 */
 function formatCell(value: unknown) {
   if (value == null) return ''
   if (typeof value === 'string' && ISO_LIKE.test(value)) return formatDateTime(value)
@@ -40,7 +44,7 @@ watch(pageSize, () => { page.value = 1 })
 
 <template>
   <div class="result-table">
-    <el-table :data="pagedRows" :max-height="maxHeight" :stripe="stripe" empty-text="暂无数据">
+    <el-table :data="pagedRows" :max-height="maxHeight" :stripe="stripe" :empty-text="t('resultTable.empty')">
       <el-table-column
         v-for="column in columns"
         :key="column"
@@ -54,8 +58,8 @@ watch(pageSize, () => { page.value = 1 })
     </el-table>
     <div class="pager">
       <span class="meta">
-        共 {{ displayTotal }} 行
-        <template v-if="truncated">（后端返回 {{ totalFetched }} 行，页面最多展示 {{ QUERY_RESULT_DISPLAY_LIMIT }} 行）</template>
+        {{ t('resultTable.total', { n: displayTotal }) }}
+        <template v-if="truncated">{{ t('resultTable.truncated', { total: totalFetched, limit: QUERY_RESULT_DISPLAY_LIMIT }) }}</template>
       </span>
       <el-pagination
         v-model:current-page="page"

@@ -1,46 +1,46 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
+import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-const menuGroups = [
+const menuGroups = computed(() => [
   {
-    label: '系统',
+    label: t('adminShell.system'),
     items: [
-      { path: '/admin/settings', label: '通用设置' },
-      { path: '/admin/users', label: '用户' },
-      { path: '/admin/roles', label: '角色' },
-      { path: '/admin/subscriptions', label: '订阅' },
+      { path: '/admin/settings', label: t('adminShell.settings') },
+      { path: '/admin/users', label: t('adminShell.users') },
+      { path: '/admin/roles', label: t('adminShell.roles') },
+      { path: '/admin/subscriptions', label: t('adminShell.subscriptions') },
     ],
   },
   {
-    label: '数据源',
+    label: t('adminShell.dataSources'),
     items: [
-      { path: '/admin/databases', label: '数据源' },
-      { path: '/admin/data-source-health', label: '连接池监控' },
+      { path: '/admin/databases', label: t('adminShell.dataSources') },
+      { path: '/admin/data-source-health', label: t('adminShell.poolHealth') },
     ],
   },
   {
-    label: '审计',
+    label: t('adminShell.audit'),
     items: [
-      { path: '/admin/query-audits', label: '查询审计' },
-      { path: '/admin/login-audits', label: '登录日志' },
+      { path: '/admin/query-audits', label: t('adminShell.queryAudits') },
+      { path: '/admin/login-audits', label: t('adminShell.loginAudits') },
+      { path: '/admin/system-logs', label: t('adminShell.systemLogs') },
+      { path: '/admin/dataset-audits', label: t('adminShell.datasetAudits') },
     ],
   },
-  {
-    label: '权限',
-    items: [
-      { path: '/admin/permissions', label: '数据权限' },
-    ],
-  },
-]
+])
 
-const flatMenus = menuGroups.flatMap((group) => group.items)
+const flatMenus = computed(() => menuGroups.value.flatMap((group) => group.items))
 
 const active = computed(() => {
-  const hit = flatMenus.find((item) => route.path.startsWith(item.path))
+  const hit = flatMenus.value.find((item) => route.path.startsWith(item.path))
   return hit?.path || '/admin/settings'
 })
 </script>
@@ -50,9 +50,13 @@ const active = computed(() => {
     <header class="topbar">
       <div class="brand" @click="router.push('/admin/settings')">
         <img class="brand-logo" src="/favicon.png" alt="" width="24" height="24" />
-        <strong class="title">管理后台</strong>
+        <strong class="title">{{ t('adminShell.title') }}</strong>
       </div>
-      <el-button plain @click="router.push('/')">退出管理</el-button>
+      <div class="top-actions">
+        <ThemeSwitcher size="small" />
+        <LanguageSwitcher size="small" />
+        <el-button plain @click="router.push('/')">{{ t('adminShell.exit') }}</el-button>
+      </div>
     </header>
     <div class="body">
       <aside class="sidebar">
@@ -108,6 +112,11 @@ const active = computed(() => {
   height: 24px;
   object-fit: contain;
   display: block;
+}
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--omni-space-2);
 }
 .body {
   display: flex;

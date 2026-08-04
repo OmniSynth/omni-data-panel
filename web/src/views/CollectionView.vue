@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirmBox, promptBox } from '@/i18n/dialog'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { collectionApi } from '@/api'
+import { chartApi, collectionApi, dashboardApi, datasetApi, metricApi } from '@/api'
 import { formatDateTime } from '@/display'
 import { resourcePath, resourceTypeLabel } from '@/nav'
 import type { Collection, CollectionItem, Id, ResourceType } from '@/types'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
@@ -28,6 +31,7 @@ function flatten(nodes: Collection[], acc: Collection[] = []): Collection[] {
 }
 
 const flatCollections = computed(() => flatten(tree.value))
+const isPersonalRoot = computed(() => collection.value?.personalOwnerId != null)
 
 function findCollection(nodes: Collection[], id: string): Collection | undefined {
   for (const node of nodes) {
@@ -47,7 +51,7 @@ async function load() {
     collection.value = findCollection(tree.value, collectionId.value)
     items.value = await collectionApi.items(collectionId.value)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '集合加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('collection.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -61,32 +65,59 @@ function openItem(row: CollectionItem) {
 async function rename() {
   if (!collection.value) return
   try {
-    const { value } = await ElMessageBox.prompt('请输入集合名称', '重命名集合', {
+    const { value } = await promptBox(t('collection.renamePrompt'), t('collection.renameTitle'), {
       inputValue: collection.value.name,
       inputPattern: /\S+/,
-      inputErrorMessage: '名称不能为空',
+      inputErrorMessage: t('common.nameRequired'),
     })
     await collectionApi.update(collection.value.id, {
       name: value,
       description: collection.value.description,
       parentId: collection.value.parentId,
     })
-    ElMessage.success('已更新')
+    ElMessage.success(t('common.updated'))
     await load()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '更新失败')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.updateFailed'))
   }
 }
 
 async function removeCollection() {
-  if (!collection.value) return
+  if (!collection.value || isPersonalRoot.value) return
   try {
-    await ElMessageBox.confirm('确认删除该集合？集合需为空才可删除。', '删除确认', { type: 'warning' })
+    await confirmBox(t('collection.deleteConfirm'), t('common.deleteConfirmTitle'), { type: 'warning' })
     await collectionApi.remove(collection.value.id)
-    ElMessage.success('集合已删除')
+    ElMessage.success(t('collection.deleted'))
     await router.push('/')
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '删除失败')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
+  }
+}
+
+async function removeItem(row: CollectionItem) {
+  if (row.type === 'COLLECTION') return
+  try {
+    await confirmBox(t('collection.deleteItemConfirm'), t('common.deleteConfirmTitle'), { type: 'warning' })
+    switch (row.type) {
+      case 'QUESTION':
+        await chartApi.remove(row.id)
+        break
+      case 'DASHBOARD':
+        await dashboardApi.remove(row.id)
+        break
+      case 'MODEL':
+        await datasetApi.remove(row.id)
+        break
+      case 'METRIC':
+        await metricApi.remove(row.id)
+        break
+      default:
+        throw new Error(t('common.deleteFailed'))
+    }
+    ElMessage.success(t('collection.itemDeleted'))
+    await load()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
   }
 }
 
@@ -97,7 +128,7 @@ function openMove(row: CollectionItem) {
 }
 
 async function submitMove() {
-  if (!movingItem.value || targetCollectionId.value === undefined) return ElMessage.warning('请选择目标集合')
+  if (!movingItem.value || targetCollectionId.value === undefined) return ElMessage.warning(t('collection.needTarget'))
   try {
     await collectionApi.move({
       resourceType: movingItem.value.type as ResourceType,
@@ -105,10 +136,10 @@ async function submitMove() {
       collectionId: targetCollectionId.value,
     })
     moveVisible.value = false
-    ElMessage.success('已移入目标集合')
+    ElMessage.success(t('collection.moved'))
     await load()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '移动失败')
+    ElMessage.error(error instanceof Error ? error.message : t('collection.moveFailed'))
   }
 }
 
@@ -120,38 +151,49 @@ onMounted(load)
   <div v-loading="loading" class="page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">{{ collection?.name || '集合' }}</h1>
-        <p class="muted">{{ collection?.description || '浏览并管理集合中的内容' }}</p>
+        <h1 class="page-title">{{ collection?.name || t('collection.title') }}</h1>
+        <p class="muted">{{ collection?.description || t('collection.subtitle') }}</p>
       </div>
       <div class="toolbar" style="margin:0">
-        <el-button @click="rename">重命名</el-button>
-        <el-button type="danger" plain @click="removeCollection">删除集合</el-button>
+        <el-button @click="rename">{{ t('collection.rename') }}</el-button>
+        <el-button
+          v-if="!isPersonalRoot"
+          type="danger"
+          plain
+          @click="removeCollection"
+        >{{ t('collection.deleteCollection') }}</el-button>
       </div>
     </div>
-    <el-table :data="items" empty-text="该集合暂无内容">
-      <el-table-column prop="name" label="名称" min-width="200">
+    <el-table :data="items" :empty-text="t('collection.empty')">
+      <el-table-column prop="name" :label="t('common.name')" min-width="200">
         <template #default="{ row }">
           <el-button link type="primary" @click="openItem(row)">{{ row.name }}</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="类型" width="120">
+      <el-table-column :label="t('common.type')" width="120">
         <template #default="{ row }">{{ resourceTypeLabel(row.type) }}</template>
       </el-table-column>
-      <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip />
-      <el-table-column label="更新时间" width="180">
+      <el-table-column prop="description" :label="t('common.description')" min-width="220" show-overflow-tooltip />
+      <el-table-column :label="t('collection.updatedAt')" width="180">
         <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="140">
+      <el-table-column :label="t('common.actions')" width="220">
         <template #default="{ row }">
-          <el-button v-if="row.type !== 'COLLECTION'" link @click="openMove(row)">移入</el-button>
-          <el-button link type="primary" @click="openItem(row)">打开</el-button>
+          <el-button v-if="row.type !== 'COLLECTION'" link @click="openMove(row)">{{ t('collection.moveTo') }}</el-button>
+          <el-button
+            v-if="row.type !== 'COLLECTION'"
+            link
+            type="danger"
+            @click="removeItem(row)"
+          >{{ t('common.delete') }}</el-button>
+          <el-button link type="primary" @click="openItem(row)">{{ t('common.open') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="moveVisible" title="移入集合" width="420px">
+    <el-dialog v-model="moveVisible" :title="t('collection.moveDialogTitle')" width="420px">
       <el-form label-width="90px">
-        <el-form-item label="目标集合">
+        <el-form-item :label="t('collection.target')">
           <el-select v-model="targetCollectionId" class="full-width" filterable>
             <el-option
               v-for="item in flatCollections"
@@ -164,8 +206,8 @@ onMounted(load)
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="moveVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitMove">确认</el-button>
+        <el-button @click="moveVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="submitMove">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>

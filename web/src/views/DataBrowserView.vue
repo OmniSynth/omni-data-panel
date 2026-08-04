@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { dataSourceApi } from '@/api'
 import { useUserStore } from '@/stores/user'
@@ -12,6 +13,7 @@ type TableItem = {
   comment?: string
 }
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const sources = ref<DataSource[]>([])
 const sourceId = ref<Id>()
@@ -80,7 +82,7 @@ function toggleSchema(schema: string) {
 }
 
 function formatLength(column: MetadataColumn) {
-  if (column.columnSize == null) return '—'
+  if (column.columnSize == null) return t('common.emptyDash')
   if (column.decimalDigits != null && column.decimalDigits > 0) {
     return `${column.columnSize},${column.decimalDigits}`
   }
@@ -88,18 +90,18 @@ function formatLength(column: MetadataColumn) {
 }
 
 function formatForeignKey(column: MetadataColumn) {
-  if (!column.foreignKey) return '否'
+  if (!column.foreignKey) return t('common.no')
   if (column.fkTableName && column.fkColumnName) {
-    return `是 → ${column.fkTableName}.${column.fkColumnName}`
+    return t('dataBrowser.fkYes', { table: column.fkTableName, col: column.fkColumnName })
   }
-  return '是'
+  return t('common.yes')
 }
 
 async function loadSources() {
   try {
     sources.value = await dataSourceApi.list()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '数据源加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dataBrowser.loadFailed'))
   }
 }
 
@@ -120,7 +122,7 @@ async function loadTables() {
           id: `${schema}.__empty__`,
           schema,
           tableName: '',
-          comment: '（暂无表）',
+          comment: t('dataBrowser.noTablesParen'),
         } satisfies TableItem]
       }
       return rows.map((table) => ({
@@ -136,7 +138,7 @@ async function loadTables() {
       expandedSchemas.value = new Set(schemas)
     }
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '表列表加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dataBrowser.tablesFailed'))
   } finally {
     loading.value = false
   }
@@ -147,10 +149,10 @@ async function syncMetadata() {
   loading.value = true
   try {
     await dataSourceApi.sync(sourceId.value)
-    ElMessage.success('元数据同步完成')
+    ElMessage.success(t('dataBrowser.syncOk'))
     await loadTables()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '同步失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dataBrowser.syncFailed'))
     loading.value = false
   }
 }
@@ -163,7 +165,7 @@ async function openTable(item: TableItem) {
     columns.value = await dataSourceApi.columns(sourceId.value, item.schema, item.tableName)
   } catch (error) {
     columns.value = []
-    ElMessage.error(error instanceof Error ? error.message : '字段加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dataBrowser.fieldsFailed'))
   } finally {
     columnsLoading.value = false
   }
@@ -187,12 +189,12 @@ onMounted(loadSources)
 <template>
   <div class="page browser">
     <div class="page-header">
-      <h1 class="page-title">数据源</h1>
+      <h1 class="page-title">{{ t('dataSource.title') }}</h1>
       <div class="header-actions">
         <el-select
           v-model="sourceId"
           clearable
-          placeholder="选择数据源"
+          :placeholder="t('dataBrowser.selectSource')"
           style="width:280px"
         >
           <el-option v-for="item in sources" :key="item.id" :label="item.name" :value="item.id" />
@@ -201,44 +203,60 @@ onMounted(loadSources)
           v-if="sourceId && userStore.isAdmin"
           :loading="loading"
           @click="syncMetadata"
-        >同步元数据</el-button>
+        >{{ t('dataBrowser.syncMeta') }}</el-button>
         <el-button
           v-if="sourceId && userStore.hasPermission('query:raw')"
           type="primary"
           @click="$router.push({ path: '/sql', query: { sourceId: String(sourceId) } })"
-        >SQL 查询</el-button>
+        >{{ t('dataBrowser.sqlQuery') }}</el-button>
       </div>
     </div>
 
-    <div v-loading="loading" class="browser-body">
-      <el-empty v-if="!sourceId" description="请选择数据源查看表结构" />
+    <div v-loading="loading" class="browser-body" :class="{ idle: !sourceId }">
+      <div v-if="!sourceId" class="browser-empty">
+        <span class="browser-empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <ellipse cx="12" cy="5" rx="8" ry="3" />
+            <path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+            <path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
+          </svg>
+        </span>
+        <div class="browser-empty-copy">
+          <strong>{{ t('dataBrowser.selectHintTitle') }}</strong>
+          <span>{{ sources.length ? t('dataBrowser.selectHint') : t('dataBrowser.selectHintEmpty') }}</span>
+        </div>
+        <div v-if="sources.length" class="browser-empty-sources">
+          <button
+            v-for="item in sources"
+            :key="item.id"
+            type="button"
+            class="source-chip"
+            @click="sourceId = item.id"
+          >
+            <strong>{{ item.name }}</strong>
+            <span>{{ item.dialect || 'MYSQL' }}</span>
+          </button>
+        </div>
+      </div>
       <template v-else>
         <aside class="tree-pane">
           <div class="pane-title">
             <template v-if="multiDatabase">
-              {{ allSchemas.length }} 个库 · {{ filteredTables.length }}/{{ realTables.length }} 张表
+              {{ t('dataBrowser.stats', { schemas: allSchemas.length, shown: filteredTables.length, total: realTables.length }) }}
             </template>
             <template v-else>
-              表列表（{{ filteredTables.length }}/{{ realTables.length }}）
+              {{ t('dataBrowser.tableList', { shown: filteredTables.length, total: realTables.length }) }}
             </template>
           </div>
           <el-input
             v-model="keyword"
             clearable
-            placeholder="搜索表名、库名或注释"
+            :placeholder="t('dataBrowser.searchTables')"
             class="table-search"
           />
           <div class="table-list">
-            <el-empty
-              v-if="!allSchemas.length"
-              description="暂无库表，请先同步元数据"
-              :image-size="64"
-            />
-            <el-empty
-              v-else-if="!groupedTables.length"
-              description="没有匹配的表"
-              :image-size="64"
-            />
+            <div v-if="!allSchemas.length" class="pane-empty">{{ t('dataBrowser.noTables') }}</div>
+            <div v-else-if="!groupedTables.length" class="pane-empty">{{ t('dataBrowser.noMatch') }}</div>
             <div v-for="group in groupedTables" :key="group.schema" class="schema-group">
               <button
                 v-if="multiDatabase"
@@ -251,14 +269,10 @@ onMounted(loadSources)
                 <span class="schema-label">{{ group.schema }}</span>
                 <span class="schema-count">{{ group.items.length || group.totalInSchema }}</span>
               </button>
-              <div v-else class="schema-name">库 · {{ group.schema }}</div>
+              <div v-else class="schema-name">{{ t('dataBrowser.schemaPrefix') }} {{ group.schema }}</div>
 
               <div v-show="isExpanded(group.schema)" class="schema-tables">
-                <el-empty
-                  v-if="!group.items.length"
-                  description="（暂无表）"
-                  :image-size="48"
-                />
+                <div v-if="!group.items.length" class="pane-empty compact">{{ t('dataBrowser.noTablesParen') }}</div>
                 <button
                   v-for="item in group.items"
                   :key="item.id"
@@ -276,34 +290,49 @@ onMounted(loadSources)
         </aside>
 
         <section class="detail-pane">
-          <div class="pane-title">{{ selectedTitle || '字段详情' }}</div>
-          <el-empty v-if="!selected" description="搜索并点击左侧表，查看字段名称、类型、主键、外键、注释与长度" />
+          <div class="pane-title">{{ selectedTitle || t('dataBrowser.fieldDetail') }}</div>
+          <div v-if="!selected" class="detail-empty">
+            <span class="browser-empty-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 6h13" />
+                <path d="M8 12h13" />
+                <path d="M8 18h13" />
+                <path d="M3 6h.01" />
+                <path d="M3 12h.01" />
+                <path d="M3 18h.01" />
+              </svg>
+            </span>
+            <div class="browser-empty-copy">
+              <strong>{{ t('dataBrowser.fieldHintTitle') }}</strong>
+              <span>{{ t('dataBrowser.fieldHint') }}</span>
+            </div>
+          </div>
           <el-table
             v-else
             v-loading="columnsLoading"
             :data="columns"
             stripe
-            empty-text="该表暂无字段信息，请重新同步元数据"
+            :empty-text="t('dataBrowser.noFields')"
           >
-            <el-table-column prop="columnName" label="字段名称" min-width="140" fixed />
-            <el-table-column prop="typeName" label="类型" min-width="110" />
-            <el-table-column label="长度" width="90">
+            <el-table-column prop="columnName" :label="t('dataBrowser.fieldName')" min-width="140" fixed />
+            <el-table-column prop="typeName" :label="t('common.type')" min-width="110" />
+            <el-table-column :label="t('dataBrowser.length')" width="90">
               <template #default="{ row }">{{ formatLength(row) }}</template>
             </el-table-column>
-            <el-table-column label="主键" width="80">
+            <el-table-column :label="t('dataBrowser.primaryKey')" width="80">
               <template #default="{ row }">
-                <el-tag v-if="row.primaryKey" size="small" type="warning">是</el-tag>
-                <span v-else class="muted">否</span>
+                <el-tag v-if="row.primaryKey" size="small" type="warning">{{ t('common.yes') }}</el-tag>
+                <span v-else class="muted">{{ t('common.no') }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="外键" min-width="180">
+            <el-table-column :label="t('dataBrowser.foreignKey')" min-width="180">
               <template #default="{ row }">{{ formatForeignKey(row) }}</template>
             </el-table-column>
-            <el-table-column label="可空" width="80">
-              <template #default="{ row }">{{ row.nullable ? '是' : '否' }}</template>
+            <el-table-column :label="t('dataBrowser.nullable')" width="80">
+              <template #default="{ row }">{{ row.nullable ? t('common.yes') : t('common.no') }}</template>
             </el-table-column>
-            <el-table-column prop="comment" label="字段注释" min-width="180" show-overflow-tooltip />
-            <el-table-column prop="position" label="序号" width="70" />
+            <el-table-column prop="comment" :label="t('dataBrowser.comment')" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="position" :label="t('dataBrowser.ordinal')" width="70" />
           </el-table>
         </section>
       </template>
@@ -318,6 +347,99 @@ onMounted(loadSources)
   grid-template-columns: 320px minmax(0, 1fr);
   gap: 16px;
   min-height: 520px;
+}
+.browser-body.idle {
+  grid-template-columns: 1fr;
+}
+.browser-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  min-height: 360px;
+  padding: 28px 32px;
+  border: 1px dashed var(--omni-border, #e5e7eb);
+  border-radius: 12px;
+  background: var(--omni-surface, #f8fafc);
+}
+.browser-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--omni-border, #e5e7eb);
+  color: var(--omni-muted, #6b7280);
+}
+.browser-empty-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 420px;
+}
+.browser-empty-copy strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--omni-text, #111827);
+}
+.browser-empty-copy span {
+  font-size: 13px;
+  color: var(--omni-muted, #6b7280);
+  line-height: 1.5;
+}
+.browser-empty-sources {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+.source-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid var(--omni-border, #e5e7eb);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  color: inherit;
+}
+.source-chip:hover {
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+.source-chip strong {
+  font-size: 13px;
+  color: var(--omni-text, #111827);
+}
+.source-chip span {
+  font-size: 11px;
+  color: var(--omni-muted, #9ca3af);
+  font-weight: 600;
+}
+.detail-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 16px 18px;
+  border: 1px dashed #e5e7eb;
+  border-radius: 10px;
+  background: #fafbfc;
+}
+.pane-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #9ca3af;
+}
+.pane-empty.compact {
+  padding: 12px;
+  font-size: 12px;
 }
 .tree-pane,
 .detail-pane {

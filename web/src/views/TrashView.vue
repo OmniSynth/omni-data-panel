@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirmBox } from '@/i18n/dialog'
+import { useI18n } from 'vue-i18n'
 import { trashApi } from '@/api'
 import { formatDateTime } from '@/display'
 import { resourceTypeLabel } from '@/nav'
 import type { TrashItem } from '@/types'
 
+const { t } = useI18n()
 const loading = ref(false)
 const rows = ref<TrashItem[]>([])
 
@@ -14,7 +17,7 @@ async function load() {
   try {
     rows.value = await trashApi.list()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '废纸篓加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('trash.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -23,21 +26,21 @@ async function load() {
 async function restore(row: TrashItem) {
   try {
     await trashApi.restore({ resourceType: row.resourceType, resourceId: row.resourceId })
-    ElMessage.success('已恢复')
+    ElMessage.success(t('trash.restored'))
     await load()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '恢复失败')
+    ElMessage.error(error instanceof Error ? error.message : t('trash.restoreFailed'))
   }
 }
 
 async function purge(row: TrashItem) {
   try {
-    await ElMessageBox.confirm('永久删除后不可恢复，确认继续？', '永久删除', { type: 'warning' })
+    await confirmBox(t('trash.purgeConfirm'), t('trash.purgeTitle'), { type: 'warning' })
     await trashApi.purge({ resourceType: row.resourceType, resourceId: row.resourceId })
-    ElMessage.success('已永久删除')
+    ElMessage.success(t('trash.purged'))
     await load()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '删除失败')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
   }
 }
 
@@ -46,20 +49,20 @@ onMounted(load)
 
 <template>
   <div class="page">
-    <div class="page-header"><h1 class="page-title">废纸篓</h1></div>
-    <el-table v-loading="loading" :data="rows" empty-text="废纸篓是空的">
-      <el-table-column prop="name" label="名称" />
-      <el-table-column label="类型" width="120">
+    <div class="page-header"><h1 class="page-title">{{ t('trash.title') }}</h1></div>
+    <el-table v-loading="loading" :data="rows" :empty-text="t('trash.empty')">
+      <el-table-column prop="name" :label="t('common.name')" />
+      <el-table-column :label="t('common.type')" width="120">
         <template #default="{ row }">{{ resourceTypeLabel(row.resourceType) }}</template>
       </el-table-column>
-      <el-table-column prop="description" label="描述" show-overflow-tooltip />
-      <el-table-column label="删除时间" width="180">
+      <el-table-column prop="description" :label="t('common.description')" show-overflow-tooltip />
+      <el-table-column :label="t('trash.deletedAt')" width="180">
         <template #default="{ row }">{{ formatDateTime(row.deletedAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="180">
+      <el-table-column :label="t('common.actions')" width="180">
         <template #default="{ row }">
-          <el-button link type="primary" @click="restore(row)">恢复</el-button>
-          <el-button link type="danger" @click="purge(row)">永久删除</el-button>
+          <el-button link type="primary" @click="restore(row)">{{ t('trash.restore') }}</el-button>
+          <el-button link type="danger" @click="purge(row)">{{ t('trash.purgeTitle') }}</el-button>
         </template>
       </el-table-column>
     </el-table>

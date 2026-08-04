@@ -42,7 +42,9 @@ public class PublicLinkService {
      */
     public List<PublicLinkEntity> list() {
         AuthenticatedUser user = AuthenticatedUser.current();
-        return mapper.selectList(Wrappers.<PublicLinkEntity>lambdaQuery().orderByDesc(PublicLinkEntity::getId))
+        return mapper.selectList(Wrappers.<PublicLinkEntity>lambdaQuery()
+                        .eq(PublicLinkEntity::getEnabled, true)
+                        .orderByDesc(PublicLinkEntity::getId))
                 .stream()
                 .filter(link -> user.admin() || link.getCreatedBy().equals(user.id()) || isOwner(link))
                 .toList();
@@ -77,9 +79,10 @@ public class PublicLinkService {
      */
     @Transactional
     public void revoke(long id) {
-        PublicLinkEntity link = requireManageable(id);
-        link.setEnabled(false);
-        mapper.updateById(link);
+        requireManageable(id);
+        mapper.update(null, Wrappers.<PublicLinkEntity>lambdaUpdate()
+                .eq(PublicLinkEntity::getId, id)
+                .set(PublicLinkEntity::getEnabled, false));
     }
 
     /**

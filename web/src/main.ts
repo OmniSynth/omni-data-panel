@@ -1,13 +1,15 @@
 import { createApp, type Directive } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
+import 'element-plus/theme-chalk/dark/css-vars.css'
 import 'gridstack/dist/gridstack.min.css'
 import './styles.css'
 import App from './App.vue'
 import router from './router'
+import i18n, { elementLocale } from './i18n'
 import { useUserStore } from './stores/user'
+import { useThemeStore } from './stores/theme'
 
 const permission: Directive<HTMLElement, string> = {
   mounted(element, binding) {
@@ -15,9 +17,12 @@ const permission: Directive<HTMLElement, string> = {
   },
 }
 
-createApp(App)
+const app = createApp(App)
   .use(createPinia())
   .use(router)
-  .use(ElementPlus, { locale: zhCn, size: 'default' })
+  .use(i18n)
+  .use(ElementPlus, { size: 'default', locale: elementLocale.value })
   .directive('permission', permission)
-  .mount('#app')
+
+useThemeStore()
+app.mount('#app')

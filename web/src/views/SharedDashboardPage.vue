@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { embedApi, publicApi } from '@/api'
 import type { DashboardLayout, DashboardRender } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
+import DashboardParameterBar from '@/components/DashboardParameterBar.vue'
+import { defaultParameterValues, parseDashboardConfig } from '@/dashboard/config'
 
 const props = defineProps<{ mode: 'public' | 'embed' }>()
+const { t } = useI18n()
 const route = useRoute()
 const loading = ref(false)
 const dashboard = ref<DashboardRender>()
+const parameterValues = ref<Record<string, unknown>>({})
 
 const token = computed(() => String(route.params.token || ''))
+const parameters = computed(() => parseDashboardConfig(dashboard.value?.configJson).parameters || [])
 
 function layoutStyle(layoutJson: string) {
   const fallback = { x: 0, y: 0, w: 6, h: 4 }
@@ -52,8 +58,9 @@ async function load() {
     dashboard.value = props.mode === 'public'
       ? await publicApi.dashboard(token.value)
       : await embedApi.dashboard(token.value)
+    parameterValues.value = defaultParameterValues(parameters.value)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '仪表盘加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dashboard.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -65,9 +72,15 @@ onMounted(load)
 <template>
   <div v-loading="loading" class="page standalone">
     <div class="page-header">
-      <h1 class="page-title">{{ dashboard?.name || '仪表盘' }}</h1>
+      <h1 class="page-title">{{ dashboard?.name || t('dashboard.title') }}</h1>
     </div>
-    <el-empty v-if="!loading && dashboard && !dashboard.cards.length" description="该仪表盘暂无卡片" />
+    <DashboardParameterBar
+      v-if="parameters.length"
+      v-model="parameterValues"
+      :parameters="parameters"
+      readonly
+    />
+    <el-empty v-if="!loading && dashboard && !dashboard.cards.length" :description="t('dashboard.noCards')" />
     <div v-if="dashboard?.cards.length" class="dashboard-grid">
       <el-card
         v-for="card in dashboard.cards"

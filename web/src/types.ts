@@ -40,11 +40,56 @@ export interface AdminUser {
   permissions: string[]
 }
 
+export interface UserDirectoryItem {
+  id: Id
+  username: string
+  displayName: string
+}
+
+export interface FieldPermissionRow {
+  fieldName: string
+  allowed: boolean
+}
+
+export interface RowRule {
+  id: Id
+  datasetId: Id
+  userId?: Id | null
+  name: string
+  ruleJson: string
+  enabled: boolean
+}
+
+export type FilterOperator = 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'LIKE' | 'IN'
+
+export interface FilterCondition {
+  field: string
+  operator: FilterOperator
+  value: string
+}
+
 export interface RoleResourceGrant {
   roleId: Id
   code: string
   name: string
   permission: 'READ' | 'WRITE'
+}
+
+export interface ObjectAclTableRef {
+  schemaName: string
+  tableName: string
+}
+
+export interface ObjectAclColumnRef {
+  schemaName: string
+  tableName: string
+  columnName: string
+}
+
+export interface DataSourceObjectAcl {
+  roleId: Id
+  tables: ObjectAclTableRef[]
+  columns: ObjectAclColumnRef[]
 }
 
 export interface DataSource {
@@ -124,6 +169,8 @@ export interface SemanticQuery {
   datasetId: Id
   dimensions: string[]
   metrics: string[]
+  /** 业务指标 bi_metric 标识 */
+  metricIds?: Id[]
   filter?: QueryFilter
   sorts: Array<{ field: string; direction: 'ASC' | 'DESC' }>
   limit: number
@@ -251,6 +298,32 @@ export interface LoginAudit {
   loggedAt?: string
 }
 
+export interface SystemLogEntry {
+  level: string
+  loggerName: string
+  message: string
+  stackTrace?: string | null
+  threadName?: string
+  createdAt?: string
+}
+
+export interface SystemLogMeta {
+  capacity: number
+  buffered: number
+}
+
+export interface DatasetAudit {
+  id: Id
+  datasetId?: Id | null
+  datasetName: string
+  action: string
+  operatorId?: Id | null
+  operatorUsername?: string | null
+  operatorDisplayName?: string | null
+  detail?: string | null
+  createdAt?: string
+}
+
 export interface Chart {
   id: Id
   name: string
@@ -272,6 +345,8 @@ export interface DashboardCard {
   chartId: Id
   title: string
   layoutJson: string
+  bindingsJson?: string
+  clickActionJson?: string
 }
 
 export interface DashboardLayout {
@@ -279,6 +354,53 @@ export interface DashboardLayout {
   y: number
   w: number
   h: number
+}
+
+export type DashboardParameterType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'date-range'
+  | 'select'
+  | 'multi-select'
+
+export interface DashboardParameterOption {
+  label: string
+  value: string | number
+}
+
+export interface ParameterOptionsFrom {
+  datasetId: string | number
+  field: string
+  limit?: number
+}
+
+export interface DashboardParameter {
+  id: string
+  label: string
+  type: DashboardParameterType
+  defaultValue?: unknown
+  options?: DashboardParameterOption[]
+  optionsFrom?: ParameterOptionsFrom
+  required?: boolean
+}
+
+export interface DashboardConfig {
+  parameters?: DashboardParameter[]
+}
+
+export interface CardParameterBinding {
+  parameterId: string
+  mode: 'semantic' | 'sql'
+  field?: string
+  operator?: 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'LIKE' | 'IN'
+  parameterIndex?: number
+}
+
+export interface CardClickAction {
+  enabled: boolean
+  setParameterId: string
+  valueMode: 'replace' | 'toggle'
 }
 
 export interface Dashboard {
@@ -300,6 +422,8 @@ export interface DashboardRenderCard {
   chartType: string
   configJson: string
   layoutJson: string
+  bindingsJson?: string
+  clickActionJson?: string
   result?: QueryResult
   error?: string
 }
@@ -414,5 +538,7 @@ export interface PublicQuestion {
 export interface SiteSettings {
   'site.name'?: string
   'embed.enabled'?: string | boolean
-  [key: string]: string | boolean | undefined
+  'cache.query.enabled'?: string | boolean
+  'cache.query.ttl-seconds'?: string | number
+  [key: string]: string | boolean | number | undefined
 }

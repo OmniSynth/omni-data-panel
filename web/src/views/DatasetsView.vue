@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
+import { confirmBox } from '@/i18n/dialog'
 import { useRoute, useRouter } from 'vue-router'
 import { collectionApi, dataSourceApi, datasetApi } from '@/api'
+import { displayLabel } from '@/display'
 import { useUserStore } from '@/stores/user'
 import type { Collection, DataSource, Dataset, DatasetField, Id, MetadataColumn, MetadataTable, ModelType } from '@/types'
 import SqlEditor from '@/components/SqlEditor.vue'
+import DatasetDataPolicyPanel from '@/components/DatasetDataPolicyPanel.vue'
 import {
   countCompletionTables,
   inferDefaultSchema,
@@ -15,6 +19,7 @@ import {
 } from '@/sql/schema'
 import { resolveSqlDialect } from '@/sql/dialects'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const route = useRoute()
 const router = useRouter()
@@ -27,8 +32,12 @@ const columns = ref<MetadataColumn[]>([])
 const editorSchema = ref<EditorSqlSchema>({})
 const completionPayload = ref<CompletionSchemaPayload | null>(null)
 const schemaLoading = ref(false)
+const inferringFields = ref(false)
+const sqlEditorRef = ref<{ format: () => boolean }>()
 const visible = ref(false)
 const editingId = ref<Id>()
+const policyVisible = ref(false)
+const policyDataset = ref<Dataset>()
 const form = reactive<Dataset>({
   id: '', name: '', dataSourceId: '', schemaName: '', tableName: '', fields: [],
   description: '', collectionId: '', modelType: 'TABLE', definitionSql: '',
@@ -89,7 +98,7 @@ async function load() {
       if (typeof route.query.collectionId === 'string') form.collectionId = route.query.collectionId
     }
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '模型加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dataset.loadFailed'))
   }
 }
 
@@ -102,7 +111,7 @@ async function sourceChanged() {
       form.schemaName = ''; form.tableName = ''; form.fields = []
     }
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '元数据加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dataset.metaFailed'))
   }
 }
 
@@ -111,7 +120,7 @@ async function schemaChanged() {
     tables.value = await dataSourceApi.tables(form.dataSourceId, form.schemaName)
     columns.value = []; form.tableName = ''; form.fields = []
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '数据表加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dataset.tablesFailed'))
   }
 }
 
@@ -124,7 +133,7 @@ async function tableChanged() {
       fieldType: 'DIMENSION',
     }))
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '字段加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('dataset.fieldsFailed'))
   }
 }
 
@@ -145,6 +154,55 @@ function onModelTypeChange(value: ModelType) {
 
 function addSqlField() {
   form.fields.push({ name: '', columnName: '', fieldType: 'DIMENSION' })
+}
+
+function formatSqlInEditor() {
+  if (!sqlEditorRef.value?.format()) {
+    ElMessage.warning(t('sqlEditor.formatFailed'))
+  }
+}
+
+async function inferFieldsFromSql() {
+  if (!form.dataSourceId) return ElMessage.warning(t('dataset.needSource'))
+  if (!form.definitionSql?.trim()) return ElMessage.warning(t('dataset.needSql'))
+  inferringFields.value = true
+  try {
+    const inferred = await datasetApi.inferSqlFields(form.dataSourceId, form.definitionSql)
+    if (!inferred.length) {
+      ElMessage.warning(t('dataset.noFieldsDetected'))
+      return
+    }
+    const previous = new Map(
+      form.fields
+        .filter((field) => field.columnName)
+        .map((field) => [field.columnName, field] as const),
+    )
+    form.fields = inferred.map((item): DatasetField => {
+      const existing = previous.get(item.columnName)
+      if (existing) {
+        return {
+          ...existing,
+          columnName: item.columnName,
+          name: existing.name || item.name,
+          fieldType: existing.fieldType || item.fieldType,
+          aggregation: existing.fieldType === 'METRIC'
+            ? (existing.aggregation || item.aggregation || 'SUM')
+            : (item.fieldType === 'METRIC' ? (item.aggregation || 'SUM') : undefined),
+        }
+      }
+      return {
+        name: item.name,
+        columnName: item.columnName,
+        fieldType: item.fieldType,
+        aggregation: item.fieldType === 'METRIC' ? (item.aggregation || 'SUM') : undefined,
+      }
+    })
+    ElMessage.success(t('dataset.fieldsGenerated', { n: form.fields.length }))
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('dataset.inferFailed'))
+  } finally {
+    inferringFields.value = false
+  }
 }
 
 function removeField(index: number) {
@@ -170,21 +228,21 @@ async function open(row?: Dataset) {
       tables.value = await dataSourceApi.tables(row.dataSourceId, row.schemaName)
       columns.value = await dataSourceApi.columns(row.dataSourceId, row.schemaName, row.tableName)
     } catch (error) {
-      ElMessage.error(error instanceof Error ? error.message : '元数据加载失败')
+      ElMessage.error(error instanceof Error ? error.message : t('dataset.metaFailed'))
     }
   }
 }
 
 async function save() {
-  if (!form.name || !form.dataSourceId) return ElMessage.warning('请填写名称与数据源')
+  if (!form.name || !form.dataSourceId) return ElMessage.warning(t('dataset.needNameSource'))
   if (modelType.value === 'TABLE' && (!form.schemaName || !form.tableName || !form.fields.length)) {
-    return ElMessage.warning('请完整配置表模型')
+    return ElMessage.warning(t('dataset.needTableConfig'))
   }
   if (modelType.value === 'SQL') {
-    if (!form.definitionSql?.trim()) return ElMessage.warning('请填写 SQL 定义')
-    if (!form.fields.length) return ElMessage.warning('请至少配置一个输出字段')
+    if (!form.definitionSql?.trim()) return ElMessage.warning(t('dataset.needSqlDef'))
+    if (!form.fields.length) return ElMessage.warning(t('dataset.needOutputField'))
     if (form.fields.some((field) => !field.name?.trim() || !field.columnName?.trim())) {
-      return ElMessage.warning('请完整填写输出字段的列名与语义名称')
+      return ElMessage.warning(t('dataset.needFieldNames'))
     }
   }
   const data = { ...form, modelType: modelType.value }
@@ -193,27 +251,36 @@ async function save() {
     if (editingId.value !== undefined) await datasetApi.update(editingId.value, data)
     else await datasetApi.create(data)
     visible.value = false
-    ElMessage.success('模型已保存')
+    ElMessage.success(t('dataset.saved'))
     if (route.query.create || route.params.id) await router.replace('/models')
     await load()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败')
+    ElMessage.error(error instanceof Error ? error.message : t('common.saveFailed'))
   }
 }
 
 async function remove(id: Id) {
   try {
-    await ElMessageBox.confirm('确认将该模型移入废纸篓？', '删除确认')
+    await confirmBox(t('dataset.moveToTrash'), t('common.deleteConfirmTitle'))
     await datasetApi.remove(id)
     await load()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '删除失败')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
   }
 }
 
 function collectionName(id?: Id) {
   if (id === undefined || id === null || id === '') return '-'
   return collections.value.find((item) => String(item.id) === String(id))?.name || String(id)
+}
+
+function canManagePolicy(row: Dataset) {
+  return userStore.isAdmin || String(row.ownerId) === String(userStore.user?.id)
+}
+
+function openPolicy(row: Dataset) {
+  policyDataset.value = row
+  policyVisible.value = true
 }
 
 watch(() => route.params.id, load)
@@ -224,55 +291,60 @@ onMounted(load)
 <template>
   <div class="page">
     <div class="page-header">
-      <h1 class="page-title">模型</h1>
-      <el-button v-if="userStore.hasPermission('dataset:create')" type="primary" @click="open()">新建模型</el-button>
+      <h1 class="page-title">{{ t('dataset.title') }}</h1>
+      <el-button v-if="userStore.hasPermission('dataset:create')" type="primary" @click="open()">{{ t('dataset.create') }}</el-button>
     </div>
-    <el-table :data="rows" empty-text="暂无模型">
-      <el-table-column prop="name" label="名称" />
-      <el-table-column label="类型" width="100">
+    <el-table :data="rows" :empty-text="t('dataset.empty')">
+      <el-table-column prop="name" :label="t('common.name')" />
+      <el-table-column :label="t('common.type')" width="100">
         <template #default="{ row }">
           <el-tag size="small" :type="row.modelType === 'SQL' ? 'warning' : 'info'" effect="plain">
-            {{ row.modelType === 'SQL' ? 'SQL' : '表' }}
+            {{ row.modelType === 'SQL' ? displayLabel('SQL') : displayLabel('TABLE') }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="description" label="描述" show-overflow-tooltip />
-      <el-table-column label="集合" width="160">
+      <el-table-column prop="description" :label="t('common.description')" show-overflow-tooltip />
+      <el-table-column :label="t('common.collection')" width="160">
         <template #default="{ row }">{{ collectionName(row.collectionId) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="160">
+      <el-table-column :label="t('common.actions')" width="240">
         <template #default="{ row }">
-          <el-button link @click="open(row)">编辑</el-button>
-          <el-button link type="danger" @click="remove(row.id)">删除</el-button>
+          <el-button link @click="open(row)">{{ t('common.edit') }}</el-button>
+          <el-button v-if="canManagePolicy(row)" link type="primary" @click="openPolicy(row)">
+            {{ t('datasetPolicy.action') }}
+          </el-button>
+          <el-button link type="danger" @click="remove(row.id)">{{ t('common.delete') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
 
+    <DatasetDataPolicyPanel v-model="policyVisible" :dataset="policyDataset" />
+
     <el-dialog
       v-model="visible"
-      :title="editingId === undefined ? '新建模型' : '编辑模型'"
+      :title="editingId === undefined ? t('dataset.createTitle') : t('dataset.editTitle')"
       width="960px"
       class="model-dialog"
       destroy-on-close
     >
       <el-form label-width="90px">
-        <el-form-item label="名称"><el-input v-model="form.name" placeholder="模型名称" /></el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="可选说明" />
+        <el-form-item :label="t('common.name')"><el-input v-model="form.name" :placeholder="t('dataset.modelName')" /></el-form-item>
+        <el-form-item :label="t('common.description')">
+          <el-input v-model="form.description" type="textarea" :rows="2" :placeholder="t('dataset.optionalDesc')" />
         </el-form-item>
-        <el-form-item label="集合">
+        <el-form-item :label="t('common.collection')">
           <el-select v-model="form.collectionId" class="full-width" clearable>
             <el-option v-for="item in collections" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="类型">
+        <el-form-item :label="t('common.type')">
           <el-radio-group v-model="modelType" @change="onModelTypeChange">
-            <el-radio-button value="TABLE">表模型</el-radio-button>
-            <el-radio-button value="SQL">SQL 模型</el-radio-button>
+            <el-radio-button value="TABLE">{{ t('dataset.tableModel') }}</el-radio-button>
+            <el-radio-button value="SQL">{{ t('dataset.sqlModel') }}</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="数据源">
-          <el-select v-model="form.dataSourceId" class="full-width" filterable placeholder="选择数据源" @change="sourceChanged">
+        <el-form-item :label="t('dataSource.title')">
+          <el-select v-model="form.dataSourceId" class="full-width" filterable :placeholder="t('dataset.selectSource')" @change="sourceChanged">
             <el-option
               v-for="item in sources"
               :key="item.id"
@@ -286,12 +358,12 @@ onMounted(load)
         </el-form-item>
 
         <template v-if="modelType === 'TABLE'">
-          <el-form-item label="模式">
+          <el-form-item :label="t('dataset.schema')">
             <el-select v-model="form.schemaName" class="full-width" filterable @change="schemaChanged">
               <el-option v-for="item in schemas" :key="item" :value="item" />
             </el-select>
           </el-form-item>
-          <el-form-item label="数据表">
+          <el-form-item :label="t('dataset.dataTable')">
             <el-select v-model="form.tableName" class="full-width" filterable @change="tableChanged">
               <el-option v-for="item in tables" :key="item.tableName" :label="item.tableName" :value="item.tableName" />
             </el-select>
@@ -302,45 +374,53 @@ onMounted(load)
       <section v-if="modelType === 'SQL'" class="sql-block">
         <div class="sql-tips">
           <div class="tip tip-info">
-            <strong>定义要求</strong>
-            <p>填写单条只读 <code>SELECT</code> / <code>WITH</code>。系统会将其作为子查询封装后供问题与仪表盘引用。</p>
+            <strong>{{ t('dataset.defRequirements') }}</strong>
+            <p>{{ t('dataset.sqlHint') }}</p>
           </div>
           <div class="tip tip-ok">
-            <strong>输出字段</strong>
-            <p>下方字段的「列名」须与 SQL 结果列（别名）一致，并至少配置一个维度或指标。</p>
+            <strong>{{ t('dataset.outputFields') }}</strong>
+            <p>{{ t('dataset.outputHint') }}</p>
           </div>
           <div class="tip tip-warn">
-            <strong>联想状态</strong>
+            <strong>{{ t('dataset.completionStatus') }}</strong>
             <p>
-              <template v-if="schemaLoading">正在加载表字段联想…</template>
-              <template v-else-if="!form.dataSourceId">请先选择数据源。</template>
-              <template v-else-if="schemaTableCount === 0">暂无表字段联想，请先同步元数据。</template>
-              <template v-else>已加载约 {{ schemaTableCount }} 张表，可按 <kbd>Ctrl</kbd>+<kbd>Space</kbd> 触发补全。</template>
+              <template v-if="schemaLoading">{{ t('dataset.loadingCompletion') }}</template>
+              <template v-else-if="!form.dataSourceId">{{ t('dataset.selectSourceFirst') }}</template>
+              <template v-else-if="schemaTableCount === 0">{{ t('dataset.noCompletion') }}</template>
+              <template v-else>{{ t('dataset.completionReady', { n: schemaTableCount }) }}</template>
             </p>
           </div>
           <div v-if="currentSource" class="tip tip-info">
-            <strong>跨库 SQL</strong>
+            <strong>{{ t('dataset.crossDb') }}</strong>
             <p>
               <template v-if="currentSource.defaultDatabase">
-                未限定表名使用默认库 {{ currentSource.defaultDatabase }}；也可用 库名.表名。
+                {{ t('dataset.defaultDbHint', { db: currentSource.defaultDatabase }) }}
               </template>
-              <template v-else>未设置默认库时请使用 库名.表名。</template>
+              <template v-else>{{ t('dataset.noDefaultDbHint') }}</template>
             </p>
           </div>
         </div>
 
         <div class="sql-toolbar">
-          <span class="sql-label">定义 SQL</span>
+          <span class="sql-label">{{ t('dataset.definitionSql') }}</span>
           <div class="sql-tags">
             <el-tag v-if="currentSource" size="small" effect="plain" type="info">{{ currentDialect }}</el-tag>
-            <el-tag v-if="schemaLoading" size="small" type="warning">加载联想中</el-tag>
+            <el-tag v-if="schemaLoading" size="small" type="warning">{{ t('dataset.loadingSuggest') }}</el-tag>
             <el-tag v-else-if="form.dataSourceId && schemaTableCount > 0" size="small" type="success" effect="plain">
-              {{ schemaTableCount }} 表可联想
+              {{ t('dataset.tablesSuggest', { n: schemaTableCount }) }}
             </el-tag>
+            <el-button
+              size="small"
+              plain
+              :disabled="!(form.definitionSql || '').trim()"
+              :title="t('sql.formatHint')"
+              @click="formatSqlInEditor"
+            >{{ t('sql.format') }}</el-button>
           </div>
         </div>
         <div class="editor-box">
           <SqlEditor
+            ref="sqlEditorRef"
             :model-value="form.definitionSql || ''"
             :dialect="currentDialect"
             :jdbc-url="currentSource?.jdbcUrl"
@@ -353,82 +433,85 @@ onMounted(load)
 
         <div class="fields-head">
           <div>
-            <strong>输出字段</strong>
-            <span class="fields-meta">{{ form.fields.length }} 个</span>
+            <strong>{{ t('dataset.outputFields') }}</strong>
+            <span class="fields-meta">{{ t('dataset.fieldCount', { n: form.fields.length }) }}</span>
           </div>
-          <el-button type="primary" plain @click="addSqlField">添加字段</el-button>
+          <div class="fields-actions">
+            <el-button type="primary" :loading="inferringFields" @click="inferFieldsFromSql">{{ t('dataset.inferFromSql') }}</el-button>
+            <el-button plain @click="addSqlField">{{ t('dataset.addField') }}</el-button>
+          </div>
         </div>
-        <el-table :data="form.fields" max-height="280" empty-text="请添加 SQL 输出字段">
-          <el-table-column label="列名（SQL 别名）" min-width="160">
+        <el-table :data="form.fields" max-height="280" :empty-text="t('dataset.addOutputField')">
+          <el-table-column :label="t('dataset.columnAlias')" min-width="160">
             <template #default="{ row }">
-              <el-input v-model="row.columnName" placeholder="如 order_id" @change="row.name = row.name || row.columnName" />
+              <el-input v-model="row.columnName" placeholder="order_id" @change="row.name = row.name || row.columnName" />
             </template>
           </el-table-column>
-          <el-table-column label="语义名称" min-width="140">
-            <template #default="{ row }"><el-input v-model="row.name" placeholder="展示名称" /></template>
+          <el-table-column :label="t('dataset.semanticName')" min-width="140">
+            <template #default="{ row }"><el-input v-model="row.name" :placeholder="t('dataset.displayName')" /></template>
           </el-table-column>
-          <el-table-column label="类型" width="140">
+          <el-table-column :label="t('common.type')" width="140">
             <template #default="{ row }">
               <el-select
                 v-model="row.fieldType"
                 @change="row.aggregation = row.fieldType === 'METRIC' ? (row.aggregation || 'SUM') : undefined"
               >
-                <el-option label="维度" value="DIMENSION" />
-                <el-option label="指标" value="METRIC" />
+                <el-option :label="displayLabel('DIMENSION')" value="DIMENSION" />
+                <el-option :label="displayLabel('METRIC')" value="METRIC" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="聚合" width="130">
+          <el-table-column :label="t('dataset.aggregation')" width="130">
             <template #default="{ row }">
-              <el-select v-model="row.aggregation" clearable :disabled="row.fieldType !== 'METRIC'" placeholder="聚合">
-                <el-option label="求和" value="SUM" />
-                <el-option label="平均" value="AVG" />
-                <el-option label="计数" value="COUNT" />
-                <el-option label="最大" value="MAX" />
-                <el-option label="最小" value="MIN" />
+              <el-select v-model="row.aggregation" clearable :disabled="row.fieldType !== 'METRIC'" :placeholder="t('dataset.aggregation')">
+                <el-option :label="displayLabel('SUM')" value="SUM" />
+                <el-option :label="displayLabel('AVG')" value="AVG" />
+                <el-option :label="displayLabel('COUNT')" value="COUNT" />
+                <el-option :label="displayLabel('MAX')" value="MAX" />
+                <el-option :label="displayLabel('MIN')" value="MIN" />
               </el-select>
             </template>
           </el-table-column>
           <el-table-column label="" width="70" align="center">
             <template #default="{ $index }">
-              <el-button link type="danger" @click="removeField($index)">删除</el-button>
+              <el-button link type="danger" @click="removeField($index)">{{ t('common.delete') }}</el-button>
             </template>
           </el-table-column>
         </el-table>
       </section>
 
-      <el-table v-else-if="modelType === 'TABLE'" :data="form.fields" max-height="320" empty-text="选择数据表后自动加载字段">
-        <el-table-column prop="columnName" label="物理字段" />
-        <el-table-column label="语义名称">
+      <el-table v-else-if="modelType === 'TABLE'" :data="form.fields" max-height="320" :empty-text="t('dataset.autoLoadFields')">
+        <el-table-column prop="columnName" :label="t('dataset.physicalField')" />
+        <el-table-column :label="t('dataset.semanticName')">
           <template #default="{ row }"><el-input v-model="row.name" /></template>
         </el-table-column>
-        <el-table-column label="类型">
+        <el-table-column :label="t('common.type')">
           <template #default="{ row }">
             <el-select
               v-model="row.fieldType"
               @change="row.aggregation = row.fieldType === 'METRIC' ? (row.aggregation || 'SUM') : undefined"
             >
-              <el-option label="维度" value="DIMENSION" />
-              <el-option label="指标" value="METRIC" />
+              <el-option :label="displayLabel('DIMENSION')" value="DIMENSION" />
+              <el-option :label="displayLabel('METRIC')" value="METRIC" />
             </el-select>
           </template>
         </el-table-column>
-        <el-table-column label="聚合">
+        <el-table-column :label="t('dataset.aggregation')">
           <template #default="{ row }">
-            <el-select v-model="row.aggregation" clearable :disabled="row.fieldType !== 'METRIC'" placeholder="聚合">
-              <el-option label="求和" value="SUM" />
-              <el-option label="平均" value="AVG" />
-              <el-option label="计数" value="COUNT" />
-              <el-option label="最大" value="MAX" />
-              <el-option label="最小" value="MIN" />
+            <el-select v-model="row.aggregation" clearable :disabled="row.fieldType !== 'METRIC'" :placeholder="t('dataset.aggregation')">
+              <el-option :label="displayLabel('SUM')" value="SUM" />
+              <el-option :label="displayLabel('AVG')" value="AVG" />
+              <el-option :label="displayLabel('COUNT')" value="COUNT" />
+              <el-option :label="displayLabel('MAX')" value="MAX" />
+              <el-option :label="displayLabel('MIN')" value="MIN" />
             </el-select>
           </template>
         </el-table-column>
       </el-table>
 
       <template #footer>
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="save">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -495,6 +578,7 @@ onMounted(load)
   gap: 10px;
   margin-top: 4px;
 }
+.fields-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .fields-head strong { font-size: 13px; }
 .fields-meta {
   margin-left: 8px;

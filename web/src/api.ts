@@ -1,10 +1,12 @@
 import axios, { type AxiosRequestConfig } from 'axios'
+import { t } from '@/i18n'
 import type {
   AdminUser, AuditCleanupPayload, Chart, Collection, CollectionItem, CompletionSchema, Dashboard, DashboardCard,
-  DashboardRender, DataSource, DataSourceHealthOverview, Dataset, DialectInfo, ExportTask, Id, LoginAudit,
-  Metric, MetadataColumn, MetadataTable, PageResult, Permission, PublicLink, PublicQuestion,
+  DashboardRender, DataSource, DataSourceHealthOverview, Dataset, DatasetAudit, DialectInfo, ExportTask, FieldPermissionRow,
+  Id, LoginAudit, Metric, MetadataColumn, MetadataTable, PageResult, Permission, PublicLink, PublicQuestion,
   PublicResourceType, QueryAudit, QuerySnapshot, QuerySubmission, QuerySubmitResult, RecentItem,
-  ResourceType, Role, RoleResourceGrant, SearchHit, SiteSettings, Subscription, TrashItem, User,
+  ResourceType, Role, RoleResourceGrant, RowRule, SearchHit, SiteSettings, Subscription, SystemLogEntry, SystemLogMeta,
+  TrashItem, User, UserDirectoryItem, DataSourceObjectAcl, ObjectAclColumnRef, ObjectAclTableRef,
 } from './types'
 
 interface ApiResponse<T> {
@@ -34,14 +36,14 @@ http.interceptors.response.use(
         location.href = '/login'
       }
     }
-    return Promise.reject(new Error(error.response?.data?.message || error.message || '网络请求失败'))
+    return Promise.reject(new Error(error.response?.data?.message || error.message || t('common.networkError')))
   },
 )
 
 async function request<T>(config: AxiosRequestConfig): Promise<T> {
   const response = await http.request<ApiResponse<T>>(config)
   const body = response.data
-  if (body.code !== 0 && body.code !== 200) throw new Error(body.message || '请求失败')
+  if (body.code !== 0 && body.code !== 200) throw new Error(body.message || t('common.requestFailed'))
   return body.data
 }
 
@@ -78,6 +80,27 @@ export const dataSourceApi = {
   }),
 }
 
+export const dataSourceObjectAclApi = {
+  get: (sourceId: Id, roleId: Id) =>
+    request<DataSourceObjectAcl>({
+      url: `/data-sources/${String(sourceId)}/object-acl`,
+      params: { roleId: String(roleId) },
+    }),
+  replace: (sourceId: Id, data: {
+    roleId: Id
+    deniedTables: ObjectAclTableRef[]
+    deniedColumns: ObjectAclColumnRef[]
+  }) => request<void>({
+    url: `/data-sources/${String(sourceId)}/object-acl`,
+    method: 'PUT',
+    data: {
+      roleId: String(data.roleId),
+      deniedTables: data.deniedTables,
+      deniedColumns: data.deniedColumns,
+    },
+  }),
+}
+
 type DatasetSave = Pick<Dataset, 'name' | 'dataSourceId' | 'schemaName' | 'tableName' | 'fields'>
   & Partial<Pick<Dataset, 'description' | 'collectionId' | 'modelType' | 'definitionSql'>>
 const datasetSave = (data: Partial<Dataset>): DatasetSave => ({
@@ -104,6 +127,23 @@ export const datasetApi = {
     url: `/datasets/${String(id)}`, method: 'PUT', data: datasetSave(data),
   }),
   remove: (id: Id) => request<void>({ url: `/datasets/${String(id)}`, method: 'DELETE' }),
+  distinct: (id: Id, fieldName: string, limit?: number) =>
+    request<(string | number)[]>({
+      url: `/datasets/${String(id)}/fields/${encodeURIComponent(fieldName)}/distinct`,
+      params: limit == null ? undefined : { limit },
+    }),
+  inferSqlFields: (dataSourceId: Id, sql: string) =>
+    request<Array<{
+      name: string
+      columnName: string
+      fieldType: 'DIMENSION' | 'METRIC'
+      aggregation?: 'SUM' | 'AVG' | 'COUNT' | 'MAX' | 'MIN' | null
+      jdbcTypeName?: string
+    }>>({
+      url: '/datasets/infer-sql-fields',
+      method: 'POST',
+      data: { dataSourceId: String(dataSourceId), sql },
+    }),
 }
 
 type ChartSave = Pick<Chart, 'name' | 'queryJson' | 'chartType' | 'configJson'>
@@ -149,18 +189,42 @@ export const dashboardApi = {
   }),
   remove: (id: Id) => request<void>({ url: `/dashboards/${String(id)}`, method: 'DELETE' }),
   cards: (id: Id) => request<DashboardCard[]>({ url: `/dashboards/${String(id)}/cards` }),
-  render: (id: Id) => request<DashboardRender>({ url: `/dashboards/${String(id)}/render` }),
-  createCard: (id: Id, data: Pick<DashboardCard, 'chartId' | 'title' | 'layoutJson'>) =>
+  render: (id: Id, options?: { forceRefresh?: boolean; parameterValues?: Record<string, unknown> }) => {
+    if (options?.parameterValues || options?.forceRefresh) {
+      return request<DashboardRender>({
+        url: `/dashboards/${String(id)}/render`,
+        method: 'POST',
+        data: {
+          forceRefresh: !!options?.forceRefresh,
+          parameterValues: options?.parameterValues,
+        },
+      })
+    }
+    return request<DashboardRender>({ url: `/dashboards/${String(id)}/render` })
+  },
+  createCard: (id: Id, data: Pick<DashboardCard, 'chartId' | 'title' | 'layoutJson'>
+    & Partial<Pick<DashboardCard, 'bindingsJson' | 'clickActionJson'>>) =>
     request<DashboardCard>({
       url: `/dashboards/${String(id)}/cards`,
       method: 'POST',
-      data: { ...data, chartId: String(data.chartId) },
+      data: {
+        ...data,
+        chartId: String(data.chartId),
+        bindingsJson: data.bindingsJson ?? '[]',
+        clickActionJson: data.clickActionJson,
+      },
     }),
-  updateCard: (id: Id, cardId: Id, data: Pick<DashboardCard, 'chartId' | 'title' | 'layoutJson'>) =>
+  updateCard: (id: Id, cardId: Id, data: Pick<DashboardCard, 'chartId' | 'title' | 'layoutJson'>
+    & Partial<Pick<DashboardCard, 'bindingsJson' | 'clickActionJson'>>) =>
     request<DashboardCard>({
       url: `/dashboards/${String(id)}/cards/${String(cardId)}`,
       method: 'PUT',
-      data: { ...data, chartId: String(data.chartId) },
+      data: {
+        ...data,
+        chartId: String(data.chartId),
+        bindingsJson: data.bindingsJson,
+        clickActionJson: data.clickActionJson,
+      },
     }),
   removeCard: (id: Id, cardId: Id) =>
     request<void>({ url: `/dashboards/${String(id)}/cards/${String(cardId)}`, method: 'DELETE' }),
@@ -216,6 +280,30 @@ export const loginAuditApi = {
     request<{ deleted: number }>({ url: '/admin/login-audits/cleanup', method: 'POST', data }),
 }
 
+export const systemLogApi = {
+  page: (params: {
+    keyword?: string
+    level?: string
+    page?: number
+    size?: number
+  }) => request<PageResult<SystemLogEntry>>({ url: '/admin/system-logs', params }),
+  meta: () => request<SystemLogMeta>({ url: '/admin/system-logs/meta' }),
+  clear: () => request<{ cleared: boolean }>({ url: '/admin/system-logs/clear', method: 'POST' }),
+}
+
+export const datasetAuditApi = {
+  page: (params: {
+    keyword?: string
+    action?: string
+    fromTime?: string
+    toTime?: string
+    page?: number
+    size?: number
+  }) => request<PageResult<DatasetAudit>>({ url: '/admin/dataset-audits', params }),
+  cleanup: (data: AuditCleanupPayload) =>
+    request<{ deleted: number }>({ url: '/admin/dataset-audits/cleanup', method: 'POST', data }),
+}
+
 export const dataSourceHealthApi = {
   overview: () => request<DataSourceHealthOverview>({ url: '/admin/data-source-health' }),
 }
@@ -234,6 +322,7 @@ export const roleApi = {
 
 export const userApi = {
   list: () => request<AdminUser[]>({ url: '/users' }),
+  directory: () => request<UserDirectoryItem[]>({ url: '/users/directory' }),
   create: (data: { username: string; password: string; displayName: string; roleIds: Id[] }) =>
     request<AdminUser>({ url: '/users', method: 'POST', data: { ...data, roleIds: data.roleIds.map(String) } }),
   update: (id: Id, data: { displayName: string; enabled: boolean; roleIds: Id[] }) =>
@@ -263,22 +352,44 @@ export const resourcePermissionApi = {
 }
 
 export const dataPolicyApi = {
-  saveField: (datasetId: Id, data: { userId: Id; fieldName: string; allowed: boolean }) =>
+  listFields: (datasetId: Id, userId: Id) =>
+    request<FieldPermissionRow[]>({
+      url: `/datasets/${String(datasetId)}/policies/fields`,
+      params: { userId: String(userId) },
+    }),
+  replaceFields: (datasetId: Id, data: { userId: Id; allowedFields: string[] }) =>
     request<void>({
       url: `/datasets/${String(datasetId)}/policies/fields`,
-      method: 'POST',
-      data: { ...data, userId: String(data.userId) },
+      method: 'PUT',
+      data: { userId: String(data.userId), allowedFields: data.allowedFields },
     }),
-  deleteField: (datasetId: Id, userId: Id, fieldName: string) =>
-    request<void>({
-      url: `/datasets/${String(datasetId)}/policies/fields/${String(userId)}/${encodeURIComponent(fieldName)}`,
-      method: 'DELETE',
-    }),
-  createRow: (datasetId: Id, data: { userId?: Id; name: string; ruleJson: string }) =>
-    request<void>({
+  listRows: (datasetId: Id) =>
+    request<RowRule[]>({ url: `/datasets/${String(datasetId)}/policies/rows` }),
+  createRow: (datasetId: Id, data: { userId?: Id; name: string; ruleJson: string; enabled?: boolean }) =>
+    request<RowRule>({
       url: `/datasets/${String(datasetId)}/policies/rows`,
       method: 'POST',
-      data: { ...data, userId: data.userId === undefined ? undefined : String(data.userId) },
+      data: {
+        name: data.name,
+        ruleJson: data.ruleJson,
+        enabled: data.enabled ?? true,
+        userId: data.userId === undefined || data.userId === null || data.userId === ''
+          ? undefined
+          : String(data.userId),
+      },
+    }),
+  updateRow: (datasetId: Id, ruleId: Id, data: { userId?: Id; name: string; ruleJson: string; enabled?: boolean }) =>
+    request<RowRule>({
+      url: `/datasets/${String(datasetId)}/policies/rows/${String(ruleId)}`,
+      method: 'PUT',
+      data: {
+        name: data.name,
+        ruleJson: data.ruleJson,
+        enabled: data.enabled ?? true,
+        userId: data.userId === undefined || data.userId === null || data.userId === ''
+          ? undefined
+          : String(data.userId),
+      },
     }),
   deleteRow: (datasetId: Id, ruleId: Id) =>
     request<void>({ url: `/datasets/${String(datasetId)}/policies/rows/${String(ruleId)}`, method: 'DELETE' }),
@@ -370,7 +481,14 @@ const metricSave = (data: Partial<Metric>): MetricSave => ({
 })
 
 export const metricApi = {
-  list: () => request<Metric[]>({ url: '/metrics' }),
+  list: (params?: { collectionId?: Id; modelId?: Id }) =>
+    request<Metric[]>({
+      url: '/metrics',
+      params: {
+        collectionId: params?.collectionId == null ? undefined : String(params.collectionId),
+        modelId: params?.modelId == null ? undefined : String(params.modelId),
+      },
+    }),
   get: (id: Id) => request<Metric>({ url: `/metrics/${String(id)}` }),
   create: (data: Partial<Metric>) => request<Metric>({
     url: '/metrics', method: 'POST', data: metricSave(data),

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { recentApi } from '@/api'
 import { resourcePath, resourceTypeLabel } from '@/nav'
 import { useUserStore } from '@/stores/user'
 import type { RecentItem } from '@/types'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const router = useRouter()
 const loading = ref(false)
@@ -14,23 +16,31 @@ const recents = ref<RecentItem[]>([])
 
 /** 首页常用工具外链，新窗口打开。 */
 const toolLinks = [
-  { category: 'JSON', name: 'JSON.cn', desc: 'JSON 格式化、校验与压缩', url: 'https://www.json.cn/' },
-  { category: 'JSON', name: 'BeJSON', desc: 'JSON 解析、对比与转义', url: 'https://www.bejson.com/' },
-  { category: 'SQL', name: 'SQL Format', desc: 'SQL 美化与格式化', url: 'https://sqlformat.org/' },
-  { category: 'SQL', name: 'DB Diagram', desc: '在线绘制数据库 ER 图', url: 'https://dbdiagram.io/' },
-  { category: '数据库', name: 'MySQL 文档', desc: '官方手册与函数参考', url: 'https://dev.mysql.com/doc/' },
-  { category: '数据库', name: 'Explain.dev', desc: '执行计划可视化分析', url: 'https://explain.dev/' },
-  { category: '编码', name: 'Base64', desc: 'Base64 编解码', url: 'https://base64.us/' },
-  { category: '编码', name: '正则测试', desc: '正则表达式在线调试', url: 'https://regex101.com/' },
-  { category: '时间', name: '时间戳转换', desc: 'Unix 时间戳与日期互转', url: 'https://tool.lu/timestamp/' },
-  { category: '时间', name: 'Cron 表达式', desc: 'Cron 生成与下次运行预览', url: 'https://cron.qqe2.com/' },
-  { category: '综合', name: 'Tool.lu', desc: '程序员在线工具箱', url: 'https://tool.lu/' },
-  { category: '综合', name: 'JWT.io', desc: 'JWT 解码与校验', url: 'https://jwt.io/' },
+  { category: 'JSON', name: 'JSON.cn', descKey: 'home.toolJsonFormat', url: 'https://www.json.cn/' },
+  { category: 'JSON', name: 'BeJSON', descKey: 'home.toolJsonParse', url: 'https://www.bejson.com/' },
+  { category: 'SQL', name: 'SQL Format', descKey: 'home.toolSqlFormat', url: 'https://sqlformat.org/' },
+  { category: 'SQL', name: 'DB Diagram', descKey: 'home.toolEr', url: 'https://dbdiagram.io/' },
+  { categoryKey: 'home.catDatabase', nameKey: 'home.toolMysqlName', name: 'MySQL Docs', descKey: 'home.toolMysqlDoc', url: 'https://dev.mysql.com/doc/' },
+  { categoryKey: 'home.catDatabase', name: 'Explain.dev', descKey: 'home.toolExplain', url: 'https://explain.dev/' },
+  { categoryKey: 'home.catEncoding', name: 'Base64', descKey: 'home.toolBase64', url: 'https://base64.us/' },
+  { categoryKey: 'home.catEncoding', name: 'Regex101', descKey: 'home.toolRegex', url: 'https://regex101.com/' },
+  { categoryKey: 'home.catTime', name: 'Tool.lu', descKey: 'home.toolTimestamp', url: 'https://tool.lu/timestamp/' },
+  { categoryKey: 'home.catTime', name: 'Cron', descKey: 'home.toolCron', url: 'https://cron.qqe2.com/' },
+  { categoryKey: 'home.catGeneral', name: 'Tool.lu', descKey: 'home.toolDevbox', url: 'https://tool.lu/' },
+  { categoryKey: 'home.catGeneral', name: 'JWT.io', descKey: 'home.toolJwt', url: 'https://jwt.io/' },
 ] as const
 
+function toolCategory(tool: (typeof toolLinks)[number]) {
+  return 'categoryKey' in tool && tool.categoryKey ? t(tool.categoryKey) : tool.category
+}
+
+function toolName(tool: (typeof toolLinks)[number]) {
+  return 'nameKey' in tool && tool.nameKey ? t(tool.nameKey) : tool.name
+}
+
 const greeting = computed(() => {
-  const name = userStore.user?.displayName || userStore.user?.username || '朋友'
-  return `近况如何，${name}?`
+  const name = userStore.user?.displayName || userStore.user?.username || t('common.friend')
+  return t('home.greeting', { name })
 })
 
 async function load() {
@@ -38,7 +48,7 @@ async function load() {
   try {
     recents.value = await recentApi.list()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '最近项加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('home.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -55,9 +65,24 @@ onMounted(load)
   <div class="page home">
     <h1 class="greeting">{{ greeting }}</h1>
     <section class="section">
-      <h2 class="section-title">从你离开的地方继续</h2>
-      <div v-loading="loading" class="recent-row">
-        <el-empty v-if="!loading && !recents.length" description="暂无最近访问，去集合里创建内容吧" />
+      <h2 class="section-title">{{ t('home.continueTitle') }}</h2>
+      <div v-loading="loading" class="recent-row" :class="{ empty: !loading && !recents.length }">
+        <div v-if="!loading && !recents.length" class="recent-empty">
+          <span class="recent-empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+          </span>
+          <div class="recent-empty-copy">
+            <strong>{{ t('home.emptyRecent') }}</strong>
+            <span>{{ t('home.emptyRecentHint') }}</span>
+          </div>
+          <router-link
+            class="recent-empty-action"
+            :to="userStore.hasPermission('query:raw') ? '/sql' : '/models'"
+          >{{ userStore.hasPermission('query:raw') ? t('home.emptyRecentAction') : t('shell.models') }}</router-link>
+        </div>
         <button
           v-for="item in recents"
           :key="`${item.resourceType}-${item.resourceId}`"
@@ -67,14 +92,14 @@ onMounted(load)
         >
           <span class="type">{{ resourceTypeLabel(item.resourceType) }}</span>
           <strong class="name">{{ item.name }}</strong>
-          <span class="desc">{{ item.description || '无描述' }}</span>
+          <span class="desc">{{ item.description || t('common.noDescription') }}</span>
         </button>
       </div>
     </section>
 
     <section class="section tools-section">
-      <h2 class="section-title">常用工具</h2>
-      <p class="section-desc">JSON、SQL、数据库与编码等外部站点，点击在新标签页打开。</p>
+      <h2 class="section-title">{{ t('home.toolsTitle') }}</h2>
+      <p class="section-desc">{{ t('home.toolsHint') }}</p>
       <div class="tool-grid">
         <a
           v-for="tool in toolLinks"
@@ -84,9 +109,9 @@ onMounted(load)
           target="_blank"
           rel="noopener noreferrer"
         >
-          <span class="type">{{ tool.category }}</span>
-          <strong class="name">{{ tool.name }}</strong>
-          <span class="desc">{{ tool.desc }}</span>
+          <span class="type">{{ toolCategory(tool) }}</span>
+          <strong class="name">{{ toolName(tool) }}</strong>
+          <span class="desc">{{ t(tool.descKey) }}</span>
         </a>
       </div>
     </section>
@@ -121,6 +146,65 @@ onMounted(load)
   padding-bottom: 8px;
   min-height: 140px;
 }
+.recent-row.empty {
+  min-height: 0;
+  padding-bottom: 0;
+  overflow: visible;
+}
+.recent-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 88px;
+  padding: 16px 20px;
+  border: 1px dashed var(--omni-border);
+  border-radius: 12px;
+  background: var(--omni-surface);
+}
+.recent-empty-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--omni-card);
+  border: 1px solid var(--omni-border);
+  color: var(--omni-muted);
+}
+.recent-empty-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.recent-empty-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--omni-text);
+}
+.recent-empty-copy span {
+  font-size: 13px;
+  color: var(--omni-muted);
+  line-height: 1.4;
+}
+.recent-empty-action {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--el-color-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.recent-empty-action:hover {
+  filter: brightness(1.05);
+}
 .recent-card {
   flex: 0 0 220px;
   text-align: left;
@@ -138,6 +222,15 @@ onMounted(load)
 .recent-card:hover {
   border-color: var(--el-color-primary-light-5);
   box-shadow: var(--omni-shadow);
+}
+@media (max-width: 640px) {
+  .recent-empty {
+    flex-wrap: wrap;
+  }
+  .recent-empty-action {
+    width: 100%;
+    text-align: center;
+  }
 }
 .tools-section .section-title { font-size: 14px; }
 .tool-grid {

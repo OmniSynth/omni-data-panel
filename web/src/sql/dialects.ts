@@ -4,12 +4,22 @@ import {
   SQLite,
   MSSQL,
   MariaSQL,
+  PLSQL,
   StandardSQL,
   type SQLDialect,
 } from '@codemirror/lang-sql'
 
 /** 与后端 DialectPlugin 编码对齐；编辑器可多于运行时已注册方言。 */
-export type SqlDialectId = 'MYSQL' | 'MARIADB' | 'POSTGRESQL' | 'SQLITE' | 'MSSQL' | 'GENERIC'
+export type SqlDialectId =
+  | 'MYSQL'
+  | 'MARIADB'
+  | 'POSTGRESQL'
+  | 'MSSQL'
+  | 'ORACLE'
+  | 'CLICKHOUSE'
+  | 'HIVE'
+  | 'SQLITE'
+  | 'GENERIC'
 
 export interface SqlDialectAdapter {
   id: SqlDialectId
@@ -65,13 +75,6 @@ registerSqlDialect({
 })
 
 registerSqlDialect({
-  id: 'SQLITE',
-  label: 'SQLite',
-  language: SQLite,
-  matchJdbcUrl: (url) => /^jdbc:sqlite:/i.test(url),
-})
-
-registerSqlDialect({
   id: 'MSSQL',
   label: 'SQL Server',
   language: MSSQL,
@@ -79,7 +82,35 @@ registerSqlDialect({
 })
 
 registerSqlDialect({
+  id: 'ORACLE',
+  label: 'Oracle',
+  language: PLSQL,
+  matchJdbcUrl: (url) => /^jdbc:oracle:/i.test(url),
+})
+
+registerSqlDialect({
+  id: 'CLICKHOUSE',
+  label: 'ClickHouse',
+  language: StandardSQL,
+  matchJdbcUrl: (url) => /^jdbc:(clickhouse|ch):/i.test(url),
+})
+
+registerSqlDialect({
+  id: 'HIVE',
+  label: 'Hive',
+  language: StandardSQL,
+  matchJdbcUrl: (url) => /^jdbc:hive2:/i.test(url),
+})
+
+registerSqlDialect({
+  id: 'SQLITE',
+  label: 'SQLite',
+  language: SQLite,
+  matchJdbcUrl: (url) => /^jdbc:sqlite:/i.test(url),
+})
+
+registerSqlDialect({
   id: 'GENERIC',
-  label: '通用 SQL',
+  label: 'Generic SQL',
   language: StandardSQL,
 })

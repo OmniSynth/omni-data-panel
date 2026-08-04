@@ -1,17 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { authApi, collectionApi, dashboardApi, settingsApi } from '@/api'
+import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
+import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import { resourcePath, resourceTypeLabel } from '@/nav'
 import { useUserStore } from '@/stores/user'
-import type { Collection, Id, SiteSettings } from '@/types'
+import type { Collection, CollectionItem, Id, ResourceType, SiteSettings } from '@/types'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
-const siteName = ref('全域数据分析')
+const siteName = ref(t('shell.defaultSiteName'))
 const collections = ref<Collection[]>([])
+const treeKey = ref(0)
+const defaultExpandedKeys = ref<string[]>([])
 const searchText = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const passwordVisible = ref(false)
 const passwordSaving = ref(false)
@@ -23,10 +30,29 @@ const createName = ref('')
 const createCollectionId = ref<Id>()
 const createSaving = ref(false)
 
+type NavTreeNode = {
+  id: string
+  name: string
+  label: string
+  kind: 'COLLECTION' | ResourceType
+  resourceId: Id
+  personal?: boolean
+  childCollections?: Collection[]
+  isLeaf?: boolean
+}
+
 const flatCollections = computed(() => flattenCollections(collections.value))
-const personalIds = computed(() => new Set(
-  flatCollections.value.filter((item) => item.personalOwnerId != null).map((item) => String(item.id)),
-))
+
+const createTypeLabel = computed(() => {
+  const labels: Record<typeof createType.value, string> = {
+    question: t('shell.charts'),
+    sql: t('shell.sqlQuery'),
+    dashboard: t('shell.dashboards'),
+    model: t('shell.models'),
+    collection: t('common.collection'),
+  }
+  return labels[createType.value]
+})
 
 function flattenCollections(nodes: Collection[], acc: Collection[] = []): Collection[] {
   for (const node of nodes) {
@@ -36,15 +62,52 @@ function flattenCollections(nodes: Collection[], acc: Collection[] = []): Collec
   return acc
 }
 
-function toTree(nodes: Collection[]): Array<Collection & { label: string }> {
-  return nodes.map((node) => ({
-    ...node,
-    label: node.name,
-    children: node.children ? toTree(node.children) : undefined,
-  }))
+function toCollectionNode(collection: Collection): NavTreeNode {
+  return {
+    id: `collection:${collection.id}`,
+    name: collection.name,
+    label: collection.name,
+    kind: 'COLLECTION',
+    resourceId: collection.id,
+    personal: collection.personalOwnerId != null,
+    childCollections: collection.children || [],
+  }
 }
 
-const collectionTree = computed(() => toTree(collections.value))
+function toResourceNode(item: CollectionItem): NavTreeNode {
+  return {
+    id: `${item.type}:${item.id}`,
+    name: item.name,
+    label: item.name,
+    kind: item.type,
+    resourceId: item.id,
+    isLeaf: true,
+  }
+}
+
+async function loadTreeNode(
+  node: { level: number; data: NavTreeNode },
+  resolve: (data: NavTreeNode[]) => void,
+) {
+  if (node.level === 0) {
+    resolve(collections.value.map(toCollectionNode))
+    return
+  }
+  const data = node.data
+  if (data.kind !== 'COLLECTION') {
+    resolve([])
+    return
+  }
+  try {
+    const items = await collectionApi.items(data.resourceId)
+    resolve([
+      ...(data.childCollections || []).map(toCollectionNode),
+      ...items.map(toResourceNode),
+    ])
+  } catch {
+    resolve((data.childCollections || []).map(toCollectionNode))
+  }
+}
 
 async function loadShell() {
   try {
@@ -53,6 +116,10 @@ async function loadShell() {
       settingsApi.get().catch((): SiteSettings => ({})),
     ])
     collections.value = tree
+    treeKey.value += 1
+    defaultExpandedKeys.value = tree
+      .filter((item) => item.personalOwnerId != null)
+      .map((item) => `collection:${item.id}`)
     if (settings['site.name']) siteName.value = String(settings['site.name'])
     if (!createCollectionId.value) {
       const personal = flatCollections.value.find((item) => String(item.personalOwnerId) === String(userStore.user?.id))
@@ -60,7 +127,7 @@ async function loadShell() {
       if (personal) createCollectionId.value = personal.id
     }
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '导航加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('shell.navLoadFailed'))
   }
 }
 
@@ -75,10 +142,10 @@ function openPasswordDialog() {
 }
 
 async function changePassword() {
-  if (!passwordForm.currentPassword || !passwordForm.newPassword) return ElMessage.warning('请填写当前密码和新密码')
-  if (passwordForm.newPassword.length < 10) return ElMessage.warning('新密码至少需要10位')
-  if (passwordForm.currentPassword === passwordForm.newPassword) return ElMessage.warning('新密码不能与当前密码相同')
-  if (passwordForm.newPassword !== passwordForm.confirmPassword) return ElMessage.warning('两次输入的新密码不一致')
+  if (!passwordForm.currentPassword || !passwordForm.newPassword) return ElMessage.warning(t('shell.fillPasswords'))
+  if (passwordForm.newPassword.length < 10) return ElMessage.warning(t('shell.passwordMin'))
+  if (passwordForm.currentPassword === passwordForm.newPassword) return ElMessage.warning(t('shell.passwordSame'))
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) return ElMessage.warning(t('shell.passwordMismatch'))
   passwordSaving.value = true
   try {
     await authApi.changePassword({
@@ -86,10 +153,10 @@ async function changePassword() {
       newPassword: passwordForm.newPassword,
     })
     passwordVisible.value = false
-    ElMessage.success('密码修改成功，请重新登录')
+    ElMessage.success(t('shell.passwordChanged'))
     logout()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '密码修改失败')
+    ElMessage.error(error instanceof Error ? error.message : t('shell.passwordFailed'))
   } finally {
     passwordSaving.value = false
   }
@@ -108,10 +175,10 @@ function openCreate(type: typeof createType.value) {
 
 async function submitCreate() {
   if (createType.value !== 'question' && !createName.value.trim()) {
-    return ElMessage.warning('请输入名称')
+    return ElMessage.warning(t('shell.needName'))
   }
   if (!createCollectionId.value && createType.value !== 'collection') {
-    return ElMessage.warning('请选择集合')
+    return ElMessage.warning(t('shell.needCollection'))
   }
   createSaving.value = true
   try {
@@ -149,6 +216,7 @@ async function submitCreate() {
         collectionId,
       })
       createVisible.value = false
+      await loadShell()
       await router.push(`/dashboards/${created.id}/edit`)
       return
     }
@@ -157,14 +225,18 @@ async function submitCreate() {
       await router.push({ path: '/models', query: { create: '1', collectionId: String(collectionId) } })
     }
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '创建失败')
+    ElMessage.error(error instanceof Error ? error.message : t('common.createFailed'))
   } finally {
     createSaving.value = false
   }
 }
 
-function onCollectionClick(data: Collection) {
-  router.push(`/collections/${data.id}`)
+function onNavNodeClick(data: NavTreeNode) {
+  if (data.kind === 'COLLECTION') {
+    router.push(`/collections/${data.resourceId}`)
+    return
+  }
+  router.push(resourcePath(data.kind, data.resourceId))
 }
 
 function onUserMenu(command: string) {
@@ -192,24 +264,26 @@ onMounted(loadShell)
         <el-input
           v-model="searchText"
           clearable
-          placeholder="搜索问题、仪表盘、模型、集合…"
+          :placeholder="t('shell.searchPlaceholder')"
           @keyup.enter="goSearch"
         >
           <template #append>
-            <el-button @click="goSearch">搜索</el-button>
+            <el-button @click="goSearch">{{ t('common.search') }}</el-button>
           </template>
         </el-input>
       </div>
       <div class="top-actions">
+        <ThemeSwitcher size="small" />
+        <LanguageSwitcher size="small" />
         <el-dropdown trigger="click" @command="openCreate">
-          <el-button type="primary">+ 创建</el-button>
+          <el-button type="primary">{{ t('shell.create') }}</el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="question">问题</el-dropdown-item>
-              <el-dropdown-item v-if="userStore.hasPermission('query:raw')" command="sql">SQL 查询</el-dropdown-item>
-              <el-dropdown-item command="dashboard">仪表盘</el-dropdown-item>
-              <el-dropdown-item command="model">模型</el-dropdown-item>
-              <el-dropdown-item command="collection">集合</el-dropdown-item>
+              <el-dropdown-item command="question">{{ t('shell.charts') }}</el-dropdown-item>
+              <el-dropdown-item v-if="userStore.hasPermission('query:raw')" command="sql">{{ t('shell.sqlQuery') }}</el-dropdown-item>
+              <el-dropdown-item command="dashboard">{{ t('shell.dashboards') }}</el-dropdown-item>
+              <el-dropdown-item command="model">{{ t('shell.models') }}</el-dropdown-item>
+              <el-dropdown-item command="collection">{{ t('common.collection') }}</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -218,35 +292,48 @@ onMounted(loadShell)
     <div class="body">
       <aside class="sidebar">
         <nav class="nav-block">
-          <router-link class="nav-link" to="/" :class="{ active: route.path === '/' }">首页</router-link>
+          <router-link class="nav-link" to="/" :class="{ active: route.path === '/' }">{{ t('shell.home') }}</router-link>
+          <router-link
+            class="nav-link"
+            to="/dashboards"
+            :class="{ active: route.path === '/dashboards' || route.path.startsWith('/dashboards/') }"
+          >{{ t('shell.dashboards') }}</router-link>
         </nav>
         <div class="nav-block">
-          <div class="nav-group">集合</div>
+          <div class="nav-group">{{ t('shell.collections') }}</div>
           <el-tree
-            :data="collectionTree"
+            :key="treeKey"
+            lazy
+            :load="loadTreeNode"
             node-key="id"
-            :props="{ label: 'label', children: 'children' }"
+            :props="{ label: 'label', children: 'children', isLeaf: 'isLeaf' }"
+            :default-expanded-keys="defaultExpandedKeys"
             highlight-current
-            default-expand-all
             :expand-on-click-node="false"
-            @node-click="onCollectionClick"
+            @node-click="onNavNodeClick"
           >
             <template #default="{ data }">
-              <span class="tree-node" :class="{ personal: personalIds.has(String(data.id)) }">{{ data.name }}</span>
+              <span
+                class="tree-node"
+                :class="{ personal: data.personal, resource: data.kind !== 'COLLECTION' }"
+              >
+                <span v-if="data.kind !== 'COLLECTION'" class="node-type">{{ resourceTypeLabel(data.kind) }}</span>
+                {{ data.name }}
+              </span>
             </template>
           </el-tree>
         </div>
         <div class="nav-block">
-          <div class="nav-group">数据</div>
-          <router-link class="nav-link" to="/databases" :class="{ active: route.path.startsWith('/databases') }">数据源</router-link>
+          <div class="nav-group">{{ t('shell.data') }}</div>
+          <router-link class="nav-link" to="/databases" :class="{ active: route.path.startsWith('/databases') }">{{ t('shell.dataSources') }}</router-link>
           <router-link
             v-if="userStore.hasPermission('query:raw')"
             class="nav-link"
             to="/sql"
             :class="{ active: route.path.startsWith('/sql') }"
-          >SQL 查询</router-link>
-          <router-link class="nav-link" to="/models" :class="{ active: route.path.startsWith('/models') }">模型</router-link>
-          <router-link class="nav-link" to="/metrics" :class="{ active: route.path.startsWith('/metrics') }">指标</router-link>
+          >{{ t('shell.sqlQuery') }}</router-link>
+          <router-link class="nav-link" to="/models" :class="{ active: route.path.startsWith('/models') }">{{ t('shell.models') }}</router-link>
+          <router-link class="nav-link" to="/metrics" :class="{ active: route.path.startsWith('/metrics') }">{{ t('shell.metrics') }}</router-link>
         </div>
         <div class="nav-footer">
           <div class="user-row">
@@ -258,13 +345,13 @@ onMounted(loadShell)
               </span>
             </div>
             <el-dropdown trigger="click" placement="top-end" @command="onUserMenu">
-              <button type="button" class="more-btn" title="更多" aria-label="更多菜单">⋯</button>
+              <button type="button" class="more-btn" :title="t('common.more')" :aria-label="t('shell.moreMenu')">⋯</button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item v-if="userStore.isAdmin" command="admin">管理端</el-dropdown-item>
-                  <el-dropdown-item command="trash">废纸篓</el-dropdown-item>
-                  <el-dropdown-item divided command="password">修改密码</el-dropdown-item>
-                  <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                  <el-dropdown-item v-if="userStore.isAdmin" command="admin">{{ t('shell.admin') }}</el-dropdown-item>
+                  <el-dropdown-item command="trash">{{ t('shell.trash') }}</el-dropdown-item>
+                  <el-dropdown-item divided command="password">{{ t('shell.changePassword') }}</el-dropdown-item>
+                  <el-dropdown-item command="logout">{{ t('shell.logout') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -276,41 +363,41 @@ onMounted(loadShell)
       </main>
     </div>
 
-    <el-dialog v-model="createVisible" :title="`创建${({ question: '问题', sql: 'SQL 查询', dashboard: '仪表盘', model: '模型', collection: '集合' })[createType]}`" width="460px">
+    <el-dialog v-model="createVisible" :title="t('shell.createTitle', { type: createTypeLabel })" width="460px">
       <el-form label-width="90px">
-        <el-form-item v-if="createType !== 'question'" label="名称">
-          <el-input v-model="createName" placeholder="请输入名称" />
+        <el-form-item v-if="createType !== 'question'" :label="t('common.name')">
+          <el-input v-model="createName" :placeholder="t('shell.namePlaceholder')" />
         </el-form-item>
-        <el-form-item :label="createType === 'collection' ? '父集合' : '所属集合'">
-          <el-select v-model="createCollectionId" class="full-width" :clearable="createType === 'collection'" placeholder="选择集合">
+        <el-form-item :label="createType === 'collection' ? t('shell.parentCollection') : t('shell.belongCollection')">
+          <el-select v-model="createCollectionId" class="full-width" :clearable="createType === 'collection'" :placeholder="t('shell.selectCollection')">
             <el-option v-for="item in flatCollections" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
-        <p v-if="createType === 'question'" class="hint">将进入查询工作台保存为问题。</p>
-        <p v-if="createType === 'sql'" class="hint">将进入 SQL 查询页；编写完成后可保存为问题并放入所选集合。</p>
-        <p v-if="createType === 'model'" class="hint">将进入模型页完成配置。</p>
+        <p v-if="createType === 'question'" class="hint">{{ t('shell.hintQuestion') }}</p>
+        <p v-if="createType === 'sql'" class="hint">{{ t('shell.hintSql') }}</p>
+        <p v-if="createType === 'model'" class="hint">{{ t('shell.hintModel') }}</p>
       </el-form>
       <template #footer>
-        <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="createSaving" @click="submitCreate">继续</el-button>
+        <el-button @click="createVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="createSaving" @click="submitCreate">{{ t('common.continue') }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="passwordVisible" title="修改密码" width="420px">
+    <el-dialog v-model="passwordVisible" :title="t('shell.changePassword')" width="420px">
       <el-form label-width="90px">
-        <el-form-item label="当前密码">
+        <el-form-item :label="t('shell.currentPassword')">
           <el-input v-model="passwordForm.currentPassword" type="password" show-password autocomplete="current-password" />
         </el-form-item>
-        <el-form-item label="新密码">
+        <el-form-item :label="t('shell.newPassword')">
           <el-input v-model="passwordForm.newPassword" type="password" show-password autocomplete="new-password" />
         </el-form-item>
-        <el-form-item label="确认新密码">
+        <el-form-item :label="t('shell.confirmPassword')">
           <el-input v-model="passwordForm.confirmPassword" type="password" show-password autocomplete="new-password" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="passwordVisible = false">取消</el-button>
-        <el-button type="primary" :loading="passwordSaving" @click="changePassword">确认修改</el-button>
+        <el-button @click="passwordVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="passwordSaving" @click="changePassword">{{ t('shell.confirmChange') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -466,8 +553,25 @@ onMounted(loadShell)
   background: var(--omni-accent-soft);
   color: var(--omni-text);
 }
-.tree-node { font-size: 13px; }
+.tree-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+}
 .tree-node.personal { font-weight: 600; color: var(--omni-accent-strong); }
+.tree-node.resource { font-weight: 400; color: var(--omni-text); }
+.node-type {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--omni-muted);
+  background: var(--omni-bg);
+  border: 1px solid var(--omni-border);
+}
 .content { flex: 1; min-width: 0; background: var(--omni-bg); }
 .hint { margin: 0; color: var(--omni-muted); font-size: 13px; }
 :deep(.el-tree) { background: transparent; }

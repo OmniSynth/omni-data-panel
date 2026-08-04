@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import AuditCleanupActions from '@/components/AuditCleanupActions.vue'
 import { loginAuditApi } from '@/api'
 import { formatDateTime } from '@/display'
 import type { LoginAudit } from '@/types'
 
+const { t } = useI18n()
 const loading = ref(false)
 const cleaning = ref(false)
 const rows = ref<LoginAudit[]>([])
@@ -30,7 +32,7 @@ async function load() {
     rows.value = result.items
     total.value = result.total
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '登录日志加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('loginAudit.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -48,7 +50,7 @@ function resetFilters() {
 }
 
 function summarizeUserAgent(ua?: string | null) {
-  if (!ua) return '—'
+  if (!ua) return t('common.emptyDash')
   if (/Edg\//i.test(ua)) return 'Microsoft Edge'
   if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) return 'Google Chrome'
   if (/Firefox\//i.test(ua)) return 'Mozilla Firefox'
@@ -60,10 +62,10 @@ async function onCleanup(payload: { mode: 'ALL' | 'BEFORE_DAYS' | 'BEFORE_DATE';
   cleaning.value = true
   try {
     const result = await loginAuditApi.cleanup(payload)
-    ElMessage.success(`已删除 ${result.deleted} 条登录日志`)
+    ElMessage.success(t('loginAudit.deleted', { n: result.deleted }))
     await load()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '清理失败')
+    ElMessage.error(error instanceof Error ? error.message : t('loginAudit.cleanupFailed'))
   } finally {
     cleaning.value = false
   }
@@ -75,7 +77,7 @@ onMounted(load)
 <template>
   <div class="page">
     <div class="page-header">
-      <h1 class="page-title">登录日志</h1>
+      <h1 class="page-title">{{ t('loginAudit.title') }}</h1>
       <AuditCleanupActions :cleaning="cleaning" @cleanup="onCleanup" />
     </div>
 
@@ -83,38 +85,38 @@ onMounted(load)
       <el-input
         v-model="filters.keyword"
         clearable
-        placeholder="搜索用户名 / IP / 消息"
+        :placeholder="t('loginAudit.searchPlaceholder')"
         style="width: 260px"
         @keyup.enter="search"
       />
-      <el-select v-model="filters.success" clearable placeholder="结果" style="width: 140px">
-        <el-option label="全部结果" value="" />
-        <el-option label="成功" value="true" />
-        <el-option label="失败" value="false" />
+      <el-select v-model="filters.success" clearable :placeholder="t('loginAudit.result')" style="width: 140px">
+        <el-option :label="t('loginAudit.allResults')" value="" />
+        <el-option :label="t('loginAudit.success')" value="true" />
+        <el-option :label="t('loginAudit.failure')" value="false" />
       </el-select>
-      <el-button type="primary" @click="search">查询</el-button>
-      <el-button @click="resetFilters">重置</el-button>
+      <el-button type="primary" @click="search">{{ t('common.search') }}</el-button>
+      <el-button @click="resetFilters">{{ t('common.reset') }}</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="rows" empty-text="暂无登录日志">
-      <el-table-column label="时间" width="170">
+    <el-table v-loading="loading" :data="rows" :empty-text="t('loginAudit.empty')">
+      <el-table-column :label="t('loginAudit.time')" width="170">
         <template #default="{ row }">{{ formatDateTime(row.loggedAt) }}</template>
       </el-table-column>
-      <el-table-column prop="username" label="用户名" min-width="120" />
-      <el-table-column label="结果" width="90">
+      <el-table-column prop="username" :label="t('loginAudit.username')" min-width="120" />
+      <el-table-column :label="t('loginAudit.result')" width="90">
         <template #default="{ row }">
           <el-tag size="small" :type="row.success ? 'success' : 'danger'">
-            {{ row.success ? '成功' : '失败' }}
+            {{ row.success ? t('loginAudit.success') : t('loginAudit.failure') }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="message" label="说明" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="message" :label="t('loginAudit.message')" min-width="140" show-overflow-tooltip />
       <el-table-column prop="clientIp" label="IP" width="140" show-overflow-tooltip />
-      <el-table-column label="浏览器" min-width="140" show-overflow-tooltip>
+      <el-table-column :label="t('loginAudit.userAgent')" min-width="140" show-overflow-tooltip>
         <template #default="{ row }">{{ summarizeUserAgent(row.userAgent) }}</template>
       </el-table-column>
       <el-table-column label="User-Agent" min-width="220" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.userAgent || '—' }}</template>
+        <template #default="{ row }">{{ row.userAgent || t('common.emptyDash') }}</template>
       </el-table-column>
     </el-table>
 

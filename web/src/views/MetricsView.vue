@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { confirmBox } from '@/i18n/dialog'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { collectionApi, datasetApi, metricApi } from '@/api'
 import { displayLabel } from '@/display'
 import { useUserStore } from '@/stores/user'
-import type { Collection, Dataset, Id, Metric } from '@/types'
+import type { Collection, Dataset, DatasetField, Id, Metric } from '@/types'
 
+const { t } = useI18n()
 const userStore = useUserStore()
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +20,27 @@ const visible = ref(false)
 const editingId = ref<Id>()
 const form = reactive<Partial<Metric>>({
   name: '', description: '', modelId: '', expressionJson: '{"field":""}', aggregation: 'SUM', collectionId: '',
+})
+
+const aggregationOptions = ['SUM', 'AVG', 'COUNT', 'MAX', 'MIN'] as const
+
+const modelFields = computed(() => {
+  const model = models.value.find((item) => String(item.id) === String(form.modelId))
+  return model?.fields || []
+})
+
+const expressionField = computed({
+  get: () => {
+    try {
+      const parsed = JSON.parse(form.expressionJson || '{}') as { field?: string }
+      return parsed.field || ''
+    } catch {
+      return ''
+    }
+  },
+  set: (field: string) => {
+    form.expressionJson = JSON.stringify({ field: field || '' })
+  },
 })
 
 function flatten(nodes: Collection[], acc: Collection[] = []): Collection[] {
@@ -41,7 +65,7 @@ async function load() {
       if (hit) open(hit)
     }
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '指标加载失败')
+    ElMessage.error(error instanceof Error ? error.message : t('metric.loadFailed'))
   }
 }
 
@@ -54,27 +78,34 @@ function open(row?: Metric) {
   visible.value = true
 }
 
+watch(() => form.modelId, () => {
+  if (!expressionField.value) return
+  const exists = modelFields.value.some((field: DatasetField) => field.name === expressionField.value)
+  if (!exists) expressionField.value = ''
+})
+
 async function save() {
-  if (!form.name || !form.modelId || !form.aggregation) return ElMessage.warning('请完整填写指标')
+  if (!form.name || !form.modelId || !form.aggregation) return ElMessage.warning(t('metric.needComplete'))
+  if (!expressionField.value) return ElMessage.warning(t('metric.needField'))
   try {
     if (editingId.value !== undefined) await metricApi.update(editingId.value, form)
     else await metricApi.create(form)
     visible.value = false
-    ElMessage.success('指标已保存')
+    ElMessage.success(t('metric.saved'))
     await load()
     if (route.query.id) await router.replace({ path: '/metrics' })
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败')
+    ElMessage.error(error instanceof Error ? error.message : t('common.saveFailed'))
   }
 }
 
 async function remove(id: Id) {
   try {
-    await ElMessageBox.confirm('确认将该指标移入废纸篓？', '删除确认')
+    await confirmBox(t('metric.moveToTrash'), t('common.deleteConfirmTitle'))
     await metricApi.remove(id)
     await load()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '删除失败')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
   }
 }
 
@@ -88,54 +119,57 @@ onMounted(load)
 <template>
   <div class="page">
     <div class="page-header">
-      <h1 class="page-title">指标</h1>
-      <el-button v-if="userStore.hasPermission('dataset:create')" type="primary" @click="open()">新建指标</el-button>
+      <h1 class="page-title">{{ t('metric.title') }}</h1>
+      <el-button v-if="userStore.hasPermission('dataset:create')" type="primary" @click="open()">{{ t('metric.create') }}</el-button>
     </div>
-    <el-table :data="rows" empty-text="暂无指标">
-      <el-table-column prop="name" label="名称" />
-      <el-table-column label="模型"><template #default="{ row }">{{ modelName(row.modelId) }}</template></el-table-column>
-      <el-table-column label="聚合" width="100">
+    <el-table :data="rows" :empty-text="t('metric.empty')">
+      <el-table-column prop="name" :label="t('common.name')" />
+      <el-table-column :label="t('metric.model')"><template #default="{ row }">{{ modelName(row.modelId) }}</template></el-table-column>
+      <el-table-column :label="t('metric.aggregation')" width="100">
         <template #default="{ row }">{{ displayLabel(row.aggregation) }}</template>
       </el-table-column>
-      <el-table-column prop="description" label="描述" show-overflow-tooltip />
-      <el-table-column label="操作" width="160">
+      <el-table-column prop="description" :label="t('common.description')" show-overflow-tooltip />
+      <el-table-column :label="t('common.actions')" width="160">
         <template #default="{ row }">
-          <el-button link @click="open(row)">编辑</el-button>
-          <el-button link type="danger" @click="remove(row.id)">删除</el-button>
+          <el-button link @click="open(row)">{{ t('common.edit') }}</el-button>
+          <el-button link type="danger" @click="remove(row.id)">{{ t('common.delete') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="visible" :title="editingId === undefined ? '新建指标' : '编辑指标'" width="560px">
+    <el-dialog v-model="visible" :title="editingId === undefined ? t('metric.createTitle') : t('metric.editTitle')" width="560px">
       <el-form label-width="90px">
-        <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="模型">
-          <el-select v-model="form.modelId" class="full-width" filterable placeholder="选择模型">
+        <el-form-item :label="t('common.name')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="t('common.description')"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
+        <el-form-item :label="t('metric.model')">
+          <el-select v-model="form.modelId" class="full-width" filterable :placeholder="t('metric.selectModel')">
             <el-option v-for="item in models" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="聚合">
-          <el-select v-model="form.aggregation" class="full-width" placeholder="选择聚合方式">
-            <el-option label="求和" value="SUM" />
-            <el-option label="平均" value="AVG" />
-            <el-option label="计数" value="COUNT" />
-            <el-option label="最大" value="MAX" />
-            <el-option label="最小" value="MIN" />
+        <el-form-item :label="t('metric.refField')">
+          <el-select v-model="expressionField" class="full-width" filterable :placeholder="t('metric.selectModelField')">
+            <el-option
+              v-for="field in modelFields"
+              :key="field.name"
+              :label="`${field.name}（${displayLabel(field.fieldType)}）`"
+              :value="field.name"
+            />
           </el-select>
         </el-form-item>
-        <el-form-item label="表达式">
-          <el-input v-model="form.expressionJson" type="textarea" :rows="3" placeholder='例如 {"field":"amount"}' />
+        <el-form-item :label="t('metric.aggregation')">
+          <el-select v-model="form.aggregation" class="full-width" :placeholder="t('metric.selectAgg')">
+            <el-option v-for="agg in aggregationOptions" :key="agg" :label="displayLabel(agg)" :value="agg" />
+          </el-select>
         </el-form-item>
-        <el-form-item label="集合">
+        <el-form-item :label="t('common.collection')">
           <el-select v-model="form.collectionId" class="full-width" clearable>
             <el-option v-for="item in collections" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="save">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
   </div>

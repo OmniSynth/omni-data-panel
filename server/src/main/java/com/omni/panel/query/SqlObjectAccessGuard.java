@@ -31,8 +31,20 @@ import com.omni.panel.service.DataSourceObjectAclService.EffectiveDenies;
 @Component
 public class SqlObjectAccessGuard {
     private static final Set<String> SYSTEM_SCHEMAS = Set.of(
-            "information_schema", "mysql", "performance_schema", "sys",
-            "pg_catalog", "pg_toast");
+            "information_schema", "mysql", "performance_schema", "sys", "system",
+            "pg_catalog", "pg_toast",
+            "guest", "db_owner", "db_accessadmin", "db_securityadmin", "db_ddladmin",
+            "db_backupoperator", "db_datareader", "db_datawriter",
+            "db_denydatareader", "db_denydatawriter",
+            "outln", "dbsnmp", "ctxsys", "mdsys", "xdb", "wmsys", "ordsys");
+
+    private static boolean isSystemSchema(String schema) {
+        String normalized = DataSourceObjectAclService.normalize(schema);
+        return SYSTEM_SCHEMAS.contains(normalized)
+                || normalized.startsWith("pg_toast")
+                || normalized.startsWith("pg_temp")
+                || normalized.startsWith("pg_toast_temp");
+    }
 
     private final DataSourceObjectAclService aclService;
 
@@ -86,7 +98,7 @@ public class SqlObjectAccessGuard {
         Set<String> referencedTableKeys = new HashSet<>();
         for (String raw : rawTables) {
             QualifiedName qn = parseQualifiedName(raw, defaultSchema);
-            if (SYSTEM_SCHEMAS.contains(DataSourceObjectAclService.normalize(qn.schema()))) {
+            if (isSystemSchema(qn.schema())) {
                 throw new BusinessException(403, "禁止访问系统元数据库：" + qn.schema());
             }
             String key = DataSourceObjectAclService.tableKey(qn.schema(), qn.name());

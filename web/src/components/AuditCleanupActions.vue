@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirmBox } from '@/i18n/dialog'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   cleaning?: boolean
@@ -10,68 +12,77 @@ const emit = defineEmits<{
   cleanup: [payload: { mode: 'ALL' | 'BEFORE_DAYS' | 'BEFORE_DATE'; days?: number; before?: string }]
 }>()
 
+const { t } = useI18n()
 const dateVisible = ref(false)
 const beforeDate = ref('')
 
+/** 确认后清空全部审计日志 */
 async function clearAll() {
   try {
-    await ElMessageBox.confirm('将删除全部日志且不可恢复，确认继续？', '清空全部', { type: 'warning' })
+    await confirmBox(t('auditCleanup.clearAllConfirm'), t('auditCleanup.clearAll'), { type: 'warning' })
     emit('cleanup', { mode: 'ALL' })
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '操作取消')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('auditCleanup.cancelled'))
   }
 }
 
-async function clearDays(days: number, label: string) {
+/**
+ * 确认后按相对天数清理。
+ * @param days 保留最近 N 天，删除更早记录
+ * @param labelKey 确认文案用的 i18n 键
+ */
+async function clearDays(days: number, labelKey: 'auditCleanup.clear3d' | 'auditCleanup.clear1m') {
+  const label = t(labelKey)
   try {
-    await ElMessageBox.confirm(`将删除 ${label} 的日志且不可恢复，确认继续？`, '清理确认', { type: 'warning' })
+    await confirmBox(t('auditCleanup.clearLabelConfirm', { label }), t('auditCleanup.confirmTitle'), { type: 'warning' })
     emit('cleanup', { mode: 'BEFORE_DAYS', days })
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '操作取消')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('auditCleanup.cancelled'))
   }
 }
 
+/** 打开「指定日期之前」对话框 */
 function openDateDialog() {
   beforeDate.value = ''
   dateVisible.value = true
 }
 
+/** 确认按截止日期清理（删除该日 00:00:00 之前） */
 async function confirmDate() {
-  if (!beforeDate.value) return ElMessage.warning('请选择日期')
-  const before = `${beforeDate.value}T00:00:00`
+  if (!beforeDate.value) return ElMessage.warning(t('auditCleanup.needDate'))
   try {
-    await ElMessageBox.confirm(`将删除 ${beforeDate.value} 之前的日志且不可恢复，确认继续？`, '清理确认', { type: 'warning' })
+    await confirmBox(t('auditCleanup.clearBeforeConfirm', { date: beforeDate.value }), t('auditCleanup.confirmTitle'), { type: 'warning' })
     dateVisible.value = false
-    emit('cleanup', { mode: 'BEFORE_DATE', before })
+    emit('cleanup', { mode: 'BEFORE_DATE', before: `${beforeDate.value}T00:00:00` })
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '操作取消')
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('auditCleanup.cancelled'))
   }
 }
 </script>
 
 <template>
   <div class="cleanup-actions">
-    <el-button :loading="cleaning" type="danger" plain @click="clearAll">清空全部</el-button>
-    <el-button :loading="cleaning" @click="clearDays(3, '3 天前')">清除 3 天前</el-button>
-    <el-button :loading="cleaning" @click="clearDays(30, '一个月前')">清除一个月前</el-button>
-    <el-button :loading="cleaning" @click="openDateDialog">指定日期之前</el-button>
+    <el-button :loading="cleaning" type="danger" plain @click="clearAll">{{ t('auditCleanup.clearAll') }}</el-button>
+    <el-button :loading="cleaning" @click="clearDays(3, 'auditCleanup.clear3d')">{{ t('auditCleanup.clear3d') }}</el-button>
+    <el-button :loading="cleaning" @click="clearDays(30, 'auditCleanup.clear1m')">{{ t('auditCleanup.clear1m') }}</el-button>
+    <el-button :loading="cleaning" @click="openDateDialog">{{ t('auditCleanup.clearBefore') }}</el-button>
 
-    <el-dialog v-model="dateVisible" title="清除指定日期之前的日志" width="420px">
+    <el-dialog v-model="dateVisible" :title="t('auditCleanup.dialogTitle')" width="420px">
       <el-form label-width="90px">
-        <el-form-item label="截止日期">
+        <el-form-item :label="t('auditCleanup.beforeDate')">
           <el-date-picker
             v-model="beforeDate"
             type="date"
             value-format="YYYY-MM-DD"
-            placeholder="选择日期"
+            :placeholder="t('auditCleanup.selectDate')"
             class="full-width"
           />
         </el-form-item>
-        <p class="hint">将删除该日期 00:00:00 之前的全部日志。</p>
+        <p class="hint">{{ t('auditCleanup.dialogHint') }}</p>
       </el-form>
       <template #footer>
-        <el-button @click="dateVisible = false">取消</el-button>
-        <el-button type="primary" :loading="cleaning" @click="confirmDate">确认清理</el-button>
+        <el-button @click="dateVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="cleaning" @click="confirmDate">{{ t('auditCleanup.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>

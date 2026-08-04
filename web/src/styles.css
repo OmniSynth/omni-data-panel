@@ -9,6 +9,10 @@
   --omni-accent-soft: #eef6fc;
   --omni-accent-strong: #1d4f91;
   --omni-danger: #f56c6c;
+  --omni-editor-bg: #ffffff;
+  --omni-editor-fg: #111827;
+  --omni-editor-gutter: #f7f7f7;
+  --omni-editor-gutter-active: #eef5fc;
   --omni-space-1: 6px;
   --omni-space-2: 10px;
   --omni-space-3: 16px;
@@ -34,6 +38,35 @@
   font-size: var(--omni-body-size);
   color: var(--omni-text);
   background: var(--omni-bg);
+  color-scheme: light;
+}
+
+html.dark {
+  --omni-bg: #0f1419;
+  --omni-surface: #151b23;
+  --omni-card: #1a222d;
+  --omni-border: #2a3441;
+  --omni-text: #e5e7eb;
+  --omni-muted: #9ca3af;
+  --omni-accent: #509ee3;
+  --omni-accent-soft: rgba(80, 158, 227, 0.16);
+  --omni-accent-strong: #7db8eb;
+  --omni-danger: #f89898;
+  --omni-editor-bg: #121820;
+  --omni-editor-fg: #e5e7eb;
+  --omni-editor-gutter: #151b23;
+  --omni-editor-gutter-active: rgba(80, 158, 227, 0.14);
+  --omni-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  --el-color-primary: #509ee3;
+  --el-color-primary-light-3: #4080b8;
+  --el-color-primary-light-5: #356a99;
+  --el-color-primary-light-7: #2a547a;
+  --el-color-primary-light-8: #244866;
+  --el-color-primary-light-9: #1e3c55;
+  --el-color-primary-dark-2: #7db8eb;
+
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body {
@@ -113,7 +146,7 @@ body {
   font-style: normal !important;
   font-size: 11px;
   font-family: var(--omni-font);
-  color: #9ca3af;
+  color: var(--omni-muted);
 }
 .cm-tooltip.omni-sql-completion .cm-completionIcon {
   opacity: 0.55;

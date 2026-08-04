@@ -96,7 +96,9 @@ public class MetadataService {
         DialectPlugin dialect = dialectRegistry.resolve(source);
         try (Connection connection = registry.get(source).getConnection()) {
             connection.setReadOnly(true);
-            String originalCatalog = connection.getCatalog();
+            String originalNamespace = dialect.defaultDatabaseIsNamespace()
+                    ? connection.getCatalog()
+                    : connection.getSchema();
             DatabaseMetaData metadata = connection.getMetaData();
             List<String> catalogs = resolveCatalogs(source, connection, metadata, dialect);
             mapper.deleteColumns(sourceId);
@@ -116,7 +118,10 @@ public class MetadataService {
                 }
             } finally {
                 try {
-                    dialect.restoreConnection(connection, source.getDefaultDatabase(), originalCatalog);
+                    String preferredNamespace = dialect.defaultDatabaseIsNamespace()
+                            ? source.getDefaultDatabase()
+                            : null;
+                    dialect.restoreConnection(connection, preferredNamespace, originalNamespace);
                 } catch (SQLException exception) {
                     log.debug("归还连接时恢复命名空间失败：{}", exception.getMessage());
                 }
@@ -134,13 +139,13 @@ public class MetadataService {
     }
 
     /**
-     * 有默认库时仅同步该库；否则同步账号可见的全部业务库。
+     * 有默认库且方言将默认库视为命名空间时，仅同步该库；否则同步账号可见的全部业务命名空间。
      */
     private List<String> resolveCatalogs(DataSourceEntity source, Connection connection,
                                          DatabaseMetaData metadata, DialectPlugin dialect)
             throws SQLException {
         String defaultDatabase = source.getDefaultDatabase();
-        if (defaultDatabase != null && !defaultDatabase.isBlank()) {
+        if (defaultDatabase != null && !defaultDatabase.isBlank() && dialect.defaultDatabaseIsNamespace()) {
             return List.of(defaultDatabase.trim());
         }
         List<String> catalogs = dialect.listNamespaces(connection, metadata);
@@ -181,7 +186,9 @@ public class MetadataService {
     private List<TableRef> listTables(Connection connection, DatabaseMetaData metadata, String catalog,
                                       DialectPlugin dialect) throws SQLException {
         List<TableRef> tables = new ArrayList<>();
-        try (ResultSet resultSet = metadata.getTables(catalog, null, "%", new String[]{"TABLE", "VIEW"})) {
+        String metaCatalog = dialect.metaCatalog(catalog);
+        String metaSchema = dialect.metaSchema(catalog);
+        try (ResultSet resultSet = metadata.getTables(metaCatalog, metaSchema, "%", new String[]{"TABLE", "VIEW"})) {
             while (resultSet.next()) {
                 String table = resultSet.getString("TABLE_NAME");
                 if (table != null && !table.isBlank()) {
@@ -211,21 +218,23 @@ public class MetadataService {
     private void syncColumns(Connection connection, DatabaseMetaData metadata, long sourceId,
                              String schema, String table, DialectPlugin dialect) throws SQLException {
         dialect.useNamespace(connection, schema);
+        String metaCatalog = dialect.metaCatalog(schema);
+        String metaSchema = dialect.metaSchema(schema);
         Set<String> primaryKeys = new HashSet<>();
-        try (ResultSet keys = metadata.getPrimaryKeys(schema, null, table)) {
+        try (ResultSet keys = metadata.getPrimaryKeys(metaCatalog, metaSchema, table)) {
             while (keys.next()) {
                 primaryKeys.add(keys.getString("COLUMN_NAME"));
             }
         }
         Map<String, String[]> foreignKeys = new HashMap<>();
-        try (ResultSet keys = metadata.getImportedKeys(schema, null, table)) {
+        try (ResultSet keys = metadata.getImportedKeys(metaCatalog, metaSchema, table)) {
             while (keys.next()) {
                 foreignKeys.put(keys.getString("FKCOLUMN_NAME"),
                         new String[]{keys.getString("PKTABLE_NAME"), keys.getString("PKCOLUMN_NAME")});
             }
         }
         boolean inserted = false;
-        try (ResultSet columns = metadata.getColumns(schema, null, table, "%")) {
+        try (ResultSet columns = metadata.getColumns(metaCatalog, metaSchema, table, "%")) {
             while (columns.next()) {
                 insertColumnRow(sourceId, schema, table, primaryKeys, foreignKeys, columns);
                 inserted = true;
