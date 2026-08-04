@@ -1,17 +1,16 @@
 package com.omni.panel.datasource;
 
-import com.omni.panel.common.BusinessException;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Base64;
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import com.omni.panel.common.BusinessException;
 
 /**
  * 使用 AES-256-GCM 加密和解密数据源凭据。
@@ -48,7 +47,7 @@ public class CredentialCrypto {
             cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(TAG_LENGTH, iv));
             byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(
-                ByteBuffer.allocate(iv.length + ciphertext.length).put(iv).put(ciphertext).array());
+                    ByteBuffer.allocate(iv.length + ciphertext.length).put(iv).put(ciphertext).array());
         } catch (GeneralSecurityException exception) {
             throw new BusinessException(500, "数据源凭据加密失败");
         }

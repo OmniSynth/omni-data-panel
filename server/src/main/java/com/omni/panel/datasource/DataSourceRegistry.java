@@ -1,21 +1,21 @@
 package com.omni.panel.datasource;
 
-import com.omni.panel.common.BusinessException;
-import com.omni.panel.datasource.dialect.DialectPlugin;
-import com.omni.panel.datasource.dialect.DialectRegistry;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
-import com.zaxxer.hikari.HikariPoolMXBean;
-import jakarta.annotation.PreDestroy;
-import org.springframework.stereotype.Component;
-
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import jakarta.annotation.PreDestroy;
+import javax.sql.DataSource;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.HikariPoolMXBean;
+import org.springframework.stereotype.Component;
+import com.omni.panel.common.BusinessException;
+import com.omni.panel.datasource.dialect.DialectPlugin;
+import com.omni.panel.datasource.dialect.DialectRegistry;
+import com.omni.panel.entity.DataSourceEntity;
 
 /**
  * 按数据源标识管理只读 HikariCP 连接池，并负责连接测试、启动预热与资源释放。
@@ -149,9 +149,9 @@ public class DataSourceRegistry {
         try {
             dialect.validateJdbcUrl(source.getJdbcUrl());
             try (Connection connection = DriverManager.getConnection(
-                source.getJdbcUrl(),
-                source.getUsername(),
-                crypto.decrypt(source.getEncryptedPassword())
+                    source.getJdbcUrl(),
+                    source.getUsername(),
+                    crypto.decrypt(source.getEncryptedPassword())
             );
                  Statement statement = connection.createStatement()) {
                 connection.setReadOnly(true);
@@ -164,10 +164,22 @@ public class DataSourceRegistry {
         }
     }
 
+    /**
+     * 将纳秒计时起点换算为毫秒耗时。
+     *
+     * @param startedNs {@link System#nanoTime()} 起点
+     * @return 非负毫秒数
+     */
     private static long elapsedMs(long startedNs) {
         return Math.max(0L, (System.nanoTime() - startedNs) / 1_000_000L);
     }
 
+    /**
+     * 从 Hikari 连接池读取当前运行指标；池已关闭或无 MXBean 时返回部分字段。
+     *
+     * @param pool Hikari 连接池
+     * @return 连接池指标快照
+     */
     private static PoolMetrics poolMetrics(HikariDataSource pool) {
         if (pool == null || pool.isClosed()) {
             return PoolMetrics.empty(null);
@@ -177,12 +189,12 @@ public class DataSourceRegistry {
             return new PoolMetrics(pool.getMaximumPoolSize(), pool.getMinimumIdle(), null, null, null, null);
         }
         return new PoolMetrics(
-            pool.getMaximumPoolSize(),
-            pool.getMinimumIdle(),
-            mxBean.getActiveConnections(),
-            mxBean.getIdleConnections(),
-            mxBean.getTotalConnections(),
-            mxBean.getThreadsAwaitingConnection()
+                pool.getMaximumPoolSize(),
+                pool.getMinimumIdle(),
+                mxBean.getActiveConnections(),
+                mxBean.getIdleConnections(),
+                mxBean.getTotalConnections(),
+                mxBean.getThreadsAwaitingConnection()
         );
     }
 
@@ -190,12 +202,12 @@ public class DataSourceRegistry {
      * 连接池瞬时指标。
      */
     public record PoolMetrics(
-        Integer maximumPoolSize,
-        Integer minimumIdle,
-        Integer activeConnections,
-        Integer idleConnections,
-        Integer totalConnections,
-        Integer threadsAwaitingConnection
+            Integer maximumPoolSize,
+            Integer minimumIdle,
+            Integer activeConnections,
+            Integer idleConnections,
+            Integer totalConnections,
+            Integer threadsAwaitingConnection
     ) {
         static PoolMetrics empty(HikariDataSource pool) {
             if (pool == null) {
@@ -211,15 +223,15 @@ public class DataSourceRegistry {
      * @param available 是否可用
      * @param poolReady 是否已有常驻连接池
      * @param latencyMs 探测延迟毫秒
-     * @param message 失败信息
-     * @param metrics 连接池指标
+     * @param message   失败信息
+     * @param metrics   连接池指标
      */
     public record HealthProbe(
-        boolean available,
-        boolean poolReady,
-        Long latencyMs,
-        String message,
-        PoolMetrics metrics
+            boolean available,
+            boolean poolReady,
+            Long latencyMs,
+            String message,
+            PoolMetrics metrics
     ) {
         static HealthProbe up(boolean poolReady, long latencyMs, String message, PoolMetrics metrics) {
             return new HealthProbe(true, poolReady, latencyMs, message, metrics);

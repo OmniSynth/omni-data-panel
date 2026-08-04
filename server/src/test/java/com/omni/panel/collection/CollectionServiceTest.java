@@ -1,24 +1,25 @@
 package com.omni.panel.collection;
 
-import com.omni.panel.auth.AuthenticatedUser;
-import com.omni.panel.common.BusinessException;
-import com.omni.panel.dataset.DatasetMapper;
-import com.omni.panel.metric.MetricMapper;
-import com.omni.panel.permission.PermissionService;
-import com.omni.panel.visualization.ChartMapper;
-import com.omni.panel.visualization.DashboardMapper;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import java.util.List;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import com.omni.panel.common.BusinessException;
+import com.omni.panel.config.AuthenticatedUser;
+import com.omni.panel.entity.CollectionEntity;
+import com.omni.panel.mapper.ChartMapper;
+import com.omni.panel.mapper.CollectionMapper;
+import com.omni.panel.mapper.DashboardMapper;
+import com.omni.panel.mapper.DatasetMapper;
+import com.omni.panel.mapper.MetricMapper;
+import com.omni.panel.service.CollectionService;
+import com.omni.panel.service.PermissionService;
 
 class CollectionServiceTest {
     private final CollectionMapper collectionMapper = mock(CollectionMapper.class);
@@ -28,7 +29,7 @@ class CollectionServiceTest {
     private final MetricMapper metricMapper = mock(MetricMapper.class);
     private final PermissionService permissionService = mock(PermissionService.class);
     private final CollectionService service = new CollectionService(
-        collectionMapper, chartMapper, dashboardMapper, datasetMapper, metricMapper, permissionService);
+            collectionMapper, chartMapper, dashboardMapper, datasetMapper, metricMapper, permissionService);
 
     @AfterEach
     void 清理() {
@@ -57,13 +58,13 @@ class CollectionServiceTest {
         when(collectionMapper.selectById(1L)).thenReturn(personal);
 
         assertThatThrownBy(() -> service.delete(1L))
-            .isInstanceOf(BusinessException.class)
-            .hasMessageContaining("个人根集合");
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("个人根集合");
     }
 
     private void authenticate(long userId) {
         AuthenticatedUser user = new AuthenticatedUser(userId, "u", false, List.of());
         SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken(user, null, List.of()));
+                new UsernamePasswordAuthenticationToken(user, null, List.of()));
     }
 }

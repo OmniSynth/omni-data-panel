@@ -1,11 +1,10 @@
 package com.omni.panel.datasource.dialect;
 
-import com.omni.panel.common.BusinessException;
-import org.springframework.stereotype.Component;
-
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.stereotype.Component;
+import com.omni.panel.common.BusinessException;
 
 /**
  * MariaDB 方言插件：连接语义与 MySQL 一致，仅 JDBC URL 前缀不同。
@@ -15,7 +14,7 @@ public class MariaDbDialectPlugin extends MysqlDialectPlugin {
     public static final String CODE = "MARIADB";
 
     private static final Pattern URL_PATTERN = Pattern.compile(
-        "(?i)^jdbc:mariadb://([^/:?]+)(?::(\\d+))?(?:/([^?;\\s]*))?.*$");
+            "(?i)^jdbc:mariadb://([^/:?]+)(?::(\\d+))?(?:/([^?;\\s]*))?.*$");
 
     @Override
     public String code() {
@@ -37,9 +36,9 @@ public class MariaDbDialectPlugin extends MysqlDialectPlugin {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
         JdbcConnectionFields.requirePort(port);
         StringBuilder url = new StringBuilder("jdbc:mariadb://")
-            .append(normalizedHost)
-            .append(':')
-            .append(port);
+                .append(normalizedHost)
+                .append(':')
+                .append(port);
         String database = JdbcConnectionFields.blankToNull(defaultDatabase);
         if (database != null) {
             url.append('/').append(database);

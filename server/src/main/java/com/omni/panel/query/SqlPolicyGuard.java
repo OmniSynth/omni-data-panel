@@ -1,15 +1,14 @@
 package com.omni.panel.query;
 
-import com.omni.panel.common.BusinessException;
-import com.omni.panel.datasource.dialect.DialectPlugin;
+import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.select.Select;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
+import com.omni.panel.common.BusinessException;
+import com.omni.panel.datasource.dialect.DialectPlugin;
 
 /**
  * 校验待执行 SQL 是否符合只读查询策略。
@@ -20,8 +19,8 @@ import java.util.regex.Pattern;
 @Component
 public class SqlPolicyGuard {
     private static final List<Pattern> COMMON_FORBIDDEN = List.of(
-        Pattern.compile("(?s).*\\binto\\s+(out|dump)file\\b.*"),
-        Pattern.compile("(?s).*\\bfor\\s+update\\b.*")
+            Pattern.compile("(?s).*\\binto\\s+(out|dump)file\\b.*"),
+            Pattern.compile("(?s).*\\bfor\\s+update\\b.*")
     );
 
     /**
@@ -36,7 +35,7 @@ public class SqlPolicyGuard {
     /**
      * 在通用只读策略之外，叠加方言特有禁止项。
      *
-     * @param sql 待校验的 SQL 文本
+     * @param sql     待校验的 SQL 文本
      * @param dialect 方言插件，可为 null
      */
     public void validate(String sql, DialectPlugin dialect) {

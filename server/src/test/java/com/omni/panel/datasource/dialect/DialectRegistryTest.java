@@ -1,22 +1,20 @@
 package com.omni.panel.datasource.dialect;
 
-import com.omni.panel.common.BusinessException;
-import com.omni.panel.datasource.DataSourceEntity;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import com.omni.panel.common.BusinessException;
+import com.omni.panel.entity.DataSourceEntity;
 
 class DialectRegistryTest {
     private final DialectRegistry registry = new DialectRegistry(List.of(
-        new MysqlDialectPlugin(), new MariaDbDialectPlugin()));
+            new MysqlDialectPlugin(), new MariaDbDialectPlugin()));
 
     @Test
     void 列出已注册方言() {
         assertThat(registry.list()).extracting(DialectInfo::code)
-            .containsExactly("MARIADB", "MYSQL");
+                .containsExactly("MARIADB", "MYSQL");
     }
 
     @Test
@@ -28,8 +26,8 @@ class DialectRegistryTest {
     @Test
     void 未知方言拒绝() {
         assertThatThrownBy(() -> registry.require("POSTGRESQL"))
-            .isInstanceOf(BusinessException.class)
-            .hasMessageContaining("不支持的数据源方言");
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不支持的数据源方言");
     }
 
     @Test

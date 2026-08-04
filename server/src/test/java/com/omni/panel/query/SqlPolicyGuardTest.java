@@ -1,12 +1,11 @@
 package com.omni.panel.query;
 
-import com.omni.panel.common.BusinessException;
-import com.omni.panel.datasource.dialect.MysqlDialectPlugin;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import com.omni.panel.common.BusinessException;
+import com.omni.panel.datasource.dialect.MysqlDialectPlugin;
 
 class SqlPolicyGuardTest {
     private final SqlPolicyGuard guard = new SqlPolicyGuard();
@@ -27,6 +26,6 @@ class SqlPolicyGuardTest {
         assertThrows(BusinessException.class, () -> guard.validate("SELECT * FROM users INTO OUTFILE '/tmp/a'"));
         assertThrows(BusinessException.class, () -> guard.validate("SELECT * FROM users FOR UPDATE"));
         assertThrows(BusinessException.class,
-            () -> guard.validate("SELECT * FROM users LOCK IN SHARE MODE", mysql));
+                () -> guard.validate("SELECT * FROM users LOCK IN SHARE MODE", mysql));
     }
 }

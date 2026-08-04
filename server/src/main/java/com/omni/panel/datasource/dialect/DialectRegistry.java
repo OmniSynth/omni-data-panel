@@ -1,16 +1,15 @@
 package com.omni.panel.datasource.dialect;
 
-import com.omni.panel.common.BusinessException;
-import com.omni.panel.datasource.DataSourceEntity;
-import org.springframework.aop.support.AopUtils;
-import org.springframework.stereotype.Component;
-
 import java.lang.reflect.Proxy;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.stereotype.Component;
+import com.omni.panel.common.BusinessException;
+import com.omni.panel.entity.DataSourceEntity;
 
 /**
  * 已注册的分析数据源方言插件表。
@@ -38,12 +37,18 @@ public class DialectRegistry {
         this.plugins = Map.copyOf(map);
     }
 
+    /**
+     * 判断注入的插件是否为可注册的具体实现，排除 JDK 代理与接口占位。
+     *
+     * @param plugin 候选方言插件
+     * @return 可注册时返回 {@code true}
+     */
     private static boolean isConcretePlugin(DialectPlugin plugin) {
         Class<?> type = AopUtils.getTargetClass(plugin);
         return !Proxy.isProxyClass(plugin.getClass())
-            && !Proxy.isProxyClass(type)
-            && !type.equals(DialectPlugin.class)
-            && !type.isInterface();
+                && !Proxy.isProxyClass(type)
+                && !type.equals(DialectPlugin.class)
+                && !type.isInterface();
     }
 
     /**
@@ -51,9 +56,9 @@ public class DialectRegistry {
      */
     public List<DialectInfo> list() {
         return plugins.values().stream()
-            .sorted(Comparator.comparing(DialectPlugin::code))
-            .map(DialectInfo::from)
-            .toList();
+                .sorted(Comparator.comparing(DialectPlugin::code))
+                .map(DialectInfo::from)
+                .toList();
     }
 
     /**

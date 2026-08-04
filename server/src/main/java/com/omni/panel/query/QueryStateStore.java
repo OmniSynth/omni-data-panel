@@ -1,18 +1,17 @@
 package com.omni.panel.query;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
-
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 保存和读取异步查询状态及结果快照。
@@ -46,7 +45,7 @@ public class QueryStateStore {
         try {
             String json = objectMapper.writeValueAsString(snapshot);
             if (redis != null
-                && json.getBytes(StandardCharsets.UTF_8).length <= properties.redisResultLimitBytes()) {
+                    && json.getBytes(StandardCharsets.UTF_8).length <= properties.redisResultLimitBytes()) {
                 redis.opsForValue().set(key(snapshot.queryId()), json, Duration.ofHours(1));
             }
         } catch (Exception exception) {
@@ -93,18 +92,19 @@ public class QueryStateStore {
     /**
      * 某一时刻的查询任务状态。
      *
-     * @param queryId 查询任务标识
-     * @param userId 发起查询的用户标识
-     * @param sourceId 查询使用的数据源标识
-     * @param status 任务状态
-     * @param result 成功完成后的查询结果
-     * @param error 失败时的错误信息
+     * @param queryId     查询任务标识
+     * @param userId      发起查询的用户标识
+     * @param sourceId    查询使用的数据源标识
+     * @param status      任务状态
+     * @param result      成功完成后的查询结果
+     * @param error       失败时的错误信息
      * @param startedAtMs 提交时间（毫秒时间戳）
-     * @param durationMs 从提交到结束的耗时毫秒；未结束时为空
+     * @param durationMs  从提交到结束的耗时毫秒；未结束时为空
      */
     public record QuerySnapshot(String queryId,
                                 @JsonSerialize(using = ToStringSerializer.class) long userId,
                                 @JsonSerialize(using = ToStringSerializer.class) long sourceId, String status,
                                 JdbcQueryExecutor.QueryResult result, String error,
-                                Long startedAtMs, Long durationMs) {}
+                                Long startedAtMs, Long durationMs) {
+    }
 }

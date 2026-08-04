@@ -1,10 +1,5 @@
 package com.omni.panel.query;
 
-import com.omni.panel.common.BusinessException;
-import com.omni.panel.datasource.dialect.DialectPlugin;
-import com.omni.panel.datasource.dialect.MysqlDialectPlugin;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -14,6 +9,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.springframework.stereotype.Component;
+import com.omni.panel.common.BusinessException;
+import com.omni.panel.datasource.dialect.DialectPlugin;
+import com.omni.panel.datasource.dialect.MysqlDialectPlugin;
 
 /**
  * 将语义查询编译为只读参数化 SQL。
@@ -27,7 +26,7 @@ public class QueryCompiler {
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z0-9_$]+");
     private static final Set<String> AGGREGATIONS = Set.of("SUM", "COUNT", "AVG", "MIN", "MAX");
     private static final Set<String> OPERATORS =
-        Set.of("EQ", "NE", "GT", "GTE", "LT", "LTE", "LIKE", "IN", "IS_NULL", "NOT_NULL");
+            Set.of("EQ", "NE", "GT", "GTE", "LT", "LTE", "LIKE", "IN", "IS_NULL", "NOT_NULL");
 
     /**
      * 根据数据集元数据、字段权限和行级规则编译语义查询。
@@ -85,15 +84,15 @@ public class QueryCompiler {
         }
 
         StringBuilder sql = new StringBuilder("SELECT ").append(String.join(", ", selections))
-            .append(" FROM ").append(fromClause(dataset, plugin));
+                .append(" FROM ").append(fromClause(dataset, plugin));
         if (!predicates.isEmpty()) {
             sql.append(" WHERE ").append(String.join(" AND ", predicates));
         }
         if (!dimensions.isEmpty() && !metrics.isEmpty()) {
             sql.append(" GROUP BY ");
             sql.append(dimensions.stream()
-                .map(name -> quote(plugin, fields.get(name).columnName()))
-                .reduce((a, b) -> a + ", " + b).orElseThrow());
+                    .map(name -> quote(plugin, fields.get(name).columnName()))
+                    .reduce((a, b) -> a + ", " + b).orElseThrow());
         }
         if (request.sorts() != null && !request.sorts().isEmpty()) {
             List<String> sorts = request.sorts().stream().map(sort -> {
@@ -111,6 +110,32 @@ public class QueryCompiler {
     }
 
     /**
+     * 编译字段去重查询：{@code SELECT DISTINCT col ... LIMIT ?}。
+     *
+     * @param dataset      数据集定义
+     * @param fieldName    语义字段名
+     * @param limit        最大返回行数
+     * @param deniedFields 当前用户不可访问的字段
+     * @param dialect      目标方言
+     * @return SQL 与参数（含 limit）
+     */
+    public CompiledQuery compileDistinct(DatasetDefinition dataset, String fieldName, int limit,
+                                         Set<String> deniedFields, DialectPlugin dialect) {
+        DialectPlugin plugin = dialect == null ? new MysqlDialectPlugin() : dialect;
+        Map<String, FieldDefinition> fields = new HashMap<>();
+        dataset.fields().forEach(field -> fields.put(field.name(), field));
+        FieldDefinition field = requireField(fields, deniedFields == null ? Set.of() : deniedFields, fieldName, null);
+        String column = quote(plugin, field.columnName());
+        String sql = "SELECT DISTINCT " + column + " AS " + alias(plugin, fieldName)
+                + " FROM " + fromClause(dataset, plugin)
+                + " WHERE " + column + " IS NOT NULL"
+                + " ORDER BY " + column
+                + " " + plugin.limitPlaceholder();
+        int capped = Math.max(1, limit);
+        return new CompiledQuery(sql, List.of(capped));
+    }
+
+    /**
      * 生成 FROM 子句，支持物理表或 SQL 模型定义。
      *
      * @param dataset 数据集物理位置或 SQL 定义
@@ -120,7 +145,7 @@ public class QueryCompiler {
     private String fromClause(DatasetDefinition dataset, DialectPlugin dialect) {
         if (dataset.definitionSql() != null && !dataset.definitionSql().isBlank()) {
             return "(" + dataset.definitionSql().trim().replaceAll(";\\s*$", "") + ") AS "
-                + dialect.quoteIdentifier("_model");
+                    + dialect.quoteIdentifier("_model");
         }
         if (dataset.schemaName() == null || dataset.tableName() == null) {
             throw new BusinessException("表模型缺少 schema 或 table");
@@ -131,11 +156,11 @@ public class QueryCompiler {
     /**
      * 递归编译过滤节点为 SQL 谓词，并将参数值追加到参数列表。
      *
-     * @param node 过滤条件节点
-     * @param fields 可用字段映射
+     * @param node         过滤条件节点
+     * @param fields       可用字段映射
      * @param deniedFields 禁止访问的字段名
-     * @param parameters 输出参数列表
-     * @param dialect 目标数据库方言
+     * @param parameters   输出参数列表
+     * @param dialect      目标数据库方言
      * @return SQL 谓词片段
      */
     private String compileFilter(QueryRequest.FilterNode node, Map<String, FieldDefinition> fields,
@@ -143,9 +168,9 @@ public class QueryCompiler {
         if (node.children() != null && !node.children().isEmpty()) {
             String logic = "OR".equalsIgnoreCase(node.logic()) ? " OR " : " AND ";
             return node.children().stream()
-                .map(child -> compileFilter(child, fields, deniedFields, parameters, dialect))
-                .reduce((left, right) -> "(" + left + logic + right + ")")
-                .orElseThrow(() -> new BusinessException("过滤组合不能为空"));
+                    .map(child -> compileFilter(child, fields, deniedFields, parameters, dialect))
+                    .reduce((left, right) -> "(" + left + logic + right + ")")
+                    .orElseThrow(() -> new BusinessException("过滤组合不能为空"));
         }
         FieldDefinition field = requireField(fields, deniedFields, node.field(), null);
         String operator = node.operator() == null ? "" : node.operator().toUpperCase(Locale.ROOT);
@@ -167,8 +192,8 @@ public class QueryCompiler {
     /**
      * 编译 IN 运算符的占位符列表，并将集合元素追加到参数列表。
      *
-     * @param column 已引用的列表达式
-     * @param value IN 条件的值，须为非空集合
+     * @param column     已引用的列表达式
+     * @param value      IN 条件的值，须为非空集合
      * @param parameters 输出参数列表
      * @return IN 谓词片段
      */
@@ -202,9 +227,9 @@ public class QueryCompiler {
     /**
      * 校验字段存在、未被拒绝且语义类型匹配，并校验物理列名合法。
      *
-     * @param fields 可用字段映射
-     * @param denied 禁止访问的字段名
-     * @param name 请求的语义字段名
+     * @param fields       可用字段映射
+     * @param denied       禁止访问的字段名
+     * @param name         请求的语义字段名
      * @param expectedType 期望的字段语义类型，为 null 时不校验类型
      * @return 通过校验的字段定义
      */
@@ -225,7 +250,7 @@ public class QueryCompiler {
      * 校验标识符后按方言规则引用列名或表名。
      *
      * @param dialect 目标数据库方言
-     * @param value 待引用的标识符
+     * @param value   待引用的标识符
      * @return 带引号的标识符
      */
     private String quote(DialectPlugin dialect, String value) {
@@ -248,7 +273,7 @@ public class QueryCompiler {
      * 校验字段别名合法并按方言规则引用。
      *
      * @param dialect 目标数据库方言
-     * @param value 字段别名
+     * @param value   字段别名
      * @return 带引号的别名
      */
     private String alias(DialectPlugin dialect, String value) {
@@ -271,10 +296,10 @@ public class QueryCompiler {
     /**
      * 数据集编译所需的物理位置、SQL 定义和字段白名单。
      *
-     * @param schemaName 数据库模式名称
-     * @param tableName 物理表名称
+     * @param schemaName    数据库模式名称
+     * @param tableName     物理表名称
      * @param definitionSql SQL 模型定义
-     * @param fields 可用于编译查询的字段定义
+     * @param fields        可用于编译查询的字段定义
      */
     public record DatasetDefinition(String schemaName, String tableName, String definitionSql,
                                     List<FieldDefinition> fields) {
@@ -282,8 +307,8 @@ public class QueryCompiler {
          * 兼容仅物理表的构造。
          *
          * @param schemaName 模式
-         * @param tableName 表
-         * @param fields 字段
+         * @param tableName  表
+         * @param fields     字段
          */
         public DatasetDefinition(String schemaName, String tableName, List<FieldDefinition> fields) {
             this(schemaName, tableName, null, fields);
@@ -293,18 +318,20 @@ public class QueryCompiler {
     /**
      * 语义字段与物理列的映射定义。
      *
-     * @param name 对外使用的语义字段名
-     * @param columnName 数据库物理列名
-     * @param fieldType 字段语义类型
+     * @param name        对外使用的语义字段名
+     * @param columnName  数据库物理列名
+     * @param fieldType   字段语义类型
      * @param aggregation 指标聚合方式
      */
-    public record FieldDefinition(String name, String columnName, String fieldType, String aggregation) {}
+    public record FieldDefinition(String name, String columnName, String fieldType, String aggregation) {
+    }
 
     /**
      * 编译完成的参数化查询。
      *
-     * @param sql 包含占位符的 SQL 文本
+     * @param sql        包含占位符的 SQL 文本
      * @param parameters 按占位符顺序排列的参数
      */
-    public record CompiledQuery(String sql, List<Object> parameters) {}
+    public record CompiledQuery(String sql, List<Object> parameters) {
+    }
 }

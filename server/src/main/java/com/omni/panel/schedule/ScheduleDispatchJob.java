@@ -1,15 +1,17 @@
 package com.omni.panel.schedule;
 
-import com.omni.panel.auth.UserAuthenticationService;
-import com.omni.panel.metadata.MetadataService;
-import com.omni.panel.subscription.SubscriptionDeliveryService;
-import com.omni.panel.visualization.DashboardRefreshService;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.Job;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
+import com.omni.panel.entity.ScheduleEntity;
+import com.omni.panel.mapper.ScheduleMapper;
+import com.omni.panel.service.DashboardRefreshService;
+import com.omni.panel.service.MetadataService;
+import com.omni.panel.service.SubscriptionDeliveryService;
+import com.omni.panel.service.UserAuthenticationService;
 
 /**
  * Quartz 通用调度入口，根据持久化任务类型分派元数据同步、仪表盘刷新或订阅发送。

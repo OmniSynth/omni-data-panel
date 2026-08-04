@@ -1,18 +1,20 @@
 package com.omni.panel.datasource;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+import com.omni.panel.entity.DataSourceEntity;
+import com.omni.panel.mapper.DataSourceMapper;
+import com.omni.panel.service.DataSourceService;
 
 /**
  * 应用启动后并行预热全部可用分析数据源连接池，降低首次查询延迟。
@@ -54,12 +56,12 @@ public class DataSourceWarmup implements ApplicationRunner {
         }
         try {
             CompletableFuture.allOf(tasks.toArray(CompletableFuture[]::new))
-                .orTimeout(60, TimeUnit.SECONDS)
-                .exceptionally(error -> {
-                    log.warn("数据源预热超时或异常：{}", error.getMessage());
-                    return null;
-                })
-                .join();
+                    .orTimeout(60, TimeUnit.SECONDS)
+                    .exceptionally(error -> {
+                        log.warn("数据源预热超时或异常：{}", error.getMessage());
+                        return null;
+                    })
+                    .join();
         } finally {
             executor.close();
         }
@@ -67,6 +69,11 @@ public class DataSourceWarmup implements ApplicationRunner {
         log.info("分析数据源连接池预热完成：成功 {}/{}", ready, sources.size());
     }
 
+    /**
+     * 预热单个数据源连接池；失败仅记录日志，不中断启动流程。
+     *
+     * @param source 数据源配置
+     */
     private void warmOne(DataSourceEntity source) {
         try {
             registry.warmUp(source);

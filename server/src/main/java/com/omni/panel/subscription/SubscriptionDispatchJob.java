@@ -5,6 +5,7 @@ import org.quartz.Job;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.omni.panel.service.SubscriptionDeliveryService;
 
 /**
  * Quartz 订阅发送入口，确保同一订阅不会并发发送邮件。

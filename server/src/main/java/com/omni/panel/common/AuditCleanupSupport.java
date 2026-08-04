@@ -6,7 +6,11 @@ import java.time.LocalDateTime;
  * 审计清理参数解析。
  */
 public final class AuditCleanupSupport {
-    private AuditCleanupSupport() {}
+    /**
+     * 工具类，禁止实例化。
+     */
+    private AuditCleanupSupport() {
+    }
 
     /**
      * @return null 表示清空全部；非 null 表示删除该时间之前的记录

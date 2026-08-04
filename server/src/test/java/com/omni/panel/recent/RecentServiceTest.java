@@ -1,19 +1,20 @@
 package com.omni.panel.recent;
 
-import com.omni.panel.dataset.DatasetMapper;
-import com.omni.panel.visualization.ChartEntity;
-import com.omni.panel.visualization.ChartMapper;
-import com.omni.panel.visualization.DashboardMapper;
-import org.junit.jupiter.api.Test;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import java.time.LocalDateTime;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import com.omni.panel.entity.ChartEntity;
+import com.omni.panel.entity.RecentItemEntity;
+import com.omni.panel.mapper.ChartMapper;
+import com.omni.panel.mapper.DashboardMapper;
+import com.omni.panel.mapper.DatasetMapper;
+import com.omni.panel.mapper.RecentItemMapper;
+import com.omni.panel.service.RecentService;
 
 class RecentServiceTest {
     @Test

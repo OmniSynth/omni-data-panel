@@ -6,7 +6,11 @@ import com.omni.panel.common.BusinessException;
  * 主机/端口等连接字段的通用校验。
  */
 public final class JdbcConnectionFields {
-    private JdbcConnectionFields() {}
+    /**
+     * 禁止实例化。
+     */
+    private JdbcConnectionFields() {
+    }
 
     public static String requireHost(String host) {
         if (host == null || host.isBlank()) {

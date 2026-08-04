@@ -1,10 +1,5 @@
 package com.omni.panel.datasource.dialect;
 
-import com.omni.panel.common.BusinessException;
-import com.omni.panel.datasource.DataSourceEntity;
-import com.zaxxer.hikari.HikariConfig;
-import org.springframework.stereotype.Component;
-
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
@@ -18,6 +13,10 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.zaxxer.hikari.HikariConfig;
+import org.springframework.stereotype.Component;
+import com.omni.panel.common.BusinessException;
+import com.omni.panel.entity.DataSourceEntity;
 
 /**
  * MySQL 分析数据源方言插件。
@@ -27,13 +26,13 @@ public class MysqlDialectPlugin extends DialectPlugin {
     public static final String CODE = "MYSQL";
 
     private static final Set<String> SYSTEM_NAMESPACES = Set.of(
-        "information_schema", "mysql", "performance_schema", "sys");
+            "information_schema", "mysql", "performance_schema", "sys");
 
     private static final Pattern URL_PATTERN = Pattern.compile(
-        "(?i)^jdbc:mysql://([^/:?]+)(?::(\\d+))?(?:/([^?;\\s]*))?.*$");
+            "(?i)^jdbc:mysql://([^/:?]+)(?::(\\d+))?(?:/([^?;\\s]*))?.*$");
 
     private static final List<Pattern> FORBIDDEN = List.of(
-        Pattern.compile("(?s).*\\block\\s+in\\s+share\\s+mode\\b.*"));
+            Pattern.compile("(?s).*\\block\\s+in\\s+share\\s+mode\\b.*"));
 
     @Override
     public String code() {
@@ -60,9 +59,9 @@ public class MysqlDialectPlugin extends DialectPlugin {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
         JdbcConnectionFields.requirePort(port);
         StringBuilder url = new StringBuilder("jdbc:mysql://")
-            .append(normalizedHost)
-            .append(':')
-            .append(port);
+                .append(normalizedHost)
+                .append(':')
+                .append(port);
         String database = JdbcConnectionFields.blankToNull(defaultDatabase);
         if (database != null) {
             url.append('/').append(database);
@@ -107,7 +106,7 @@ public class MysqlDialectPlugin extends DialectPlugin {
 
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
-        throws SQLException {
+            throws SQLException {
         if (preferredNamespace != null && !preferredNamespace.isBlank()) {
             connection.setCatalog(preferredNamespace.trim());
             return;
@@ -146,12 +145,12 @@ public class MysqlDialectPlugin extends DialectPlugin {
 
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
-        throws SQLException {
+            throws SQLException {
         String sql = """
-            SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES
-            WHERE TABLE_SCHEMA = ? AND TABLE_TYPE IN ('BASE TABLE', 'VIEW')
-            ORDER BY TABLE_NAME
-            """;
+                SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = ? AND TABLE_TYPE IN ('BASE TABLE', 'VIEW')
+                ORDER BY TABLE_NAME
+                """;
         List<DialectTableInfo> tables = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, namespace);
@@ -166,14 +165,14 @@ public class MysqlDialectPlugin extends DialectPlugin {
 
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
-        throws SQLException {
+            throws SQLException {
         String sql = """
-            SELECT COLUMN_NAME, COLUMN_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION,
-                   NUMERIC_SCALE, IS_NULLABLE, ORDINAL_POSITION, COLUMN_COMMENT
-            FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-            ORDER BY ORDINAL_POSITION
-            """;
+                SELECT COLUMN_NAME, COLUMN_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION,
+                       NUMERIC_SCALE, IS_NULLABLE, ORDINAL_POSITION, COLUMN_COMMENT
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+                ORDER BY ORDINAL_POSITION
+                """;
         List<DialectColumnInfo> columns = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, namespace);
@@ -184,16 +183,16 @@ public class MysqlDialectPlugin extends DialectPlugin {
                     Long numPrec = (Long) resultSet.getObject("NUMERIC_PRECISION");
                     Long numScale = (Long) resultSet.getObject("NUMERIC_SCALE");
                     Integer columnSize = charLen != null ? charLen.intValue()
-                        : numPrec != null ? numPrec.intValue() : null;
+                            : numPrec != null ? numPrec.intValue() : null;
                     Integer decimalDigits = numScale == null ? null : numScale.intValue();
                     columns.add(new DialectColumnInfo(
-                        resultSet.getString("COLUMN_NAME"),
-                        resultSet.getString("COLUMN_TYPE"),
-                        columnSize,
-                        decimalDigits,
-                        "YES".equalsIgnoreCase(resultSet.getString("IS_NULLABLE")),
-                        resultSet.getInt("ORDINAL_POSITION"),
-                        resultSet.getString("COLUMN_COMMENT")
+                            resultSet.getString("COLUMN_NAME"),
+                            resultSet.getString("COLUMN_TYPE"),
+                            columnSize,
+                            decimalDigits,
+                            "YES".equalsIgnoreCase(resultSet.getString("IS_NULLABLE")),
+                            resultSet.getInt("ORDINAL_POSITION"),
+                            resultSet.getString("COLUMN_COMMENT")
                     ));
                 }
             }
@@ -211,6 +210,12 @@ public class MysqlDialectPlugin extends DialectPlugin {
         return FORBIDDEN;
     }
 
+    /**
+     * 通过 JDBC {@link DatabaseMetaData#getCatalogs()} 收集业务库名。
+     *
+     * @param metadata 数据库元数据
+     * @param catalogs 待填充的业务库名集合
+     */
     private void collectFromMetaData(DatabaseMetaData metadata, Set<String> catalogs) throws SQLException {
         try (ResultSet resultSet = metadata.getCatalogs()) {
             while (resultSet.next()) {
@@ -219,6 +224,12 @@ public class MysqlDialectPlugin extends DialectPlugin {
         }
     }
 
+    /**
+     * 通过 {@code SHOW DATABASES} 收集业务库名。
+     *
+     * @param connection JDBC 连接
+     * @param catalogs   待填充的业务库名集合
+     */
     private void collectFromShowDatabases(Connection connection, Set<String> catalogs) throws SQLException {
         try (Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery("SHOW DATABASES")) {
@@ -228,13 +239,19 @@ public class MysqlDialectPlugin extends DialectPlugin {
         }
     }
 
+    /**
+     * 通过 {@code information_schema.SCHEMATA} 收集业务库名。
+     *
+     * @param connection JDBC 连接
+     * @param catalogs   待填充的业务库名集合
+     */
     private void collectFromInformationSchema(Connection connection, Set<String> catalogs)
-        throws SQLException {
+            throws SQLException {
         String sql = """
-            SELECT SCHEMA_NAME FROM information_schema.SCHEMATA
-            WHERE SCHEMA_NAME NOT IN ('information_schema','mysql','performance_schema','sys')
-            ORDER BY SCHEMA_NAME
-            """;
+                SELECT SCHEMA_NAME FROM information_schema.SCHEMATA
+                WHERE SCHEMA_NAME NOT IN ('information_schema','mysql','performance_schema','sys')
+                ORDER BY SCHEMA_NAME
+                """;
         try (Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery(sql)) {
             while (resultSet.next()) {
@@ -243,6 +260,12 @@ public class MysqlDialectPlugin extends DialectPlugin {
         }
     }
 
+    /**
+     * 将非系统库名加入集合，忽略空值与系统命名空间。
+     *
+     * @param catalogs 业务库名集合
+     * @param catalog  待判定的库名
+     */
     private void addBusinessNamespace(Set<String> catalogs, String catalog) {
         if (catalog == null || catalog.isBlank()) {
             return;
