@@ -1,0 +1,418 @@
+export type Id = number | string
+export type RecordData = Record<string, unknown>
+
+export type ResourceType = 'QUESTION' | 'DASHBOARD' | 'MODEL' | 'METRIC' | 'COLLECTION'
+export type PublicResourceType = 'DASHBOARD' | 'QUESTION'
+export type ModelType = 'TABLE' | 'SQL'
+
+export interface User {
+  id: Id
+  username: string
+  displayName: string
+  roles: string[]
+  admin: boolean
+  permissions: string[]
+}
+
+export interface Role {
+  id: Id
+  code: string
+  name: string
+  description?: string
+  enabled: boolean
+  builtIn: boolean
+  permissions: string[]
+}
+
+export interface Permission {
+  id: Id
+  code: string
+  name: string
+}
+
+export interface AdminUser {
+  id: Id
+  username: string
+  displayName: string
+  enabled: boolean
+  roleIds: Id[]
+  roles: string[]
+  permissions: string[]
+}
+
+export interface RoleResourceGrant {
+  roleId: Id
+  code: string
+  name: string
+  permission: 'READ' | 'WRITE'
+}
+
+export interface DataSource {
+  id: Id
+  name: string
+  host?: string
+  port?: number
+  /** 可选默认库；未填则同步并浏览全部业务库 */
+  defaultDatabase?: string | null
+  /** 组装后的 JDBC 地址（管理员可见） */
+  jdbcUrl?: string
+  username?: string
+  password?: string
+  status?: string
+  ownerId?: Id
+  /** 运行时方言编码，须为已注册插件 */
+  dialect?: string
+}
+
+/** 后端已注册、可创建连接的方言 */
+export interface DialectInfo {
+  code: string
+  label: string
+  defaultPort: number
+}
+
+export interface CompletionSchema {
+  dialect: string
+  schemas: Record<string, Record<string, string[]>>
+}
+
+export interface MetadataTable {
+  tableName: string
+  comment?: string
+}
+
+export interface MetadataColumn {
+  columnName: string
+  typeName: string
+  columnSize?: number | null
+  decimalDigits?: number | null
+  nullable: boolean
+  primaryKey?: boolean
+  foreignKey?: boolean
+  fkTableName?: string | null
+  fkColumnName?: string | null
+  position: number
+  comment?: string
+}
+
+export interface DatasetField {
+  id?: Id
+  datasetId?: Id
+  name: string
+  columnName: string
+  fieldType: 'DIMENSION' | 'METRIC'
+  aggregation?: 'SUM' | 'AVG' | 'COUNT' | 'MAX' | 'MIN'
+}
+
+export interface Dataset {
+  id: Id
+  name: string
+  dataSourceId: Id
+  schemaName: string
+  tableName: string
+  fields: DatasetField[]
+  ownerId?: Id
+  description?: string
+  collectionId?: Id
+  modelType?: ModelType
+  definitionSql?: string
+  deletedAt?: string
+  updatedAt?: string
+}
+
+export interface SemanticQuery {
+  datasetId: Id
+  dimensions: string[]
+  metrics: string[]
+  filter?: QueryFilter
+  sorts: Array<{ field: string; direction: 'ASC' | 'DESC' }>
+  limit: number
+}
+
+export interface QueryFilter {
+  logic?: 'AND' | 'OR'
+  field?: string
+  operator?: 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'LIKE' | 'IN' | 'IS_NULL' | 'NOT_NULL'
+  value?: unknown
+  children?: QueryFilter[]
+}
+
+export interface QuerySubmission {
+  sourceId?: Id
+  sql?: string
+  parameters?: unknown[]
+  query?: SemanticQuery
+}
+
+export interface QuerySubmitResult {
+  queryId: string
+}
+
+export interface QuerySnapshot {
+  queryId: string
+  userId?: Id
+  sourceId?: Id
+  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'
+  result?: QueryResult
+  error?: string
+  /** 提交时间（毫秒时间戳） */
+  startedAtMs?: number
+  /** 从提交到结束的耗时毫秒 */
+  durationMs?: number
+}
+
+export interface QueryResult {
+  columns: string[]
+  rows: RecordData[]
+}
+
+export interface PageResult<T> {
+  items: T[]
+  total: number
+  page: number
+  size: number
+}
+
+/** 分析数据源连接池健康状态 */
+export type DataSourceHealthStatus = 'UP' | 'DOWN' | 'DEGRADED' | 'COLD' | 'DISABLED'
+
+export interface DataSourceHealthItem {
+  sourceId: Id
+  name: string
+  host?: string | null
+  port?: number | null
+  defaultDatabase?: string | null
+  sourceStatus?: string | null
+  health: DataSourceHealthStatus
+  poolReady: boolean
+  latencyMs?: number | null
+  message?: string | null
+  maximumPoolSize?: number | null
+  minimumIdle?: number | null
+  activeConnections?: number | null
+  idleConnections?: number | null
+  totalConnections?: number | null
+  threadsAwaitingConnection?: number | null
+  checkedAtMs: number
+}
+
+export interface DataSourceHealthOverview {
+  checkedAt: string
+  total: number
+  up: number
+  degraded: number
+  down: number
+  cold: number
+  disabled: number
+  items: DataSourceHealthItem[]
+}
+
+export interface QueryAudit {
+  id: Id
+  queryId: string
+  userId: Id
+  username: string
+  displayName?: string
+  dataSourceId: Id
+  dataSourceName: string
+  sqlText: string
+  clientIp?: string
+  userAgent?: string
+  status: string
+  rowCount?: number | null
+  errorMessage?: string | null
+  durationMs?: number | null
+  resultPreview?: string | null
+  startedAt?: string
+  finishedAt?: string | null
+}
+
+export interface QueryAuditPreview {
+  columns: string[]
+  rows: RecordData[]
+  previewRowCount: number
+  totalRowCount: number
+}
+
+export interface AuditCleanupPayload {
+  mode: 'ALL' | 'BEFORE_DAYS' | 'BEFORE_DATE'
+  days?: number
+  before?: string
+}
+
+export interface LoginAudit {
+  id: Id
+  username: string
+  userId?: Id | null
+  success: boolean
+  message: string
+  clientIp?: string | null
+  userAgent?: string | null
+  loggedAt?: string
+}
+
+export interface Chart {
+  id: Id
+  name: string
+  datasetId?: Id
+  dataSourceId?: Id
+  queryJson: string
+  chartType: string
+  configJson: string
+  ownerId?: Id
+  description?: string
+  collectionId?: Id
+  deletedAt?: string
+  updatedAt?: string
+}
+
+export interface DashboardCard {
+  id: Id
+  dashboardId: Id
+  chartId: Id
+  title: string
+  layoutJson: string
+}
+
+export interface DashboardLayout {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface Dashboard {
+  id: Id
+  name: string
+  configJson: string
+  ownerId: Id
+  lastRefreshedAt?: string
+  accessLevel: 'ADMIN' | 'OWNER' | 'WRITE' | 'READ'
+  description?: string
+  collectionId?: Id
+  deletedAt?: string
+  updatedAt?: string
+}
+
+export interface DashboardRenderCard {
+  cardId: Id
+  title: string
+  chartType: string
+  configJson: string
+  layoutJson: string
+  result?: QueryResult
+  error?: string
+}
+
+export interface DashboardRender {
+  id: Id
+  name: string
+  configJson: string
+  accessLevel: 'ADMIN' | 'OWNER' | 'WRITE' | 'READ'
+  cards: DashboardRenderCard[]
+}
+
+export interface ExportTask {
+  id: Id
+  ownerId: Id
+  queryId: string
+  format: 'CSV' | 'XLSX'
+  status: string
+  objectName?: string
+  errorMessage?: string
+}
+
+export interface Subscription {
+  id: Id
+  name: string
+  dashboardId: Id
+  cronExpression: string
+  recipients: string
+  enabled: boolean
+  ownerId?: Id
+}
+
+export interface Collection {
+  id: Id
+  name: string
+  description?: string
+  parentId?: Id
+  personalOwnerId?: Id
+  ownerId?: Id
+  archived?: boolean
+  children?: Collection[]
+  updatedAt?: string
+}
+
+export interface CollectionItem {
+  id: Id
+  type: ResourceType
+  name: string
+  description?: string
+  updatedAt?: string
+  ownerId?: Id
+}
+
+export interface RecentItem {
+  resourceType: ResourceType
+  resourceId: Id
+  name: string
+  description?: string
+  visitedAt: string
+}
+
+export interface Metric {
+  id: Id
+  name: string
+  description?: string
+  modelId: Id
+  expressionJson: string
+  aggregation: string
+  collectionId?: Id
+  ownerId?: Id
+  deletedAt?: string
+  updatedAt?: string
+}
+
+export interface SearchHit {
+  resourceType: ResourceType
+  resourceId: Id
+  name: string
+  description?: string
+  collectionId?: Id
+}
+
+export interface TrashItem {
+  resourceType: ResourceType
+  resourceId: Id
+  name: string
+  description?: string
+  deletedAt: string
+  ownerId?: Id
+}
+
+export interface PublicLink {
+  id: Id
+  resourceType: PublicResourceType
+  resourceId: Id
+  token: string
+  enabled: boolean
+  createdBy?: Id
+  createdAt?: string
+}
+
+export interface PublicQuestion {
+  id: Id
+  name: string
+  description?: string
+  chartType: string
+  configJson: string
+  result?: QueryResult
+  error?: string
+}
+
+export interface SiteSettings {
+  'site.name'?: string
+  'embed.enabled'?: string | boolean
+  [key: string]: string | boolean | undefined
+}

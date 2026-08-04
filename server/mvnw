@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+VERSION=3.9.9
+HOME_DIR="${HOME}/.m2/wrapper/dists/apache-maven-${VERSION}"
+if [ ! -x "${HOME_DIR}/bin/mvn" ]; then
+  ARCHIVE="${TMPDIR:-/tmp}/apache-maven-${VERSION}.zip"
+  curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${VERSION}/apache-maven-${VERSION}-bin.zip" -o "${ARCHIVE}"
+  mkdir -p "$(dirname "${HOME_DIR}")"
+  unzip -oq "${ARCHIVE}" -d "$(dirname "${HOME_DIR}")"
+fi
+exec "${HOME_DIR}/bin/mvn" "$@"

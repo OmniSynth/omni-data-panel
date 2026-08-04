@@ -1,0 +1,131 @@
+:root {
+  --omni-bg: #f5f6f8;
+  --omni-surface: #f9fafb;
+  --omni-card: #ffffff;
+  --omni-border: #e5e7eb;
+  --omni-text: #1f2937;
+  --omni-muted: #6b7280;
+  --omni-accent: #509ee3;
+  --omni-accent-soft: #eef6fc;
+  --omni-accent-strong: #1d4f91;
+  --omni-danger: #f56c6c;
+  --omni-space-1: 6px;
+  --omni-space-2: 10px;
+  --omni-space-3: 16px;
+  --omni-space-4: 24px;
+  --omni-page-pad: 20px 24px;
+  --omni-radius: 10px;
+  --omni-radius-sm: 8px;
+  --omni-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --omni-font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --omni-title-size: 22px;
+  --omni-body-size: 14px;
+
+  /* Element Plus 主色对齐品牌青蓝 */
+  --el-color-primary: #509ee3;
+  --el-color-primary-light-3: #7db8eb;
+  --el-color-primary-light-5: #a7cff2;
+  --el-color-primary-light-7: #d1e6f8;
+  --el-color-primary-light-8: #e3f0fb;
+  --el-color-primary-light-9: #eef6fc;
+  --el-color-primary-dark-2: #4080b8;
+
+  font-family: var(--omni-font);
+  font-size: var(--omni-body-size);
+  color: var(--omni-text);
+  background: var(--omni-bg);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-width: 960px;
+  background: var(--omni-bg);
+  color: var(--omni-text);
+}
+.page {
+  padding: var(--omni-page-pad);
+  min-width: 0;
+}
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--omni-space-3);
+  gap: var(--omni-space-2);
+}
+.page-title {
+  margin: 0;
+  font-size: var(--omni-title-size);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--omni-text);
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--omni-space-2);
+  margin-bottom: var(--omni-space-3);
+  flex-wrap: wrap;
+}
+.full-width { width: 100%; }
+.card-title { font-weight: 600; margin-bottom: 14px; }
+.danger { color: var(--omni-danger); }
+.chart-box { width: 100%; height: 360px; }
+.muted {
+  color: var(--omni-muted);
+  margin: var(--omni-space-1) 0 0;
+  font-size: 13px;
+}
+
+/* SQL 联想弹层（常挂到 body，需全局样式兜底） */
+.cm-tooltip.omni-sql-completion.cm-tooltip-autocomplete {
+  border: 1px solid var(--omni-border) !important;
+  border-radius: var(--omni-radius) !important;
+  background: var(--omni-card) !important;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+  overflow: hidden;
+}
+.cm-tooltip.omni-sql-completion.cm-tooltip-autocomplete > ul {
+  font-family: Consolas, "Courier New", "PingFang SC", monospace;
+  font-size: 13px;
+  max-height: 280px;
+  padding: 6px !important;
+  margin: 0 !important;
+}
+.cm-tooltip.omni-sql-completion.cm-tooltip-autocomplete > ul > li {
+  padding: 7px 10px !important;
+  margin: 1px 0;
+  border-radius: 7px;
+  line-height: 1.35;
+  color: var(--omni-text);
+}
+.cm-tooltip.omni-sql-completion.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--omni-accent-soft) !important;
+  color: var(--omni-accent-strong) !important;
+}
+.cm-tooltip.omni-sql-completion .cm-completionMatchedText {
+  text-decoration: none !important;
+  font-weight: 700;
+  color: var(--omni-accent-strong);
+}
+.cm-tooltip.omni-sql-completion .cm-completionDetail {
+  margin-left: 10px;
+  font-style: normal !important;
+  font-size: 11px;
+  font-family: var(--omni-font);
+  color: #9ca3af;
+}
+.cm-tooltip.omni-sql-completion .cm-completionIcon {
+  opacity: 0.55;
+  color: var(--omni-muted);
+}
+.cm-tooltip.omni-sql-completion li[aria-selected] .cm-completionIcon {
+  opacity: 0.9;
+  color: var(--omni-accent);
+}
+.cm-tooltip.omni-sql-completion .cm-completionDetail:not(.omni-completion-type) {
+  display: none;
+}
+.cm-tooltip.omni-sql-completion .omni-completion-type {
+  display: inline-block;
+}
