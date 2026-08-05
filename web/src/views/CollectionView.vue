@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirmBox, promptBox } from '@/i18n/dialog'
 import { useI18n } from 'vue-i18n'
@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { chartApi, collectionApi, dashboardApi, datasetApi, metricApi } from '@/api'
 import { formatDateTime } from '@/display'
 import { resourcePath, resourceTypeLabel } from '@/nav'
+import { refreshShellNavKey } from '@/nav/shellNav'
 import { useUserStore } from '@/stores/user'
 import type { Collection, CollectionItem, Id, ResourceType } from '@/types'
 import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
@@ -15,6 +16,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const refreshShellNav = inject(refreshShellNavKey, async () => {})
 const loading = ref(false)
 const collection = ref<Collection>()
 const items = ref<CollectionItem[]>([])
@@ -85,6 +87,7 @@ async function rename() {
     })
     ElMessage.success(t('common.updated'))
     await load()
+    await refreshShellNav()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.updateFailed'))
   }
@@ -96,6 +99,7 @@ async function removeCollection() {
     await confirmBox(t('collection.deleteConfirm'), t('common.deleteConfirmTitle'), { type: 'warning' })
     await collectionApi.remove(collection.value.id)
     ElMessage.success(t('collection.deleted'))
+    await refreshShellNav()
     await router.push('/')
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
@@ -124,6 +128,7 @@ async function removeItem(row: CollectionItem) {
     }
     ElMessage.success(t('collection.itemDeleted'))
     await load()
+    await refreshShellNav()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
   }
@@ -146,6 +151,7 @@ async function submitMove() {
     moveVisible.value = false
     ElMessage.success(t('collection.moved'))
     await load()
+    await refreshShellNav()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('collection.moveFailed'))
   }

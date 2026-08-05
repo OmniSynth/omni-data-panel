@@ -20,6 +20,7 @@
         <java.version>21</java.version>
         <mybatis-plus.version>3.5.11</mybatis-plus.version>
         <jjwt.version>0.12.6</jjwt.version>
+        <totp.version>1.7.1</totp.version>
         <minio.version>8.5.17</minio.version>
         <poi.version>5.3.0</poi.version>
         <playwright.version>1.49.0</playwright.version>
@@ -82,10 +83,24 @@
             <artifactId>ojdbc11</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- ClickHouse / Hive JDBC 易与 Spring Boot 胖包、DriverManager SPI 冲突，默认不引入。
+        <!-- ClickHouse JDBC 易与 Spring Boot 胖包、DriverManager SPI 冲突，默认不引入。
              需要时将驱动加入运行时 classpath，例如：
-             com.clickhouse:clickhouse-jdbc:0.9.8:all（并 exclusion 全部传递依赖）
-             或官方 Hive JDBC。插件 ClickHouseDialectPlugin / HiveDialectPlugin 已就绪。 -->
+             com.clickhouse:clickhouse-jdbc:0.9.8:all（并 exclusion 全部传递依赖）。
+             Hive / Spark：本地 jar 见下方 system 依赖（不打进可执行胖包；部署可用 -Dloader.path=lib）。
+             插件 ClickHouseDialectPlugin / HiveDialectPlugin / SparkDialectPlugin 已就绪。 -->
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-jdbc</artifactId>
+            <version>4.2.0</version>
+            <classifier>standalone</classifier>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/hive-jdbc-4.2.0-standalone.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>dev.samstevens.totp</groupId>
+            <artifactId>totp</artifactId>
+            <version>${totp.version}</version>
+        </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>

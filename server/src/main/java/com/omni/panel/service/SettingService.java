@@ -25,6 +25,7 @@ import com.omni.panel.mapper.SettingMapper;
 public class SettingService {
     static final String CACHE_QUERY_ENABLED = "cache.query.enabled";
     static final String CACHE_QUERY_TTL_SECONDS = "cache.query.ttl-seconds";
+    static final String AUTH_SESSION_MAX_CONCURRENT = "auth.session.max-concurrent";
     static final String MAIL_HOST = "mail.host";
     static final String MAIL_PORT = "mail.port";
     static final String MAIL_USERNAME = "mail.username";
@@ -37,6 +38,9 @@ public class SettingService {
     private static final int DEFAULT_CACHE_TTL_SECONDS = 300;
     private static final int MIN_CACHE_TTL_SECONDS = 30;
     private static final int MAX_CACHE_TTL_SECONDS = 86_400;
+    private static final int DEFAULT_MAX_CONCURRENT_SESSIONS = 2;
+    private static final int MIN_MAX_CONCURRENT_SESSIONS = 0;
+    private static final int MAX_MAX_CONCURRENT_SESSIONS = 100;
     private static final int DEFAULT_MAIL_PORT = 25;
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
@@ -45,6 +49,7 @@ public class SettingService {
             "embed.enabled",
             CACHE_QUERY_ENABLED,
             CACHE_QUERY_TTL_SECONDS,
+            AUTH_SESSION_MAX_CONCURRENT,
             MAIL_HOST,
             MAIL_PORT,
             MAIL_USERNAME,
@@ -63,6 +68,7 @@ public class SettingService {
             Map.entry("embed.enabled", "true"),
             Map.entry(CACHE_QUERY_ENABLED, "false"),
             Map.entry(CACHE_QUERY_TTL_SECONDS, String.valueOf(DEFAULT_CACHE_TTL_SECONDS)),
+            Map.entry(AUTH_SESSION_MAX_CONCURRENT, String.valueOf(DEFAULT_MAX_CONCURRENT_SESSIONS)),
             Map.entry(MAIL_HOST, ""),
             Map.entry(MAIL_PORT, String.valueOf(DEFAULT_MAIL_PORT)),
             Map.entry(MAIL_USERNAME, ""),
@@ -164,6 +170,27 @@ public class SettingService {
     }
 
     /**
+     * 读取单用户最大同时登录会话数；0 表示不限制，缺省 2。
+     *
+     * @return 并发上限
+     */
+    public int maxConcurrentSessions() {
+        String value = get(AUTH_SESSION_MAX_CONCURRENT);
+        if (value == null || value.isBlank()) {
+            return DEFAULT_MAX_CONCURRENT_SESSIONS;
+        }
+        try {
+            int max = Integer.parseInt(value.trim());
+            if (max < MIN_MAX_CONCURRENT_SESSIONS || max > MAX_MAX_CONCURRENT_SESSIONS) {
+                return DEFAULT_MAX_CONCURRENT_SESSIONS;
+            }
+            return max;
+        } catch (NumberFormatException exception) {
+            return DEFAULT_MAX_CONCURRENT_SESSIONS;
+        }
+    }
+
+    /**
      * 批量更新设置，仅管理员。
      *
      * @param values 设置映射
@@ -246,6 +273,19 @@ public class SettingService {
                         + "–" + MAX_CACHE_TTL_SECONDS + " 秒之间");
             }
             return String.valueOf(seconds);
+        }
+        if (AUTH_SESSION_MAX_CONCURRENT.equals(key)) {
+            int max;
+            try {
+                max = Integer.parseInt(raw);
+            } catch (NumberFormatException exception) {
+                throw new BusinessException("同时登录设备数必须是整数");
+            }
+            if (max < MIN_MAX_CONCURRENT_SESSIONS || max > MAX_MAX_CONCURRENT_SESSIONS) {
+                throw new BusinessException("同时登录设备数需在 " + MIN_MAX_CONCURRENT_SESSIONS
+                        + "–" + MAX_MAX_CONCURRENT_SESSIONS + " 之间（0 表示不限制）");
+            }
+            return String.valueOf(max);
         }
         if (MAIL_PORT.equals(key)) {
             if (raw.isEmpty()) {

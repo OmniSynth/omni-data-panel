@@ -19,6 +19,7 @@ const form = ref({
   embedEnabled: false,
   queryCacheEnabled: false,
   queryCacheTtlSeconds: 300,
+  maxConcurrentSessions: 2,
   mailHost: '',
   mailPort: 25,
   mailUsername: '',
@@ -55,6 +56,7 @@ async function load() {
   try {
     const settings = await settingsApi.get()
     const ttl = Number(settings['cache.query.ttl-seconds'])
+    const sessions = Number(settings['auth.session.max-concurrent'])
     const port = Number(settings['mail.port'])
     passwordSet.value = asBool(settings['mail.password.set'])
     form.value = {
@@ -62,6 +64,7 @@ async function load() {
       embedEnabled: asBool(settings['embed.enabled']),
       queryCacheEnabled: asBool(settings['cache.query.enabled']),
       queryCacheTtlSeconds: Number.isFinite(ttl) && ttl > 0 ? ttl : 300,
+      maxConcurrentSessions: Number.isFinite(sessions) && sessions >= 0 ? sessions : 2,
       mailHost: String(settings['mail.host'] || ''),
       mailPort: Number.isFinite(port) && port > 0 ? port : 25,
       mailUsername: String(settings['mail.username'] || ''),
@@ -85,6 +88,7 @@ function buildPayload(): SiteSettings {
     'embed.enabled': form.value.embedEnabled ? 'true' : 'false',
     'cache.query.enabled': form.value.queryCacheEnabled ? 'true' : 'false',
     'cache.query.ttl-seconds': String(form.value.queryCacheTtlSeconds),
+    'auth.session.max-concurrent': String(form.value.maxConcurrentSessions),
     'mail.host': form.value.mailHost.trim(),
     'mail.port': String(form.value.mailPort),
     'mail.username': form.value.mailUsername.trim(),
@@ -166,6 +170,16 @@ onMounted(load)
             @change="markDirty"
           />
           <div class="hint">{{ t('settings.cacheHint') }}</div>
+        </el-form-item>
+        <el-form-item :label="t('settings.maxSessions')">
+          <el-input-number
+            v-model="form.maxConcurrentSessions"
+            :min="0"
+            :max="100"
+            controls-position="right"
+            @change="markDirty"
+          />
+          <div class="hint">{{ t('settings.maxSessionsHint') }}</div>
         </el-form-item>
       </el-card>
 

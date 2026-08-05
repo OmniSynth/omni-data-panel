@@ -202,6 +202,26 @@ async function resendActivation(user: AdminUser) {
   }
 }
 
+async function resetMfa(user: AdminUser) {
+  try {
+    await ElMessageBox.confirm(
+      t('users.resetMfaConfirm', { name: user.displayName || user.username }),
+      t('users.resetMfa'),
+      { type: 'warning' },
+    )
+    saving.value = true
+    await userApi.resetMfa(user.id)
+    ElMessage.success(t('users.resetMfaSuccess'))
+    await load()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error instanceof Error ? error.message : t('users.resetMfaFailed'))
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
 function resetForm() {
   editingId.value = undefined
   Object.assign(form, emptyForm())
@@ -237,6 +257,13 @@ onMounted(load)
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column :label="t('users.mfa')" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag :type="row.totpEnabled ? 'success' : 'info'" size="small">
+            {{ row.totpEnabled ? t('users.mfaOn') : t('users.mfaOff') }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column :label="t('common.status')" width="90" align="center">
         <template #default="{ row }">
           <el-switch
@@ -247,7 +274,7 @@ onMounted(load)
           />
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="240">
+      <el-table-column :label="t('common.actions')" min-width="280">
         <template #default="{ row }">
           <el-button link :disabled="row.roles.includes('ADMIN')" @click="open(row)">{{ t('common.edit') }}</el-button>
           <el-button
@@ -261,6 +288,15 @@ onMounted(load)
           </el-button>
           <el-button link type="primary" :disabled="row.roles.includes('ADMIN')" @click="openPassword(row)">
             {{ t('users.resetPassword') }}
+          </el-button>
+          <el-button
+            v-if="row.totpEnabled"
+            link
+            type="danger"
+            :loading="saving"
+            @click="resetMfa(row)"
+          >
+            {{ t('users.resetMfa') }}
           </el-button>
         </template>
       </el-table-column>

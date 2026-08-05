@@ -10,6 +10,7 @@ const dialectLanguage: Record<SqlDialectId, SqlLanguage> = {
   ORACLE: 'plsql',
   CLICKHOUSE: 'sql',
   HIVE: 'sql',
+  SPARK: 'sql',
   SQLITE: 'sqlite',
   GENERIC: 'sql',
 }

@@ -18,6 +18,7 @@ export type SqlDialectId =
   | 'ORACLE'
   | 'CLICKHOUSE'
   | 'HIVE'
+  | 'SPARK'
   | 'SQLITE'
   | 'GENERIC'
 
@@ -100,6 +101,12 @@ registerSqlDialect({
   label: 'Hive',
   language: StandardSQL,
   matchJdbcUrl: (url) => /^jdbc:hive2:/i.test(url),
+})
+
+registerSqlDialect({
+  id: 'SPARK',
+  label: 'Spark',
+  language: StandardSQL,
 })
 
 registerSqlDialect({

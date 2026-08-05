@@ -38,6 +38,7 @@ export interface AdminUser {
   email?: string
   enabled: boolean
   activated: boolean
+  totpEnabled?: boolean
   roleIds: Id[]
   roles: string[]
   permissions: string[]
@@ -554,6 +555,7 @@ export interface SiteSettings {
   'embed.enabled'?: string | boolean
   'cache.query.enabled'?: string | boolean
   'cache.query.ttl-seconds'?: string | number
+  'auth.session.max-concurrent'?: string | number
   'mail.host'?: string
   'mail.port'?: string | number
   'mail.username'?: string

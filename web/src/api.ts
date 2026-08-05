@@ -57,9 +57,38 @@ const crud = <T>(path: string) => ({
   remove: (id: Id) => request<void>({ url: `${path}/${String(id)}`, method: 'DELETE' }),
 })
 
+export type LoginResult = {
+  accessToken?: string | null
+  tokenType?: string | null
+  mfaRequired?: boolean | null
+  mfaToken?: string | null
+}
+
 export const authApi = {
-  login: (data: { username: string; password: string }) =>
-    request<{ accessToken: string; tokenType: string }>({ url: '/auth/login', method: 'POST', data }),
+  loginChallenge: () =>
+    request<{
+      challengeId: string
+      nonce: string
+      timestamp: number
+      expiresAt: number
+      signKey: string
+    }>({ url: '/auth/login-challenge' }),
+  login: (data: {
+    username: string
+    password: string
+    challengeId: string
+    nonce: string
+    timestamp: number
+    signature: string
+  }) => request<LoginResult>({ url: '/auth/login', method: 'POST', data }),
+  verifyMfa: (data: { mfaToken: string; code: string }) =>
+    request<LoginResult>({ url: '/auth/mfa/verify', method: 'POST', data }),
+  mfaStatus: () => request<{ enabled: boolean }>({ url: '/auth/mfa' }),
+  beginMfaSetup: () => request<{ secret: string; otpauthUri: string }>({ url: '/auth/mfa/setup', method: 'POST' }),
+  confirmMfa: (code: string) =>
+    request<{ backupCodes: string[] }>({ url: '/auth/mfa/confirm', method: 'POST', data: { code } }),
+  disableMfa: (data: { password: string; code: string }) =>
+    request<void>({ url: '/auth/mfa/disable', method: 'POST', data }),
   me: () => request<User>({ url: '/auth/me' }),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     request<void>({ url: '/auth/password', method: 'PUT', data }),
@@ -355,6 +384,8 @@ export const userApi = {
     }),
   resendActivation: (id: Id) =>
     request<void>({ url: `/users/${String(id)}/activation-email`, method: 'POST' }),
+  resetMfa: (id: Id) =>
+    request<void>({ url: `/users/${String(id)}/mfa/reset`, method: 'POST' }),
 }
 
 export const resourcePermissionApi = {

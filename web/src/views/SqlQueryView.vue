@@ -639,7 +639,7 @@ code {
   border: 1px solid var(--omni-border);
   border-radius: 8px;
   overflow: hidden;
-  background: #fafbfc;
+  background: var(--omni-editor-bg);
 }
 .editor-row {
   display: flex;

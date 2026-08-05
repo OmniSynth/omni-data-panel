@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, provide, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
+import QRCode from 'qrcode'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { authApi, collectionApi, dashboardApi, settingsApi } from '@/api'
@@ -9,6 +10,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 import { minLengthRule, requiredRule, validateForm } from '@/form/rules'
 import { resourcePath, resourceTypeLabel } from '@/nav'
+import { refreshShellNavKey } from '@/nav/shellNav'
 import { useUserStore } from '@/stores/user'
 import type { Collection, CollectionItem, Id, ResourceType, SiteSettings } from '@/types'
 
@@ -29,6 +31,19 @@ const passwordVisible = ref(false)
 const passwordSaving = ref(false)
 const passwordFormRef = ref<FormInstance>()
 const passwordForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
+
+const mfaVisible = ref(false)
+const mfaSaving = ref(false)
+const mfaEnabled = ref(false)
+const mfaPhase = ref<'status' | 'setup' | 'backup' | 'disable'>('status')
+const mfaSecret = ref('')
+const mfaOtpauthUri = ref('')
+const mfaQrDataUrl = ref('')
+const mfaBackupCodes = ref<string[]>([])
+const mfaConfirmFormRef = ref<FormInstance>()
+const mfaDisableFormRef = ref<FormInstance>()
+const mfaConfirmForm = reactive({ code: '' })
+const mfaDisableForm = reactive({ password: '', code: '' })
 
 const createVisible = ref(false)
 const createType = ref<'question' | 'sql' | 'dashboard' | 'model' | 'collection'>('question')
@@ -70,6 +85,15 @@ const passwordRules = computed<FormRules>(() => ({
       },
     },
   ],
+}))
+
+const mfaConfirmRules = computed<FormRules>(() => ({
+  code: [requiredRule(t('common.pleaseEnter', { field: t('shell.mfaCode') }))],
+}))
+
+const mfaDisableRules = computed<FormRules>(() => ({
+  password: [requiredRule(t('common.pleaseEnter', { field: t('shell.currentPassword') }))],
+  code: [requiredRule(t('common.pleaseEnter', { field: t('shell.mfaCode') }))],
 }))
 
 type NavTreeNode = {
@@ -205,6 +229,92 @@ async function changePassword() {
   }
 }
 
+async function openMfaDialog() {
+  mfaPhase.value = 'status'
+  mfaSecret.value = ''
+  mfaOtpauthUri.value = ''
+  mfaQrDataUrl.value = ''
+  mfaBackupCodes.value = []
+  mfaConfirmForm.code = ''
+  Object.assign(mfaDisableForm, { password: '', code: '' })
+  mfaVisible.value = true
+  mfaSaving.value = true
+  try {
+    const status = await authApi.mfaStatus()
+    mfaEnabled.value = status.enabled
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('shell.mfaLoadFailed'))
+    mfaVisible.value = false
+  } finally {
+    mfaSaving.value = false
+  }
+}
+
+async function startMfaSetup() {
+  mfaSaving.value = true
+  try {
+    const setup = await authApi.beginMfaSetup()
+    mfaSecret.value = setup.secret
+    mfaOtpauthUri.value = setup.otpauthUri
+    mfaQrDataUrl.value = await QRCode.toDataURL(setup.otpauthUri, { width: 200, margin: 1 })
+    mfaConfirmForm.code = ''
+    mfaPhase.value = 'setup'
+    await nextTick()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('shell.mfaSetupFailed'))
+  } finally {
+    mfaSaving.value = false
+  }
+}
+
+async function confirmMfaSetup() {
+  if (!(await validateForm(mfaConfirmFormRef.value))) return
+  mfaSaving.value = true
+  try {
+    const result = await authApi.confirmMfa(mfaConfirmForm.code.trim())
+    mfaBackupCodes.value = result.backupCodes
+    mfaEnabled.value = true
+    mfaPhase.value = 'backup'
+    ElMessage.success(t('shell.mfaEnabled'))
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('shell.mfaConfirmFailed'))
+  } finally {
+    mfaSaving.value = false
+  }
+}
+
+async function copyBackupCodes() {
+  try {
+    await navigator.clipboard.writeText(mfaBackupCodes.value.join('\n'))
+    ElMessage.success(t('shell.mfaBackupCopied'))
+  } catch {
+    ElMessage.error(t('shell.mfaBackupCopyFailed'))
+  }
+}
+
+function openMfaDisable() {
+  Object.assign(mfaDisableForm, { password: '', code: '' })
+  mfaPhase.value = 'disable'
+}
+
+async function disableMfa() {
+  if (!(await validateForm(mfaDisableFormRef.value))) return
+  mfaSaving.value = true
+  try {
+    await authApi.disableMfa({
+      password: mfaDisableForm.password,
+      code: mfaDisableForm.code.trim(),
+    })
+    mfaEnabled.value = false
+    mfaPhase.value = 'status'
+    ElMessage.success(t('shell.mfaDisabled'))
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('shell.mfaDisableFailed'))
+  } finally {
+    mfaSaving.value = false
+  }
+}
+
 function goSearch() {
   const q = searchText.value.trim()
   router.push(q ? { path: '/search', query: { q } } : '/search')
@@ -292,6 +402,7 @@ function onUserMenu(command: string) {
   if (command === 'admin') router.push('/admin')
   else if (command === 'trash') router.push('/trash')
   else if (command === 'password') openPasswordDialog()
+  else if (command === 'mfa') void openMfaDialog()
   else if (command === 'logout') logout()
 }
 
@@ -299,6 +410,7 @@ watch(() => route.query.q, (value) => {
   if (typeof value === 'string') searchText.value = value
 })
 
+provide(refreshShellNavKey, loadShell)
 onMounted(loadShell)
 </script>
 
@@ -413,27 +525,28 @@ onMounted(loadShell)
             <router-link class="nav-link" to="/models" :class="{ active: route.path.startsWith('/models') }">{{ t('shell.models') }}</router-link>
             <router-link class="nav-link" to="/metrics" :class="{ active: route.path.startsWith('/metrics') }">{{ t('shell.metrics') }}</router-link>
           </div>
-          <div class="nav-footer">
-            <div class="user-row">
-              <div class="user-info">
-                <span class="user-avatar">{{ (userStore.user?.displayName || userStore.user?.username || '?').slice(0, 1) }}</span>
-                <span class="user-meta">
-                  <strong>{{ userStore.user?.displayName || userStore.user?.username }}</strong>
-                  <small>{{ userStore.user?.username }}</small>
-                </span>
-              </div>
-              <el-dropdown trigger="click" placement="top-end" @command="onUserMenu">
-                <button type="button" class="more-btn" :title="t('common.more')" :aria-label="t('shell.moreMenu')">⋯</button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item v-if="userStore.isAdmin" command="admin">{{ t('shell.admin') }}</el-dropdown-item>
-                    <el-dropdown-item command="trash">{{ t('shell.trash') }}</el-dropdown-item>
-                    <el-dropdown-item divided command="password">{{ t('shell.changePassword') }}</el-dropdown-item>
-                    <el-dropdown-item command="logout">{{ t('shell.logout') }}</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+        </div>
+        <div class="nav-footer">
+          <div class="user-row">
+            <div class="user-info">
+              <span class="user-avatar">{{ (userStore.user?.displayName || userStore.user?.username || '?').slice(0, 1) }}</span>
+              <span class="user-meta">
+                <strong>{{ userStore.user?.displayName || userStore.user?.username }}</strong>
+                <small>{{ userStore.user?.username }}</small>
+              </span>
             </div>
+            <el-dropdown trigger="click" placement="top-end" @command="onUserMenu">
+              <button type="button" class="more-btn" :title="t('common.more')" :aria-label="t('shell.moreMenu')">⋯</button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="userStore.isAdmin" command="admin">{{ t('shell.admin') }}</el-dropdown-item>
+                  <el-dropdown-item command="trash">{{ t('shell.trash') }}</el-dropdown-item>
+                  <el-dropdown-item divided command="password">{{ t('shell.changePassword') }}</el-dropdown-item>
+                  <el-dropdown-item command="mfa">{{ t('shell.mfa') }}</el-dropdown-item>
+                  <el-dropdown-item command="logout">{{ t('shell.logout') }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
       </aside>
@@ -482,18 +595,103 @@ onMounted(loadShell)
         <el-button type="primary" :loading="passwordSaving" @click="changePassword">{{ t('shell.confirmChange') }}</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="mfaVisible" :title="t('shell.mfa')" width="480px" destroy-on-close>
+      <div v-loading="mfaSaving && mfaPhase === 'status'">
+        <template v-if="mfaPhase === 'status'">
+          <p class="mfa-status">
+            {{ mfaEnabled ? t('shell.mfaEnabledHint') : t('shell.mfaDisabledHint') }}
+          </p>
+          <el-button v-if="!mfaEnabled" type="primary" :loading="mfaSaving" @click="startMfaSetup">
+            {{ t('shell.mfaStart') }}
+          </el-button>
+          <el-button v-else type="danger" plain @click="openMfaDisable">{{ t('shell.mfaDisable') }}</el-button>
+        </template>
+        <template v-else-if="mfaPhase === 'setup'">
+          <p class="hint">{{ t('shell.mfaSetupHint') }}</p>
+          <div class="mfa-qr-wrap">
+            <img v-if="mfaQrDataUrl" class="mfa-qr" :src="mfaQrDataUrl" alt="TOTP QR" />
+          </div>
+          <p class="mfa-secret">{{ t('shell.mfaSecret') }}：<code>{{ mfaSecret }}</code></p>
+          <el-form ref="mfaConfirmFormRef" :model="mfaConfirmForm" :rules="mfaConfirmRules" label-width="90px">
+            <el-form-item :label="t('shell.mfaCode')" prop="code">
+              <el-input v-model="mfaConfirmForm.code" autocomplete="one-time-code" />
+            </el-form-item>
+          </el-form>
+        </template>
+        <template v-else-if="mfaPhase === 'backup'">
+          <el-alert type="warning" :closable="false" show-icon :title="t('shell.mfaBackupHint')" />
+          <ul class="mfa-backup-list">
+            <li v-for="code in mfaBackupCodes" :key="code"><code>{{ code }}</code></li>
+          </ul>
+          <el-button @click="copyBackupCodes">{{ t('shell.mfaCopyBackup') }}</el-button>
+        </template>
+        <template v-else>
+          <p class="hint">{{ t('shell.mfaDisableHint') }}</p>
+          <el-form ref="mfaDisableFormRef" :model="mfaDisableForm" :rules="mfaDisableRules" label-width="90px">
+            <el-form-item :label="t('shell.currentPassword')" prop="password">
+              <el-input v-model="mfaDisableForm.password" type="password" show-password autocomplete="current-password" />
+            </el-form-item>
+            <el-form-item :label="t('shell.mfaCode')" prop="code">
+              <el-input v-model="mfaDisableForm.code" autocomplete="one-time-code" :placeholder="t('shell.mfaCodeOrBackup')" />
+            </el-form-item>
+          </el-form>
+        </template>
+      </div>
+      <template #footer>
+        <el-button @click="mfaVisible = false">{{ t('common.close') }}</el-button>
+        <el-button
+          v-if="mfaPhase === 'setup'"
+          type="primary"
+          :loading="mfaSaving"
+          @click="confirmMfaSetup"
+        >
+          {{ t('shell.mfaConfirm') }}
+        </el-button>
+        <el-button
+          v-if="mfaPhase === 'disable'"
+          type="danger"
+          :loading="mfaSaving"
+          @click="disableMfa"
+        >
+          {{ t('shell.mfaDisableConfirm') }}
+        </el-button>
+        <el-button v-if="mfaPhase === 'backup'" type="primary" @click="mfaVisible = false">
+          {{ t('shell.mfaBackupDone') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--omni-bg);
   color: var(--omni-text);
 }
+.mfa-status { margin: 0 0 16px; color: var(--omni-text); line-height: 1.6; }
+.mfa-qr-wrap { display: flex; justify-content: center; margin: 12px 0; }
+.mfa-qr { width: 200px; height: 200px; border-radius: 8px; background: #fff; }
+.mfa-secret { font-size: 13px; word-break: break-all; color: var(--omni-muted); }
+.mfa-backup-list {
+  margin: 12px 0;
+  padding: 12px 16px;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: var(--omni-bg);
+  border-radius: 8px;
+}
+.hint { margin: 0 0 12px; color: var(--omni-muted); font-size: 13px; line-height: 1.5; }
 .topbar {
   height: 56px;
+  flex-shrink: 0;
   background: var(--omni-card);
   border-bottom: 1px solid var(--omni-border);
   display: grid;
@@ -533,10 +731,19 @@ onMounted(loadShell)
   justify-content: flex-end;
   padding-right: 2px;
 }
-.body { display: flex; min-height: calc(100vh - 56px); min-width: 0; }
+.body {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
 .sidebar {
   width: 240px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  height: 100%;
+  min-height: 0;
   background: var(--omni-surface);
   border-right: 1px solid var(--omni-border);
   padding: 8px 10px 12px;
@@ -584,9 +791,11 @@ onMounted(loadShell)
   display: flex;
   flex-direction: column;
   gap: var(--omni-space-2);
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   min-width: 220px;
+  overflow-x: hidden;
+  overflow-y: auto;
   opacity: 1;
   transition: opacity 0.15s ease;
 }
@@ -622,9 +831,19 @@ onMounted(loadShell)
   font-weight: 600;
 }
 .nav-footer {
-  margin-top: auto;
+  flex-shrink: 0;
   padding-top: 12px;
   border-top: 1px solid var(--omni-border);
+  background: var(--omni-surface);
+}
+.sidebar.collapsed .nav-footer {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  height: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
 }
 .user-row {
   display: flex;
@@ -708,7 +927,13 @@ onMounted(loadShell)
   background: var(--omni-bg);
   border: 1px solid var(--omni-border);
 }
-.content { flex: 1; min-width: 0; background: var(--omni-bg); }
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--omni-bg);
+}
 .hint { margin: 0; color: var(--omni-muted); font-size: 13px; }
 :deep(.el-tree) { background: transparent; }
 :deep(.el-tree-node__content) { border-radius: var(--omni-radius-sm); height: 32px; }

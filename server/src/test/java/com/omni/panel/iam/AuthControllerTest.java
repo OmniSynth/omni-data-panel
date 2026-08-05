@@ -21,7 +21,10 @@ import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.UserMapper;
 import com.omni.panel.service.JwtService;
 import com.omni.panel.service.LoginAuditService;
+import com.omni.panel.service.LoginChallengeService;
+import com.omni.panel.service.TotpService;
 import com.omni.panel.service.UserService;
+import com.omni.panel.service.UserSessionRegistry;
 
 class AuthControllerTest {
     private final UserMapper userMapper = mock(UserMapper.class);
@@ -29,7 +32,8 @@ class AuthControllerTest {
             mock(org.springframework.security.crypto.password.PasswordEncoder.class);
     private final AuthController controller = new AuthController(
             userMapper, passwordEncoder, mock(JwtService.class), mock(LoginAuditService.class),
-            mock(UserService.class));
+            mock(UserService.class), mock(TotpService.class), mock(LoginChallengeService.class),
+            mock(UserSessionRegistry.class));
 
     @AfterEach
     void 清理认证上下文() {

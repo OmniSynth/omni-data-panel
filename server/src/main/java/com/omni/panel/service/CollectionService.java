@@ -147,7 +147,8 @@ public class CollectionService {
     }
 
     /**
-     * 删除无子集合且无内容的集合；个人根集合不可删。
+     * 删除无子集合且无未删除内容的集合；个人根集合不可删。
+     * 废纸篓中仍挂在该集合下的资源会先解除 collection_id，避免外键阻塞。
      *
      * @param id 集合标识
      */
@@ -162,11 +163,45 @@ public class CollectionService {
         if (children > 0) {
             throw new BusinessException("集合仍有子集合，无法删除");
         }
-        if (!items(id).isEmpty()) {
+        if (countActiveResources(id) > 0) {
             throw new BusinessException("集合仍有内容，无法删除");
         }
+        detachResources(id);
         permissionService.deleteResource("COLLECTION", id);
         collectionMapper.deleteById(id);
+    }
+
+    /** 统计集合下未删除资源（不按权限过滤，避免漏检导致外键失败）。 */
+    private long countActiveResources(long collectionId) {
+        long charts = chartMapper.selectCount(Wrappers.<ChartEntity>lambdaQuery()
+                .eq(ChartEntity::getCollectionId, collectionId)
+                .isNull(ChartEntity::getDeletedAt));
+        long dashboards = dashboardMapper.selectCount(Wrappers.<DashboardEntity>lambdaQuery()
+                .eq(DashboardEntity::getCollectionId, collectionId)
+                .isNull(DashboardEntity::getDeletedAt));
+        long datasets = datasetMapper.selectCount(Wrappers.<DatasetEntity>lambdaQuery()
+                .eq(DatasetEntity::getCollectionId, collectionId)
+                .isNull(DatasetEntity::getDeletedAt));
+        long metrics = metricMapper.selectCount(Wrappers.<MetricEntity>lambdaQuery()
+                .eq(MetricEntity::getCollectionId, collectionId)
+                .isNull(MetricEntity::getDeletedAt));
+        return charts + dashboards + datasets + metrics;
+    }
+
+    /** 解除仍引用该集合的资源（含废纸篓），以便物理删除集合。 */
+    private void detachResources(long collectionId) {
+        chartMapper.update(null, Wrappers.<ChartEntity>lambdaUpdate()
+                .eq(ChartEntity::getCollectionId, collectionId)
+                .set(ChartEntity::getCollectionId, null));
+        dashboardMapper.update(null, Wrappers.<DashboardEntity>lambdaUpdate()
+                .eq(DashboardEntity::getCollectionId, collectionId)
+                .set(DashboardEntity::getCollectionId, null));
+        datasetMapper.update(null, Wrappers.<DatasetEntity>lambdaUpdate()
+                .eq(DatasetEntity::getCollectionId, collectionId)
+                .set(DatasetEntity::getCollectionId, null));
+        metricMapper.update(null, Wrappers.<MetricEntity>lambdaUpdate()
+                .eq(MetricEntity::getCollectionId, collectionId)
+                .set(MetricEntity::getCollectionId, null));
     }
 
     /**

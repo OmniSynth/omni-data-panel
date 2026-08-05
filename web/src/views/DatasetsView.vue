@@ -682,7 +682,7 @@ onMounted(load)
   border: 1px solid var(--omni-border);
   border-radius: 8px;
   overflow: hidden;
-  background: #fafbfc;
+  background: var(--omni-editor-bg);
   min-height: 240px;
 }
 @media (max-width: 1100px) {

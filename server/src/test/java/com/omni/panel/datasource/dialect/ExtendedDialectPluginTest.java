@@ -44,5 +44,12 @@ class ExtendedDialectPluginTest {
                 .isEqualTo("jdbc:hive2://hive.host:10000/ods");
         assertThat(hive.matchesJdbcUrl("jdbc:hive2://hive.host:10000/ods")).isTrue();
         assertThat(hive.metaSchema("ods")).isEqualTo("ods");
+
+        SparkDialectPlugin spark = new SparkDialectPlugin();
+        assertThat(spark.buildJdbcUrl("spark.host", 10000, "ods"))
+                .isEqualTo("jdbc:hive2://spark.host:10000/ods");
+        assertThat(spark.matchesJdbcUrl("jdbc:hive2://spark.host:10000/ods")).isFalse();
+        assertThat(spark.code()).isEqualTo("SPARK");
+        assertThat(spark.metaSchema("ods")).isEqualTo("ods");
     }
 }

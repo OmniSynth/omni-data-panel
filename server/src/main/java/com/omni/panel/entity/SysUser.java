@@ -46,6 +46,18 @@ public class SysUser {
      * 激活完成时间
      */
     private LocalDateTime activatedAt;
+    /**
+     * 是否已启用 TOTP 双因子
+     */
+    private Boolean totpEnabled;
+    /**
+     * 已确认的 TOTP 密钥密文
+     */
+    private String totpSecret;
+    /**
+     * 绑定过程中尚未确认的 TOTP 密钥密文
+     */
+    private String totpPendingSecret;
 
     public Long getId() {
         return id;
@@ -109,5 +121,29 @@ public class SysUser {
 
     public void setActivatedAt(LocalDateTime activatedAt) {
         this.activatedAt = activatedAt;
+    }
+
+    public Boolean getTotpEnabled() {
+        return totpEnabled;
+    }
+
+    public void setTotpEnabled(Boolean totpEnabled) {
+        this.totpEnabled = totpEnabled;
+    }
+
+    public String getTotpSecret() {
+        return totpSecret;
+    }
+
+    public void setTotpSecret(String totpSecret) {
+        this.totpSecret = totpSecret;
+    }
+
+    public String getTotpPendingSecret() {
+        return totpPendingSecret;
+    }
+
+    public void setTotpPendingSecret(String totpPendingSecret) {
+        this.totpPendingSecret = totpPendingSecret;
     }
 }

@@ -5,6 +5,7 @@ import java.util.List;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
@@ -25,10 +26,13 @@ import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.UserMapper;
 import com.omni.panel.service.JwtService;
 import com.omni.panel.service.LoginAuditService;
+import com.omni.panel.service.LoginChallengeService;
+import com.omni.panel.service.TotpService;
 import com.omni.panel.service.UserService;
+import com.omni.panel.service.UserSessionRegistry;
 
 /**
- * 提供用户登录、当前身份查询与密码修改接口。
+ * 提供用户登录、双因子校验、当前身份查询与密码修改接口。
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -38,26 +42,51 @@ public class AuthController {
     private final JwtService jwtService;
     private final LoginAuditService loginAuditService;
     private final UserService userService;
+    private final TotpService totpService;
+    private final LoginChallengeService loginChallengeService;
+    private final UserSessionRegistry sessionRegistry;
 
     public AuthController(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtService jwtService,
-                          LoginAuditService loginAuditService, UserService userService) {
+                          LoginAuditService loginAuditService, UserService userService, TotpService totpService,
+                          LoginChallengeService loginChallengeService, UserSessionRegistry sessionRegistry) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.loginAuditService = loginAuditService;
         this.userService = userService;
+        this.totpService = totpService;
+        this.loginChallengeService = loginChallengeService;
+        this.sessionRegistry = sessionRegistry;
     }
 
     /**
-     * 校验用户名和密码并签发访问令牌。
+     * 签发一次性登录挑战，供前端计算 HMAC 签名。
      *
-     * @param request     登录凭据
+     * @return 挑战信息
+     */
+    @GetMapping("/login-challenge")
+    public ApiResponse<LoginChallengeService.ChallengeView> loginChallenge() {
+        return ApiResponse.ok(loginChallengeService.issue());
+    }
+
+    /**
+     * 校验签名、用户名和密码；若已启用 TOTP 则返回 MFA 中间令牌，否则签发访问令牌。
+     *
+     * @param request     登录凭据与签名
      * @param httpRequest 当前 HTTP 请求，用于记录 IP 与浏览器
-     * @return 访问令牌及令牌类型
+     * @return 访问令牌或 MFA 挑战
      */
     @PostMapping("/login")
     public ApiResponse<LoginResult> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         ClientRequestInfo.Info client = ClientRequestInfo.from(httpRequest);
+        try {
+            loginChallengeService.verifyAndConsume(
+                    request.challengeId(), request.nonce(), request.timestamp(),
+                    request.username(), request.password(), request.signature());
+        } catch (BusinessException exception) {
+            loginAuditService.record(request.username(), null, false, "登录签名失败", client);
+            throw exception;
+        }
         SysUser user = userMapper.selectOne(Wrappers.<SysUser>lambdaQuery().eq(SysUser::getUsername, request.username()));
         if (user == null) {
             loginAuditService.record(request.username(), null, false, "用户不存在", client);
@@ -75,8 +104,93 @@ public class AuthController {
             loginAuditService.record(request.username(), user.getId(), false, "密码错误", client);
             throw new BusinessException(401, "用户名或密码错误");
         }
+        if (Boolean.TRUE.equals(user.getTotpEnabled())) {
+            loginAuditService.record(request.username(), user.getId(), false, "需要MFA", client);
+            return ApiResponse.ok(LoginResult.needMfa(jwtService.createMfaPending(user.getId(), user.getUsername())));
+        }
         loginAuditService.record(request.username(), user.getId(), true, "登录成功", client);
-        return ApiResponse.ok(new LoginResult(jwtService.create(user.getId(), user.getUsername()), "Bearer"));
+        return ApiResponse.ok(LoginResult.bearer(issueAccessToken(user)));
+    }
+
+    /**
+     * 使用 MFA 中间令牌与验证码完成登录。
+     *
+     * @param request     MFA 校验参数
+     * @param httpRequest 当前请求
+     * @return 正式访问令牌
+     */
+    @PostMapping("/mfa/verify")
+    public ApiResponse<LoginResult> verifyMfa(@Valid @RequestBody MfaVerifyRequest request,
+                                              HttpServletRequest httpRequest) {
+        ClientRequestInfo.Info client = ClientRequestInfo.from(httpRequest);
+        long userId = jwtService.requireMfaPendingUserId(request.mfaToken());
+        SysUser user = userMapper.selectById(userId);
+        if (user == null || !Boolean.TRUE.equals(user.getEnabled())) {
+            loginAuditService.record(user == null ? "" : user.getUsername(), userId, false, "MFA验证失败", client);
+            throw new BusinessException(401, "MFA 验证失败");
+        }
+        if (!totpService.verifyLoginCode(userId, request.code())) {
+            loginAuditService.record(user.getUsername(), userId, false, "MFA验证失败", client);
+            throw new BusinessException(401, "验证码错误");
+        }
+        loginAuditService.record(user.getUsername(), userId, true, "登录成功(MFA)", client);
+        return ApiResponse.ok(LoginResult.bearer(issueAccessToken(user)));
+    }
+
+    private String issueAccessToken(SysUser user) {
+        JwtService.AccessToken access = jwtService.createAccess(user.getId(), user.getUsername());
+        sessionRegistry.register(user.getId(), access.jti(), access.expiresAt());
+        return access.token();
+    }
+
+    /**
+     * 查询当前用户双因子状态。
+     *
+     * @return 是否已启用
+     */
+    @GetMapping("/mfa")
+    public ApiResponse<MfaStatus> mfaStatus() {
+        long userId = AuthenticatedUser.current().id();
+        return ApiResponse.ok(new MfaStatus(totpService.isEnabled(userId)));
+    }
+
+    /**
+     * 开始绑定双因子，返回密钥与 otpauth URI。
+     *
+     * @return 绑定信息
+     */
+    @PostMapping("/mfa/setup")
+    public ApiResponse<TotpService.SetupInfo> beginMfaSetup() {
+        return ApiResponse.ok(totpService.beginSetup(AuthenticatedUser.current().id()));
+    }
+
+    /**
+     * 确认绑定并返回一次性备用码。
+     *
+     * @param request 动态验证码
+     * @return 备用码列表
+     */
+    @PostMapping("/mfa/confirm")
+    public ApiResponse<MfaConfirmResult> confirmMfa(@Valid @RequestBody MfaCodeRequest request) {
+        List<String> backupCodes = totpService.confirmSetup(AuthenticatedUser.current().id(), request.code());
+        return ApiResponse.ok(new MfaConfirmResult(backupCodes));
+    }
+
+    /**
+     * 关闭双因子认证。
+     *
+     * @param request 当前密码与验证码
+     * @return 空成功响应
+     */
+    @PostMapping("/mfa/disable")
+    public ApiResponse<Void> disableMfa(@Valid @RequestBody MfaDisableRequest request) {
+        AuthenticatedUser current = AuthenticatedUser.current();
+        SysUser user = userMapper.selectById(current.id());
+        if (user == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new BusinessException("当前密码错误");
+        }
+        totpService.disable(current.id(), request.code());
+        return ApiResponse.ok();
     }
 
     /**
@@ -137,12 +251,48 @@ public class AuthController {
     }
 
     /**
-     * 登录请求。
+     * 登录请求（含防重放签名）。
      *
-     * @param username 用户名
-     * @param password 登录密码
+     * @param username    用户名
+     * @param password    登录密码
+     * @param challengeId 登录挑战标识
+     * @param nonce       挑战随机数
+     * @param timestamp   签名时间戳（秒）
+     * @param signature   HMAC-SHA256 十六进制签名
      */
-    public record LoginRequest(@NotBlank String username, @NotBlank String password) {
+    public record LoginRequest(
+            @NotBlank String username,
+            @NotBlank String password,
+            @NotBlank String challengeId,
+            @NotBlank String nonce,
+            @NotNull Long timestamp,
+            @NotBlank String signature) {
+    }
+
+    /**
+     * MFA 登录校验请求。
+     *
+     * @param mfaToken 密码通过后签发的中间令牌
+     * @param code     TOTP 或备用码
+     */
+    public record MfaVerifyRequest(@NotBlank String mfaToken, @NotBlank String code) {
+    }
+
+    /**
+     * 仅含验证码的请求。
+     *
+     * @param code 动态验证码
+     */
+    public record MfaCodeRequest(@NotBlank String code) {
+    }
+
+    /**
+     * 关闭 MFA 请求。
+     *
+     * @param password 当前登录密码
+     * @param code     TOTP 或备用码
+     */
+    public record MfaDisableRequest(@NotBlank String password, @NotBlank String code) {
     }
 
     /**
@@ -168,12 +318,43 @@ public class AuthController {
     }
 
     /**
-     * 登录成功结果。
+     * 登录结果：正式令牌或 MFA 挑战。
      *
-     * @param accessToken JWT 访问令牌
+     * @param accessToken JWT 访问令牌；MFA 挑战时为 null
      * @param tokenType   令牌类型
+     * @param mfaRequired 是否需要第二步
+     * @param mfaToken    MFA 中间令牌
      */
-    public record LoginResult(String accessToken, String tokenType) {
+    public record LoginResult(String accessToken, String tokenType, Boolean mfaRequired, String mfaToken) {
+        /**
+         * 签发正式访问令牌的结果。
+         */
+        public static LoginResult bearer(String accessToken) {
+            return new LoginResult(accessToken, "Bearer", false, null);
+        }
+
+        /**
+         * 需要 MFA 校验的结果。
+         */
+        public static LoginResult needMfa(String mfaToken) {
+            return new LoginResult(null, null, true, mfaToken);
+        }
+    }
+
+    /**
+     * MFA 状态。
+     *
+     * @param enabled 是否已启用
+     */
+    public record MfaStatus(boolean enabled) {
+    }
+
+    /**
+     * MFA 绑定确认结果。
+     *
+     * @param backupCodes 一次性备用码（仅此响应可见）
+     */
+    public record MfaConfirmResult(List<String> backupCodes) {
     }
 
     /**

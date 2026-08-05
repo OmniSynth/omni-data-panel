@@ -1,87 +1,161 @@
 # Omni Data Panel
 
-Omni Data Panel 是基于 Spring Boot 3、Vue 3、Vite 6 与 ECharts 6 的 Metabase 式数据分析平台：集合组织内容、首页续看、模型/指标、图表与仪表盘、废纸篓、公开分享与嵌入，并保留多角色 RBAC 与数据源/仪表盘角色授权。
+**自建、可控、不按席位收费的数据分析平台。**
 
-> 默认账号 `admin`、密码 `admin123` 仅用于本地开发。生产部署必须通过 `ADMIN_INITIAL_PASSWORD` 设置至少10位的非默认初始密码，并替换 `deploy/.env` 中的全部密码和密钥。
+付费 BI 往往把「看数」锁在授权席位、封闭插件和厂商托管里：方言受限、嵌入受限、权限模型不透明，成本随人数与数据源线性膨胀。Omni Data Panel 把分析能力交还给团队——源码可控、部署自有、连接你已有的数仓与业务库，用开放架构覆盖从取数到分享的完整链路。
+
+> 默认账号 `admin` / `admin123` 仅用于本地开发。生产必须通过 `ADMIN_INITIAL_PASSWORD` 设置至少 10 位的非默认初始密码，并替换 `deploy/.env` 中全部密码与密钥。
+
+## 我们解决什么问题
+
+| 付费 BI 常见痛点 | Omni 的做法 |
+|---|---|
+| 席位 / 模块按年付费 | 自建部署，能力不绑许可证 |
+| 只开放「官方支持」的数据源 | 插件化方言：关系库 + ClickHouse / Hive / Spark |
+| 嵌入与分享被厂商 API 绑架 | 公开链接 + **签名嵌入**（短期 JWT，服务端代签） |
+| 共享看板泄露查询与底表细节 | 仪表盘安全渲染：只出结果与展示配置 |
+| 原生 SQL 失控 | 只读策略、对象级表/列 ACL、审计可追溯 |
+| 黑盒运维 | 连接池健康、登录/查询/模型/系统日志全链路可见 |
+
+技术栈：Spring Boot 3 · Vue 3 · Vite 6 · ECharts 6 · MySQL 8 · Redis · MinIO。
 
 ## 架构
 
-浏览器访问 nginx 托管的 Vue 单页应用，`/api` 请求由 nginx 转发到 Spring Boot。后端使用 MySQL 8 保存元数据，Redis 保存查询状态，MinIO 保存导出文件。
-
 ```text
-Browser -> nginx/web -> server
-                         |-- MySQL 8
-                         |-- Redis
-                         `-- MinIO
+Browser → nginx / Vue SPA → /api → Spring Boot
+                                   ├── MySQL 8   元数据（Flyway）
+                                   ├── Redis     查询状态 / 结果缓存
+                                   └── MinIO     导出文件
 ```
 
-## 目录
+| 目录 | 说明 |
+|---|---|
+| `server/` | Java 21、Spring Boot 3 后端（含 Maven Wrapper） |
+| `web/` | Vue 3 前端 |
+| `deploy/` | Docker Compose 与环境变量示例 |
+| `docs/embed-integration.md` | 业务系统签名嵌入对接说明 |
 
-- `server/`：Java 21、Spring Boot 3 后端及 Maven Wrapper
-- `web/`：Vue 3、Vite 6、ECharts 6 前端
-- `deploy/`：Docker Compose 与环境变量示例
+## 完整功能
 
-后端 Java 包按技术层划分：`controller`（接口）、`service`（实现）、`mapper`（持久化）、`entity`（实体）、`config`（安全等配置）；查询引擎、方言等基础设施仍保留在 `query`、`datasource` 等包。
+### 分析工作台
 
-## 前置条件
+- **首页续看**：最近打开的图表、仪表盘、模型，降低「找资产」成本。
+- **集合**：树状组织个人与共享空间；移动、重命名、角色共享；空集合可删。
+- **全局搜索**：按权限过滤图表、仪表盘、模型、集合。
+- **废纸篓**：软删除后可恢复或彻底清除。
+- **顶栏创建**：集合、问题（图表）、SQL、仪表盘、模型一键入口。
+- **中英双语**：登录页与顶栏切换（`localStorage` 键 `omni.locale`）；支持明暗主题。
 
-本地开发：
+### 数据连接与元数据
 
-- JDK 21
-- Node.js 22 与 npm
-- MySQL 8
-- 可选：Redis、MinIO
+- **数据库类型（方言）**：`MYSQL`、`MARIADB`、`POSTGRESQL`、`MSSQL`、`ORACLE`、`CLICKHOUSE`、`HIVE`、`SPARK`（扩展点 `DialectPlugin`）。
+- **连接生命周期**：创建 / 编辑 / 测试连通 / 元数据同步 / 删除；凭据 AES 加密存储。
+- **命名空间**：
+  - MySQL / MariaDB / ClickHouse / Hive / Spark：库名即命名空间，跨库用 `库.表`。
+  - PostgreSQL / SQL Server / Oracle：连接须填库名或服务名；同步业务 schema，SQL 用 `schema.table`。
+- **数据浏览器**：分析侧浏览已授权数据源的库表结构，与管理端连接维护分离。
+- **驱动说明**：MySQL / MariaDB / PostgreSQL / SQL Server / Oracle 默认内置。ClickHouse 需自行加入 classpath（推荐 `com.clickhouse:clickhouse-jdbc:0.9.8:all` 并 exclusion 传递依赖）。Hive / Spark 共用 `jdbc:hive2`，本地可将 `hive-jdbc-*-standalone.jar` 放在 `server/lib/`（见 `pom.xml` system 依赖）；打包部署可用 `-Dloader.path=lib`。创建 Spark 数据源时须显式选择类型 `SPARK`。
 
-容器运行：
+### 语义层：模型与指标
 
-- Docker Engine 24+
-- Docker Compose v2
+- **模型（Dataset）**：物理表或自定义 SQL；字段推断；维度 / 度量类型。
+- **指标（Metric）**：绑定模型字段的业务指标，语义查询通过 `metricIds` 引用。
+- **数据策略**：字段权限、行级规则；数据源对象 ACL（表 / 列 deny）；原生 SQL 经解析校验，防止越权扫表。
 
-## 本地启动后端
+### 取数：语义查询 + SQL
 
-先准备 MySQL 数据库，再设置后端环境变量。开发配置自带的密钥和默认数据库凭据只适用于本机开发。
+| 入口 | 权限 | 能力 |
+|---|---|---|
+| 查询工作台 `/query` | `query:execute` | 维度 / 度量 / 指标 / 过滤 / 排序 / limit；预览图表；保存为问题 |
+| SQL 工作台 `/sql` | `query:raw` | 只读原生 SQL；方言高亮、补全、格式化；参数对齐；导出；保存为图表 |
 
-PowerShell：
+后端查询：提交 → 状态轮询 → 可取消；语义查询编译为参数化 SQL；`SqlPolicyGuard` 仅允许单条 `SELECT` / `WITH`。
 
-```powershell
-cd server
-$env:DB_URL="jdbc:mysql://localhost:3306/omni_panel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
-$env:DB_USERNAME="<本地数据库用户>"
-$env:DB_PASSWORD="<本地数据库密码>"
-.\mvnw.cmd spring-boot:run
-```
+### 可视化：图表与仪表盘
 
-Linux/macOS：
+- **图表类型**：表格、柱状 / 条形、折线、面积、组合图、饼图、散点、KPI、漏斗、地图等。
+- **编码与下钻**：`configJson.encoding` 映射类目 / 数值；支持客户端下钻路径。
+- **仪表盘布局**：GridStack 拖拽；多 Tab；多卡并行渲染且保持顺序。
+- **交互参数**：文本 / 数字 / 日期 / 区间 / 单选 / 多选；静态选项或模型字段 DISTINCT；卡片绑定语义 filter 或 SQL `?`；点击类目写参并重渲染。
+- **结果缓存**：站点级开关 `cache.query.enabled` 与 TTL；编辑页刷新 / 定时刷新可强制回源。
+- **导出**：前端 PDF / PNG；查询结果 CSV / XLSX（同步或异步经 MinIO）。
 
-```bash
-cd server
-DB_URL='jdbc:mysql://localhost:3306/omni_panel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai' \
-DB_USERNAME='<本地数据库用户>' \
-DB_PASSWORD='<本地数据库密码>' \
-./mvnw spring-boot:run
-```
+### 分享与嵌入
 
-后端默认监听 `http://0.0.0.0:8080`（本机可用 `http://localhost:8080`），Flyway 会在启动时初始化或升级元数据库。
+| 方式 | 适用场景 | 要点 |
+|---|---|---|
+| 公开链接 | 对外只读分享 | 可撤销；永久直至删除 |
+| 签名嵌入 | 嵌进业务系统 | 短期 JWT（约 1h）、需开启 `embed.enabled`、**服务端代签** |
+| 打印页 | 订阅邮件 PDF | Playwright 无头打开 `/print/dashboard/{token}` |
 
-## 本地启动前端
+仪表盘安全渲染（`/api/dashboards/{id}/render`）：以图表所有者权限执行已保存查询，只返回展示配置与结果，不向只读用户暴露查询 JSON、模型或数据源细节。公开 / 嵌入侧使用参数默认值。
 
-```bash
-cd web
-npm ci
-npm run dev
-```
+完整对接步骤见 [业务系统安全嵌入说明](docs/embed-integration.md)。
 
-前端默认监听 `http://localhost:5173`，并同时绑定局域网地址（`0.0.0.0`）。开发服务器将 `/api` 代理到 `http://127.0.0.1:8080`。如需修改目标地址，设置 `VITE_API_TARGET`。
+### 调度与订阅
 
-同网段设备可通过本机局域网 IP 访问，例如 `http://192.168.x.x:5173`。启动前端后终端会打印 Network 地址；若无法访问，请在 Windows 防火墙中放行 `5173`（前端）与 `8080`（后端）端口。
+- **调度**：Quartz 任务 CRUD（需 `schedule:manage`）。
+- **订阅**：按 Cron 将仪表盘邮件推送给站内用户；可手动触发；可选附带 PDF（`SUBSCRIPTION_PDF_ENABLED`）。
+- **邮件**：管理端配置 SMTP 并测试发送；亦可使用环境变量 `MAIL_*`。
 
-后端默认监听 `0.0.0.0:8080`，可用 `SERVER_ADDRESS` / `SERVER_PORT` 覆盖。
+### 权限与安全
 
-## Docker Compose 启动
+- **多角色 RBAC**：功能权限取启用角色并集；内置 `ADMIN` 受保护（不可编辑 / 禁用 / 删除 / 普通接口分配）。
+- **功能权限示例**：`data-source:manage`、`dataset:manage`、`dashboard:manage`、`query:execute`、`query:raw`、`schedule:manage`、`export:execute`。
+- **资源 ACL**：集合 / 仪表盘 / 图表 / 模型 / 指标 / 数据源等按角色授予 `READ` / `WRITE`（取最高；`WRITE` 含 `READ`）。数据源角色仅 `READ`；连接维护仅 `ADMIN`。集合权限可继承；个人集合不可共享。
+- **登录 hardening**：HMAC 登录挑战、JWT、可选 TOTP 双因素与备份码、并发会话上限（`auth.session.max-concurrent`）。
+- **审计**：登录、查询（含详情）、模型变更、系统日志；支持清理。连接池健康页便于运维排障。
 
-复制开发环境示例：
+### 管理控制台（`/admin`）
 
-PowerShell：
+| 分组 | 能力 |
+|---|---|
+| 系统 | 站点名称、嵌入开关、查询缓存、会话上限、SMTP |
+| 人员 | 用户多角色、启停、密码重置、激活邮件、MFA 重置；角色与权限目录 |
+| 数据源 | 连接维护、连接池健康、对象 ACL / 角色授权 |
+| 运营 | 仪表盘订阅 |
+| 审计 | 查询 / 登录 / 系统日志 / 模型审计 |
+
+通用设置键：`site.name`、`embed.enabled`、`cache.query.enabled`、`cache.query.ttl-seconds`、`auth.session.max-concurrent`、`mail.*`。
+
+## 概念速查
+
+| 产品用语 | API / 资源 |
+|---|---|
+| 数据源 | `data-sources` |
+| 模型 | `datasets` |
+| 指标 | `metrics` |
+| 图表 / 问题 | `charts` / questions |
+| 仪表盘 | `dashboards` |
+| 集合 | `collections` |
+
+## API 概览
+
+业务 API 前缀 `/api`。公开端点：`/api/auth/login`、`/api/public/**`、`GET /api/embed/**`、`/actuator/health`；其余需 Bearer JWT。
+
+| 模块 | 路径 |
+|---|---|
+| 认证 | `/api/auth`（登录、挑战、MFA、当前用户、改密） |
+| 组织 | `/api/collections`、`/recents`、`/search`、`/trash` |
+| 指标 | `/api/metrics` |
+| 身份 | `/api/users`、`/roles`、`/permissions` |
+| 数据 | `/api/data-sources`、`/metadata`、对象 ACL |
+| 模型 | `/api/datasets`、字段 DISTINCT、行/字段策略 |
+| 查询 | `/api/queries` |
+| 可视化 | `/api/charts`、`/dashboards`、`/dashboards/{id}/render` |
+| 导出 / 调度 | `/api/exports`、`/schedules`、`/subscriptions` |
+| 授权 | `/api/resources/{type}/{id}/permissions` |
+| 分享 | `/api/public-links`、`/public/**`、`/embed/**` |
+| 设置 | `/api/settings` |
+
+## 快速开始
+
+### 前置条件
+
+本地：JDK 21、Node.js 22、MySQL 8；可选 Redis、MinIO。  
+容器：Docker Engine 24+、Compose v2。
+
+### Docker Compose（推荐体验）
 
 ```powershell
 Copy-Item deploy/.env.example deploy/.env
@@ -89,169 +163,92 @@ cd deploy
 docker compose up --build -d
 ```
 
-Linux/macOS：
-
 ```bash
 cp deploy/.env.example deploy/.env
 cd deploy
 docker compose up --build -d
 ```
 
-查看状态和日志：
-
-```bash
-cd deploy
-docker compose ps
-docker compose logs -f server web
-```
-
-停止服务：
-
-```bash
-cd deploy
-docker compose down
-```
-
-如需同时删除 MySQL、Redis、MinIO 数据卷，使用 `docker compose down -v`。默认入口：
-
 - Web：`http://localhost`
-- 后端：`http://localhost:8080`
+- API：`http://localhost:8080`
 - MinIO Console：`http://localhost:9001`
 
-Compose 文件位于 `deploy/`，其中构建上下文使用 `..` 指向仓库根目录；请勿将它改为以执行命令所在目录为基准的路径。
+Compose 以生产配置启动后端：首次若 `admin` 仍为开发默认密码，将用 `ADMIN_INITIAL_PASSWORD` 替换（空、等于 `admin123` 或少于 10 位会拒绝启动）。之后不会自动重置密码。
 
-Compose 以生产配置启动后端。首次启动时，如果数据库中的 `admin` 仍使用开发默认密码，后端会使用 `ADMIN_INITIAL_PASSWORD` 替换它；该变量为空、等于 `admin123` 或少于10位时会拒绝启动。管理员密码已被修改后，后续启动不会重置。登录后可在右上角“修改密码”中继续更换密码，成功后需重新登录。
+### 本地开发
 
-## 环境变量
+后端：
 
-`deploy/.env.example` 提供完整的本地开发示例，实际运行文件为 `deploy/.env`，该文件已被 Git 忽略。
+```powershell
+cd server
+$env:DB_URL="jdbc:mysql://localhost:3306/omni_panel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
+$env:DB_USERNAME="<用户>"
+$env:DB_PASSWORD="<密码>"
+.\mvnw.cmd spring-boot:run
+```
 
-数据库：
+```bash
+cd server
+DB_URL='jdbc:mysql://localhost:3306/omni_panel?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai' \
+DB_USERNAME='<用户>' DB_PASSWORD='<密码>' ./mvnw spring-boot:run
+```
 
-- `MYSQL_DATABASE`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_ROOT_PASSWORD`
-- `MYSQL_PORT`：宿主机 MySQL 端口
+前端：
 
-Redis：
+```bash
+cd web
+npm ci
+npm run dev
+```
 
-- `REDIS_PASSWORD`
-- `REDIS_PORT`：宿主机 Redis 端口
+开发服务器：`http://localhost:5173`，`/api` 代理到 `127.0.0.1:8080`（可用 `VITE_API_TARGET` 覆盖）。
 
-MinIO：
+### 环境变量要点
 
-- `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`
-- `MINIO_BUCKET`：导出文件桶，启动时由 `minio-init` 自动创建
-- `MINIO_API_PORT`、`MINIO_CONSOLE_PORT`
+完整示例见 `deploy/.env.example`（实际 `deploy/.env` 已被 Git 忽略）。
 
-后端安全：
+| 类别 | 变量 |
+|---|---|
+| 数据库 | `MYSQL_*`、`DB_URL` / `DB_USERNAME` / `DB_PASSWORD` |
+| Redis / MinIO | `REDIS_*`、`MINIO_*` |
+| 安全 | `JWT_SECRET`、`CREDENTIAL_MASTER_KEY`、`ADMIN_INITIAL_PASSWORD` |
+| 邮件 / 订阅 | `MAIL_*`、`FRONTEND_URL`、`SUBSCRIPTION_PDF_ENABLED`、`SUBSCRIPTION_PDF_TIMEOUT_MS` |
+| 端口 | `SERVER_PORT`、`WEB_PORT` |
 
-- `JWT_SECRET`：Base64 编码的至少 32 字节 HMAC 密钥
-- `CREDENTIAL_MASTER_KEY`：Base64 编码的 32 字节 AES 密钥
-- `ADMIN_INITIAL_PASSWORD`：生产环境首次启动的管理员密码，至少10位且不能为 `admin123`
-
-订阅邮件（可选）：
-
-- `MAIL_HOST`、`MAIL_PORT`、`MAIL_USERNAME`、`MAIL_PASSWORD`：SMTP 连接信息
-- `MAIL_SMTP_AUTH`：是否启用 SMTP 认证
-- `MAIL_STARTTLS`：是否启用 STARTTLS
-- `MAIL_FROM`：订阅邮件发件人
-- `FRONTEND_URL`：前端地址（邮件链接 + 无头浏览器打开打印页生成 PDF，后端必须能访问）
-- `SUBSCRIPTION_PDF_ENABLED`：是否附带仪表盘 PDF（默认 `true`）；设为 `false` 时仅发送链接
-- `SUBSCRIPTION_PDF_TIMEOUT_MS`：PDF 渲染超时毫秒（默认 `90000`）
-
-订阅默认会用 Chromium 打开 `{FRONTEND_URL}/print/dashboard/{token}` 导出 PDF 并作为附件发送。本地首次需安装浏览器：
+生产部署前用 `openssl rand -base64 32` 重新生成密钥，替换全部示例密码。订阅 PDF 需本机安装 Chromium：
 
 ```bash
 cd server
 ./mvnw.cmd exec:java -e "-Dexec.mainClass=com.microsoft.playwright.CLI" "-Dexec.args=install chromium"
 ```
 
-邮件变量不使用 Compose 强制校验。未配置邮件服务时订阅仍可创建和保存，但任务执行发送时会明确失败。
-
-端口：
-
-- `SERVER_PORT`：宿主机后端端口
-- `WEB_PORT`：宿主机 Web 端口
-
-生产部署前必须重新生成两个安全密钥，例如使用 `openssl rand -base64 32`，并替换数据库、Redis、MinIO 的全部示例密码。不要提交真实 `.env`。
-
-## 产品导览
-
-- **分析壳**：首页续看、集合树、数据源浏览、模型、指标、图表、仪表盘、搜索、废纸篓；顶栏「+ 创建」；顶栏/登录页可切换中英文（`localStorage` 键 `omni.locale`）。
-- **管理壳** `/admin`：通用设置、数据源连接维护、用户、角色、数据权限、订阅（仅 ADMIN）。
-- **概念映射**：数据源=`data-sources`；模型=`datasets`；图表=`charts`；指标=`metrics`；集合=`collections`。
-- **分析库方言**：运行时已注册 `MYSQL`、`MARIADB`、`POSTGRESQL`、`MSSQL`、`ORACLE`、`CLICKHOUSE`、`HIVE`（插件扩展点 `DialectPlugin`）。
-  - MySQL/MariaDB/ClickHouse/Hive：库名即可选命名空间；跨库用 `库.表`。
-  - PostgreSQL/SQL Server/Oracle：连接须填库名/服务名（写入 JDBC URL）；元数据同步枚举其下业务 schema，SQL 使用 `schema.table`。
-  - 默认已内置 MySQL/MariaDB/PostgreSQL/SQL Server/Oracle 驱动；**ClickHouse / Hive 需自行将 JDBC 驱动加入运行时 classpath**（避免有缺陷的驱动经 SPI 拖垮 Flyway/元数据库启动）。ClickHouse 推荐 `com.clickhouse:clickhouse-jdbc:0.9.8:all` 并 exclusion 全部传递依赖。
-- **通用设置键**：`site.name`、`embed.enabled`；查询结果缓存 `cache.query.enabled`（默认关闭）、`cache.query.ttl-seconds`（默认 300，范围 30–86400）。开启后仪表盘/公开图表渲染可复用 Redis 中的图表结果；编辑页「刷新卡片」与定时刷新会强制重新查询并回写缓存。
-- **仪表盘参数**：在 `configJson.parameters` 定义文本/数字/日期/区间/单选/多选控件；卡片 `bindings_json` 可绑定到语义 filter 或 SQL `?` 占位；`click_action_json` 支持点击图表类目写入参数并重渲染。登录查看使用 `POST /api/dashboards/{id}/render` 传参；公开/嵌入仅使用默认值。单选/多选可配置 `optionsFrom`（模型字段 DISTINCT，接口 `GET /api/datasets/{id}/fields/{field}/distinct`），也可使用静态 `options`。图表 `configJson.encoding` 可显式映射类目/数值列，并支持 `combo` 组合图；仪表盘多卡渲染并行执行且保持卡片顺序。
-
-## API 模块
-
-所有业务 API 使用 `/api` 前缀：
-
-- `/api/auth`：登录、当前用户与修改密码
-- `/api/collections`、`/api/recents`、`/api/search`、`/api/trash`：集合、续看、搜索、废纸篓
-- `/api/metrics`：指标（可按 `modelId` 过滤；语义查询通过 `query.metricIds` 引用）
-- `/api/roles`、`/api/permissions`：角色管理与功能权限目录（仅 ADMIN）
-- `/api/users`：用户、多角色绑定与密码重置（仅 ADMIN）
-- `/api/data-sources`：数据源管理与连通性测试
-- `/api/data-sources/{sourceId}/metadata`：元数据同步与浏览
-- `/api/datasets`：模型（原数据集）及字段、行权限策略
-- `/api/datasets/{id}/fields/{field}/distinct`：模型字段去重取值（参数动态选项）
-- `/api/queries`：查询提交、状态与取消
-- `/api/charts`、`/api/dashboards`：图表与仪表盘
-- `/api/exports`：同步及异步导出
-- `/api/schedules`、`/api/subscriptions`：调度与订阅
-- `/api/resources/{resourceType}/{resourceId}/permissions`：角色资源授权
-- `/api/dashboards/{id}/render`：不暴露查询定义的仪表盘安全渲染
-- `/api/public-links`、`/api/public/**`、`/api/embed/**`：公开链接与签名嵌入
-- `/api/settings`：站点名称与嵌入开关（读：登录用户；写：ADMIN）
-
-公开端点：`/api/auth/login`、`/api/public/**`、`GET /api/embed/**`、`/actuator/health`。其余 API 需要 Bearer JWT。
-
-## 权限模型
-
-用户可绑定多个启用角色，功能权限取所有角色权限的并集；`/api/auth/me` 的 `roles` 返回当前启用角色编码。`ADMIN` 是受保护的内置角色，不能编辑、禁用、删除，也不能通过普通用户管理接口分配或移除。
-
-资源权限按角色授予。同一用户通过多个角色获得不同级别时取最高权限，`WRITE` 包含 `READ`。数据源只支持 `READ` 授权，创建、编辑、删除、测试和元数据同步仅限 `ADMIN`。仪表盘支持 `READ` 与 `WRITE`：所有者天然保留写权限，`WRITE` 可编辑和删除，`READ` 只能查看；角色共享仅由 `ADMIN` 管理。
-
-仪表盘的角色读取使用 `/api/dashboards/{id}/render`。后端以每张图表所有者的实时权限执行已保存查询，只返回图表展示配置和查询结果，不向读取者暴露查询 JSON、数据集或数据源信息。字段权限和行级策略仍按用户作用于数据集查询。
+未配置 SMTP 时可保存订阅，发送任务会明确失败。
 
 ## 构建与测试
-
-后端完整测试：
-
-PowerShell：
 
 ```powershell
 cd server
 .\mvnw.cmd clean verify
 ```
 
-Linux/macOS：
-
 ```bash
-cd server
-./mvnw clean verify
-```
-
-Testcontainers MySQL 集成测试需要显式启用：
-
-```bash
-cd server
+cd server && ./mvnw clean verify
+# Testcontainers（需 Docker，且显式开启）
 ./mvnw -Domni.test.docker=true test
 ```
-
-该测试使用 `disabledWithoutDocker = true`。未安装 Docker、Docker 守护进程不可用，或未设置 `omni.test.docker=true` 时，Testcontainers 测试会跳过，不代表测试失败。
-
-前端构建与端到端测试：
 
 ```bash
 cd web
 npm ci
 npm run build
-npm run test:e2e
+npm run test:e2e   # 需先启动前后端
 ```
 
-端到端测试执行前需先启动对应的前后端服务。
+## 设计原则
+
+1. **能力在你这边**：部署、数据、密钥、审计日志不离开你的环境。
+2. **分享不泄底**：嵌入与只读渲染优先「结果可见、定义可控」。
+3. **方言可扩展**：数仓与关系库同一套连接 / 查询 / 元数据插件模型。
+4. **权限可解释**：功能权限 + 资源 ACL + 行/列策略 + SQL 门禁，层层可审计。
+
+付费 BI 卖的是封闭与席位；Omni Data Panel 交付的是**可拥有的分析基础设施**。

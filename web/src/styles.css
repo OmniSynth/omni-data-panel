@@ -13,6 +13,8 @@
   --omni-editor-fg: #111827;
   --omni-editor-gutter: #f7f7f7;
   --omni-editor-gutter-active: #eef5fc;
+  --omni-editor-active-line: rgba(80, 158, 227, 0.06);
+  --omni-editor-selection: rgba(80, 158, 227, 0.28);
   --omni-space-1: 6px;
   --omni-space-2: 10px;
   --omni-space-3: 16px;
@@ -56,6 +58,8 @@ html.dark {
   --omni-editor-fg: #e5e7eb;
   --omni-editor-gutter: #151b23;
   --omni-editor-gutter-active: rgba(80, 158, 227, 0.14);
+  --omni-editor-active-line: rgba(80, 158, 227, 0.14);
+  --omni-editor-selection: rgba(80, 158, 227, 0.38);
   --omni-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 
   --el-color-primary: #509ee3;

@@ -24,13 +24,14 @@ class ApiContractJsonTest {
 
     @Test
     void 登录结果和用户字段名称保持稳定() {
-        JsonNode login = objectMapper.valueToTree(new AuthController.LoginResult("jwt", "Bearer"));
+        JsonNode login = objectMapper.valueToTree(AuthController.LoginResult.bearer("jwt"));
         JsonNode user = objectMapper.valueToTree(
                 new AuthController.UserView(
                         1, "admin", "系统管理员", "admin@example.com",
                         List.of("ADMIN"), true, List.of("data-source:manage")));
 
         assertThat(login.path("accessToken").asText()).isEqualTo("jwt");
+        assertThat(login.path("mfaRequired").asBoolean()).isFalse();
         assertThat(login.has("token")).isFalse();
         assertThat(user.path("admin").asBoolean()).isTrue();
         assertThat(user.path("email").asText()).isEqualTo("admin@example.com");

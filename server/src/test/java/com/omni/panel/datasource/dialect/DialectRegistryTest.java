@@ -17,12 +17,13 @@ class DialectRegistryTest {
             new MssqlDialectPlugin(),
             new OracleDialectPlugin(),
             new ClickHouseDialectPlugin(),
-            new HiveDialectPlugin()));
+            new HiveDialectPlugin(),
+            new SparkDialectPlugin()));
 
     @Test
     void 列出已注册方言() {
         assertThat(registry.list()).extracting(DialectInfo::code)
-                .containsExactly("CLICKHOUSE", "HIVE", "MARIADB", "MSSQL", "MYSQL", "ORACLE", "POSTGRESQL");
+                .containsExactly("CLICKHOUSE", "HIVE", "MARIADB", "MSSQL", "MYSQL", "ORACLE", "POSTGRESQL", "SPARK");
     }
 
     @Test
@@ -60,5 +61,7 @@ class DialectRegistryTest {
         assertThat(registry.resolve(source).code()).isEqualTo("CLICKHOUSE");
         source.setDialect("hive");
         assertThat(registry.resolve(source).code()).isEqualTo("HIVE");
+        source.setDialect("spark");
+        assertThat(registry.resolve(source).code()).isEqualTo("SPARK");
     }
 }

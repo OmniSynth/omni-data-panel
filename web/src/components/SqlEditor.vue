@@ -10,7 +10,8 @@ import { resolveSqlDialect, type SqlDialectId } from '@/sql/dialects'
 import { formatSql } from '@/sql/format'
 import { catalogFromEditorSchema, createColumnCompletionSource } from '@/sql/columnCompletion'
 import type { EditorSqlSchema } from '@/sql/schema'
-import { sqlNavicatHighlighting } from '@/sql/highlight'
+import { sqlHighlightingFor } from '@/sql/highlight'
+import { useThemeStore } from '@/stores/theme'
 
 const props = withDefaults(defineProps<{
   modelValue: string
@@ -26,10 +27,12 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
+const themeStore = useThemeStore()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const host = ref<HTMLElement>()
 let editor: EditorView | undefined
 const language = new Compartment()
+const highlighting = new Compartment()
 
 const completionTheme = EditorView.theme({
   '.cm-tooltip.cm-tooltip-autocomplete': {
@@ -222,7 +225,7 @@ onMounted(() => {
           }],
         }),
         language.of(languageExtension()),
-        sqlNavicatHighlighting,
+        highlighting.of(sqlHighlightingFor(themeStore.isDark)),
         completionTheme,
         EditorView.lineWrapping,
         placeholder(props.placeholderText ?? t('sqlEditor.placeholder')),
@@ -244,6 +247,11 @@ watch(() => [props.dialect, props.jdbcUrl, props.schema, props.defaultSchema] as
   if (!editor) return
   editor.dispatch({ effects: language.reconfigure(languageExtension()) })
 }, { deep: true })
+
+watch(() => themeStore.isDark, (dark) => {
+  if (!editor) return
+  editor.dispatch({ effects: highlighting.reconfigure(sqlHighlightingFor(dark)) })
+})
 
 onBeforeUnmount(() => editor?.destroy())
 
@@ -286,11 +294,11 @@ defineExpose({ format: formatDocument, insertText })
   color: var(--omni-text);
 }
 :deep(.cm-activeLine) {
-  background: rgba(80, 158, 227, 0.06);
+  background: var(--omni-editor-active-line);
 }
 :deep(.cm-selectionBackground),
 :deep(.cm-editor ::selection) {
-  background: rgba(80, 158, 227, 0.28) !important;
+  background: var(--omni-editor-selection) !important;
 }
 :deep(.cm-placeholder) {
   color: var(--omni-muted);

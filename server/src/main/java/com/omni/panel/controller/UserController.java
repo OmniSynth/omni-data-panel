@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.omni.panel.common.ApiResponse;
+import com.omni.panel.service.TotpService;
 import com.omni.panel.service.UserService;
 
 /**
@@ -26,9 +27,11 @@ import com.omni.panel.service.UserService;
 @RequestMapping("/api/users")
 public class UserController {
     private final UserService service;
+    private final TotpService totpService;
 
-    public UserController(UserService service) {
+    public UserController(UserService service, TotpService totpService) {
         this.service = service;
+        this.totpService = totpService;
     }
 
     /**
@@ -107,6 +110,19 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> resendActivation(@PathVariable long id) {
         service.resendActivation(id);
+        return ApiResponse.ok();
+    }
+
+    /**
+     * 管理员强制清除用户双因子认证。
+     *
+     * @param id 用户标识
+     * @return 空成功响应
+     */
+    @PostMapping("/{id}/mfa/reset")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<Void> resetMfa(@PathVariable long id) {
+        totpService.resetForUser(id);
         return ApiResponse.ok();
     }
 

@@ -346,6 +346,7 @@ public class UserService {
     private UserView view(SysUser user) {
         return new UserView(user.getId(), user.getUsername(), user.getDisplayName(), user.getEmail(),
                 Boolean.TRUE.equals(user.getEnabled()), isActivated(user),
+                Boolean.TRUE.equals(user.getTotpEnabled()),
                 userMapper.findRoleIds(user.getId()), userMapper.findRoles(user.getId()),
                 userMapper.findPermissions(user.getId()));
     }
@@ -359,13 +360,14 @@ public class UserService {
      * @param email       邮箱
      * @param enabled     是否启用
      * @param activated   是否已激活
+     * @param totpEnabled 是否已启用双因子
      * @param roleIds     已绑定角色标识列表
      * @param roles       当前启用角色编码列表
      * @param permissions 当前启用角色的功能权限并集
      */
     public record UserView(@JsonSerialize(using = ToStringSerializer.class) long id,
                            String username, String displayName, String email, boolean enabled,
-                           boolean activated,
+                           boolean activated, boolean totpEnabled,
                            @JsonSerialize(contentUsing = ToStringSerializer.class) List<Long> roleIds,
                            List<String> roles, List<String> permissions) {
     }

@@ -83,6 +83,7 @@ async function loadDialects() {
       { code: 'ORACLE', label: 'Oracle', defaultPort: 1521 },
       { code: 'CLICKHOUSE', label: 'ClickHouse', defaultPort: 8123 },
       { code: 'HIVE', label: 'Hive', defaultPort: 10000 },
+      { code: 'SPARK', label: 'Spark', defaultPort: 10000 },
     ]
   }
 }
