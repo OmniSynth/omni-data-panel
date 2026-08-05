@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
@@ -30,6 +31,9 @@ import com.omni.panel.query.QueryStateStore;
 
 /**
  * 以每张图表所有者的实时权限执行已保存查询，并生成不含查询定义的仪表盘渲染结果。
+ *
+ * <p>持有仪表盘 {@code READ} 的用户即可查看卡片结果：卡片查询在图表所有者安全上下文中执行，
+ * 不要求查看者对图表本身具备列表级 {@code READ}（图表详情/列表仍走图表自身有效权限）。</p>
  */
 @Service
 public class DashboardRenderService {
@@ -64,9 +68,9 @@ public class DashboardRenderService {
     /**
      * 校验仪表盘读取权限并执行全部卡片查询。
      *
-     * @param dashboardId      仪表盘标识
-     * @param forceRefresh     为 true 时跳过结果缓存读取
-     * @param parameterValues  运行时参数；为空时使用默认值
+     * @param dashboardId     仪表盘标识
+     * @param forceRefresh    为 true 时跳过结果缓存读取
+     * @param parameterValues 运行时参数；为空时使用默认值
      * @return 不暴露查询定义和数据引用的卡片渲染结果
      */
     public RenderedDashboard render(long dashboardId, boolean forceRefresh,

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
@@ -17,11 +18,13 @@ import com.omni.panel.entity.CollectionEntity;
 import com.omni.panel.entity.DashboardEntity;
 import com.omni.panel.entity.DatasetEntity;
 import com.omni.panel.entity.MetricEntity;
+import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.ChartMapper;
 import com.omni.panel.mapper.CollectionMapper;
 import com.omni.panel.mapper.DashboardMapper;
 import com.omni.panel.mapper.DatasetMapper;
 import com.omni.panel.mapper.MetricMapper;
+import com.omni.panel.mapper.UserMapper;
 
 /**
  * 管理集合树、个人集合以及集合内资源聚合与迁移。
@@ -33,16 +36,19 @@ public class CollectionService {
     private final DashboardMapper dashboardMapper;
     private final DatasetMapper datasetMapper;
     private final MetricMapper metricMapper;
+    private final UserMapper userMapper;
     private final PermissionService permissionService;
 
     public CollectionService(CollectionMapper collectionMapper, ChartMapper chartMapper,
                              DashboardMapper dashboardMapper, DatasetMapper datasetMapper,
-                             MetricMapper metricMapper, PermissionService permissionService) {
+                             MetricMapper metricMapper, UserMapper userMapper,
+                             PermissionService permissionService) {
         this.collectionMapper = collectionMapper;
         this.chartMapper = chartMapper;
         this.dashboardMapper = dashboardMapper;
         this.datasetMapper = datasetMapper;
         this.metricMapper = metricMapper;
+        this.userMapper = userMapper;
         this.permissionService = permissionService;
     }
 
@@ -83,15 +89,16 @@ public class CollectionService {
                 .eq(CollectionEntity::getArchived, false)
                 .orderByAsc(CollectionEntity::getId));
         List<CollectionEntity> visible = all.stream()
-                .filter(item -> user.admin() || item.getOwnerId().equals(user.id())
-                        || item.getPersonalOwnerId() != null && item.getPersonalOwnerId().equals(user.id()))
+                .filter(item -> permissionService.canRead("COLLECTION", item.getId(), item.getOwnerId()))
                 .toList();
         Map<Long, List<CollectionEntity>> children = visible.stream()
                 .filter(item -> item.getParentId() != null)
                 .collect(Collectors.groupingBy(CollectionEntity::getParentId));
+        long currentUserId = user.id();
         return visible.stream()
-                .filter(item -> item.getParentId() == null)
-                .map(item -> toNode(item, children))
+                .filter(item -> item.getParentId() == null || visible.stream()
+                        .noneMatch(candidate -> candidate.getId().equals(item.getParentId())))
+                .map(item -> toNode(item, children, currentUserId))
                 .toList();
     }
 
@@ -158,6 +165,7 @@ public class CollectionService {
         if (!items(id).isEmpty()) {
             throw new BusinessException("集合仍有内容，无法删除");
         }
+        permissionService.deleteResource("COLLECTION", id);
         collectionMapper.deleteById(id);
     }
 
@@ -260,11 +268,7 @@ public class CollectionService {
         if (collection == null || Boolean.TRUE.equals(collection.getArchived())) {
             throw new BusinessException(404, "集合不存在");
         }
-        AuthenticatedUser user = AuthenticatedUser.current();
-        if (!user.admin() && !collection.getOwnerId().equals(user.id())
-                && (collection.getPersonalOwnerId() == null || !collection.getPersonalOwnerId().equals(user.id()))) {
-            throw new BusinessException(403, "无权访问该集合");
-        }
+        permissionService.require("COLLECTION", id, collection.getOwnerId(), "READ");
         return collection;
     }
 
@@ -276,27 +280,47 @@ public class CollectionService {
      */
     private CollectionEntity requireWritable(long id) {
         CollectionEntity collection = requireReadable(id);
-        AuthenticatedUser user = AuthenticatedUser.current();
-        if (!user.admin()
-                && !collection.getOwnerId().equals(user.id())
-                && (collection.getPersonalOwnerId() == null || !collection.getPersonalOwnerId().equals(user.id()))) {
-            throw new BusinessException(403, "无权修改该集合");
-        }
+        permissionService.require("COLLECTION", id, collection.getOwnerId(), "WRITE");
         return collection;
     }
 
     /**
      * 递归构建集合树节点。
      *
-     * @param entity   当前集合
-     * @param children 父标识到子集合列表的映射
+     * @param entity        当前集合
+     * @param children      父标识到子集合列表的映射
+     * @param currentUserId 当前用户标识
      * @return 含子节点的树节点
      */
-    private CollectionNode toNode(CollectionEntity entity, Map<Long, List<CollectionEntity>> children) {
+    private CollectionNode toNode(CollectionEntity entity, Map<Long, List<CollectionEntity>> children,
+                                  long currentUserId) {
         List<CollectionNode> childNodes = children.getOrDefault(entity.getId(), List.of()).stream()
-                .map(child -> toNode(child, children)).toList();
-        return new CollectionNode(entity.getId(), entity.getName(), entity.getDescription(),
+                .map(child -> toNode(child, children, currentUserId)).toList();
+        return new CollectionNode(entity.getId(), displayName(entity, currentUserId), entity.getDescription(),
                 entity.getParentId(), entity.getPersonalOwnerId(), entity.getOwnerId(), childNodes);
+    }
+
+    /**
+     * 个人集合对外展示名：本人为「你的个人集合」，他人为「{显示名} 的个人集合」。
+     */
+    private String displayName(CollectionEntity entity, long currentUserId) {
+        Long personalOwnerId = entity.getPersonalOwnerId();
+        if (personalOwnerId == null) {
+            return entity.getName();
+        }
+        if (personalOwnerId.equals(currentUserId)) {
+            return "你的个人集合";
+        }
+        SysUser owner = userMapper.selectById(personalOwnerId);
+        String label = "用户" + personalOwnerId;
+        if (owner != null) {
+            if (owner.getDisplayName() != null && !owner.getDisplayName().isBlank()) {
+                label = owner.getDisplayName().trim();
+            } else if (owner.getUsername() != null && !owner.getUsername().isBlank()) {
+                label = owner.getUsername().trim();
+            }
+        }
+        return label + " 的个人集合";
     }
 
     /**

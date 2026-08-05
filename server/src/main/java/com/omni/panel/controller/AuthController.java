@@ -1,6 +1,7 @@
 package com.omni.panel.controller;
 
 import java.util.List;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.omni.panel.common.ApiResponse;
 import com.omni.panel.common.BusinessException;
@@ -23,6 +25,7 @@ import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.UserMapper;
 import com.omni.panel.service.JwtService;
 import com.omni.panel.service.LoginAuditService;
+import com.omni.panel.service.UserService;
 
 /**
  * 提供用户登录、当前身份查询与密码修改接口。
@@ -34,13 +37,15 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final LoginAuditService loginAuditService;
+    private final UserService userService;
 
     public AuthController(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtService jwtService,
-                          LoginAuditService loginAuditService) {
+                          LoginAuditService loginAuditService, UserService userService) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.loginAuditService = loginAuditService;
+        this.userService = userService;
     }
 
     /**
@@ -62,6 +67,10 @@ public class AuthController {
             loginAuditService.record(request.username(), user.getId(), false, "账号已停用", client);
             throw new BusinessException(401, "用户名或密码错误");
         }
+        if (user.getActivated() != null && !user.getActivated()) {
+            loginAuditService.record(request.username(), user.getId(), false, "账号未激活", client);
+            throw new BusinessException(401, "账号未激活，请查收邮件设置密码");
+        }
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             loginAuditService.record(request.username(), user.getId(), false, "密码错误", client);
             throw new BusinessException(401, "用户名或密码错误");
@@ -80,7 +89,30 @@ public class AuthController {
         AuthenticatedUser current = AuthenticatedUser.current();
         SysUser user = userMapper.selectById(current.id());
         return ApiResponse.ok(new UserView(user.getId(), user.getUsername(), user.getDisplayName(),
-                current.roleCodes(), current.admin(), current.permissions()));
+                user.getEmail(), current.roleCodes(), current.admin(), current.permissions()));
+    }
+
+    /**
+     * 校验设密令牌并返回账号预览信息。
+     *
+     * @param token 邮件中的原始令牌
+     * @return 设密预览
+     */
+    @GetMapping("/setup-password")
+    public ApiResponse<UserService.SetupPreview> previewSetup(@RequestParam String token) {
+        return ApiResponse.ok(userService.previewSetup(token));
+    }
+
+    /**
+     * 通过邮件令牌设置密码并完成激活（若为激活令牌）。
+     *
+     * @param request 令牌与新密码
+     * @return 无数据的成功响应
+     */
+    @PostMapping("/setup-password")
+    public ApiResponse<Void> completeSetup(@Valid @RequestBody SetupPasswordRequest request) {
+        userService.completeSetup(request.token(), request.password());
+        return ApiResponse.ok();
     }
 
     /**
@@ -125,6 +157,17 @@ public class AuthController {
     }
 
     /**
+     * 邮件令牌设密请求。
+     *
+     * @param token    邮件中的原始令牌
+     * @param password 至少 10 位的新密码
+     */
+    public record SetupPasswordRequest(
+            @NotBlank String token,
+            @NotBlank @Size(min = 10, message = "密码至少需要10位") String password) {
+    }
+
+    /**
      * 登录成功结果。
      *
      * @param accessToken JWT 访问令牌
@@ -139,12 +182,13 @@ public class AuthController {
      * @param id          用户标识
      * @param username    用户名
      * @param displayName 展示名称
+     * @param email       邮箱
      * @param roles       当前角色编码列表
      * @param admin       是否具有管理员角色
      * @param permissions 权限编码列表
      */
     public record UserView(@JsonSerialize(using = ToStringSerializer.class) long id,
-                           String username, String displayName, List<String> roles,
+                           String username, String displayName, String email, List<String> roles,
                            boolean admin, List<String> permissions) {
     }
 }

@@ -1,20 +1,28 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import { requiredRule, validateForm } from '@/form/rules'
 import { useUserStore } from '@/stores/user'
 
 const { t } = useI18n()
 const form = reactive({ username: '', password: '' })
+const formRef = ref<FormInstance>()
 const loading = ref(false)
 const router = useRouter()
 const route = useRoute()
 
+const formRules = computed<FormRules>(() => ({
+  username: [requiredRule(t('common.pleaseEnter', { field: t('login.username') }))],
+  password: [requiredRule(t('common.pleaseEnter', { field: t('login.password') }))],
+}))
+
 async function submit() {
-  if (!form.username || !form.password) return ElMessage.warning(t('login.needCredentials'))
+  if (!(await validateForm(formRef.value))) return
   loading.value = true
   try {
     await useUserStore().login(form.username, form.password)
@@ -39,9 +47,13 @@ async function submit() {
         <h1>{{ t('login.title') }}</h1>
         <p class="subtitle">{{ t('login.subtitle') }}</p>
       </div>
-      <el-form label-position="top" @keyup.enter="submit">
-        <el-form-item :label="t('login.username')"><el-input v-model="form.username" autocomplete="username" /></el-form-item>
-        <el-form-item :label="t('login.password')"><el-input v-model="form.password" type="password" show-password autocomplete="current-password" /></el-form-item>
+      <el-form ref="formRef" :model="form" :rules="formRules" label-position="top" @keyup.enter="submit">
+        <el-form-item :label="t('login.username')" prop="username">
+          <el-input v-model="form.username" autocomplete="username" />
+        </el-form-item>
+        <el-form-item :label="t('login.password')" prop="password">
+          <el-input v-model="form.password" type="password" show-password autocomplete="current-password" />
+        </el-form-item>
         <el-button type="primary" class="full-width" :loading="loading" @click="submit">{{ t('login.submit') }}</el-button>
       </el-form>
     </el-card>
@@ -78,29 +90,23 @@ async function submit() {
   box-shadow: var(--omni-shadow), 0 24px 48px rgba(15, 23, 42, 0.18);
 }
 .brand {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 22px;
+  text-align: center;
+  margin-bottom: 18px;
 }
 .brand-logo {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
   display: block;
+  margin: 0 auto 10px;
+  border-radius: 10px;
 }
-h1 {
-  text-align: center;
+.brand h1 {
   margin: 0;
   font-size: 22px;
-  font-weight: 700;
+  color: var(--omni-text);
 }
 .subtitle {
-  margin: 0;
+  margin: 6px 0 0;
   color: var(--omni-muted);
   font-size: 13px;
-  text-align: center;
 }
 .full-width { width: 100%; }
 </style>

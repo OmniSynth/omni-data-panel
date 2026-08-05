@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
 import java.util.List;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -14,7 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.omni.panel.config.AuthenticatedUser;
 import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.UserMapper;
+import com.omni.panel.service.SystemMailService;
+import com.omni.panel.service.UserCredentialTokenService;
 import com.omni.panel.service.UserService;
+import com.omni.panel.subscription.SubscriptionProperties;
 
 class UserServiceTest {
     @AfterEach
@@ -26,10 +31,14 @@ class UserServiceTest {
     void 用户更新在事务中整体替换多个角色() throws Exception {
         UserMapper mapper = mock(UserMapper.class);
         PasswordEncoder encoder = mock(PasswordEncoder.class);
-        UserService service = new UserService(mapper, encoder);
+        SystemMailService mailService = mock(SystemMailService.class);
+        UserCredentialTokenService tokenService = mock(UserCredentialTokenService.class);
+        UserService service = new UserService(mapper, encoder, mailService, tokenService,
+                new SubscriptionProperties());
         SysUser user = new SysUser();
         user.setId(7L);
         user.setUsername("tester");
+        user.setActivated(true);
         when(mapper.selectById(7L)).thenReturn(user);
         when(mapper.countAssignableRoles(List.of(2L, 3L))).thenReturn(2);
         when(mapper.insertRoles(7L, List.of(2L, 3L))).thenReturn(2);
@@ -40,14 +49,16 @@ class UserServiceTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(admin, null, List.of()));
 
-        var result = service.update(7L, "测试用户", true, List.of(2L, 3L, 2L));
+        var result = service.update(7L, "测试用户", "tester@example.com", true, List.of(2L, 3L, 2L));
 
         var ordered = inOrder(mapper);
         ordered.verify(mapper).deleteRoles(7L);
         ordered.verify(mapper).insertRoles(7L, List.of(2L, 3L));
         assertThat(result.permissions()).containsExactly("query:execute", "export:execute");
+        assertThat(result.email()).isEqualTo("tester@example.com");
+        assertThat(result.activated()).isTrue();
         assertThat(UserService.class.getMethod(
-                        "update", long.class, String.class, boolean.class, List.class)
+                        "update", long.class, String.class, String.class, boolean.class, List.class)
                 .isAnnotationPresent(Transactional.class)).isTrue();
     }
 }

@@ -14,6 +14,54 @@ const router = useRouter()
 const loading = ref(false)
 const recents = ref<RecentItem[]>([])
 
+interface FeatureItem {
+  key: string
+  titleKey: string
+  descKey: string
+  to: string
+  visible?: boolean
+}
+
+const features = computed<FeatureItem[]>(() => [
+  {
+    key: 'dashboards',
+    titleKey: 'home.featureDashboards',
+    descKey: 'home.featureDashboardsDesc',
+    to: '/dashboards',
+  },
+  {
+    key: 'charts',
+    titleKey: 'home.featureCharts',
+    descKey: 'home.featureChartsDesc',
+    to: '/questions',
+  },
+  {
+    key: 'models',
+    titleKey: 'home.featureModels',
+    descKey: 'home.featureModelsDesc',
+    to: '/models',
+  },
+  {
+    key: 'metrics',
+    titleKey: 'home.featureMetrics',
+    descKey: 'home.featureMetricsDesc',
+    to: '/metrics',
+  },
+  {
+    key: 'databases',
+    titleKey: 'home.featureDatabases',
+    descKey: 'home.featureDatabasesDesc',
+    to: '/databases',
+  },
+  {
+    key: 'sql',
+    titleKey: 'home.featureSql',
+    descKey: 'home.featureSqlDesc',
+    to: '/sql',
+    visible: userStore.hasPermission('query:raw'),
+  },
+].filter((item) => item.visible !== false))
+
 /** 首页常用工具外链，新窗口打开。 */
 const toolLinks = [
   { category: 'JSON', name: 'JSON.cn', descKey: 'home.toolJsonFormat', url: 'https://www.json.cn/' },
@@ -38,11 +86,6 @@ function toolName(tool: (typeof toolLinks)[number]) {
   return 'nameKey' in tool && tool.nameKey ? t(tool.nameKey) : tool.name
 }
 
-const greeting = computed(() => {
-  const name = userStore.user?.displayName || userStore.user?.username || t('common.friend')
-  return t('home.greeting', { name })
-})
-
 async function load() {
   loading.value = true
   try {
@@ -63,7 +106,21 @@ onMounted(load)
 
 <template>
   <div class="page home">
-    <h1 class="greeting">{{ greeting }}</h1>
+    <section class="section">
+      <h2 class="section-title">{{ t('home.featuresTitle') }}</h2>
+      <div class="feature-grid">
+        <router-link
+          v-for="feature in features"
+          :key="feature.key"
+          class="feature-card"
+          :to="feature.to"
+        >
+          <strong class="name">{{ t(feature.titleKey) }}</strong>
+          <span class="desc">{{ t(feature.descKey) }}</span>
+        </router-link>
+      </div>
+    </section>
+
     <section class="section">
       <h2 class="section-title">{{ t('home.continueTitle') }}</h2>
       <div v-loading="loading" class="recent-row" :class="{ empty: !loading && !recents.length }">
@@ -120,13 +177,6 @@ onMounted(load)
 
 <style scoped>
 .home { padding: 28px 32px; }
-.greeting {
-  margin: 0 0 28px;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--omni-text);
-}
 .section + .section { margin-top: 36px; }
 .section-title {
   margin: 0 0 14px;
@@ -138,6 +188,41 @@ onMounted(load)
   margin: -6px 0 14px;
   font-size: 13px;
   color: #9ca3af;
+}
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.feature-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 96px;
+  padding: 18px 16px;
+  border: 1px solid var(--omni-border);
+  border-radius: 12px;
+  background: var(--omni-card);
+  text-decoration: none;
+  color: inherit;
+}
+.feature-card:hover {
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: var(--omni-shadow);
+}
+.feature-card .name {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--omni-text);
+}
+.feature-card .desc {
+  font-size: 13px;
+  color: var(--omni-muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .recent-row {
   display: flex;
@@ -224,6 +309,7 @@ onMounted(load)
   box-shadow: var(--omni-shadow);
 }
 @media (max-width: 640px) {
+  .home { padding: 20px 16px; }
   .recent-empty {
     flex-wrap: wrap;
   }
@@ -275,7 +361,8 @@ onMounted(load)
   font-weight: 600;
   color: var(--omni-text);
 }
-.desc {
+.recent-card .desc,
+.tool-card .desc {
   font-size: 12px;
   color: #9ca3af;
   display: -webkit-box;

@@ -3,6 +3,7 @@ package com.omni.panel.service;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
@@ -39,6 +40,21 @@ public class RoleService {
         return mapper.selectList(Wrappers.<SysRoleEntity>lambdaQuery()
                         .orderByDesc(SysRoleEntity::getBuiltIn).orderByAsc(SysRoleEntity::getCode))
                 .stream().map(this::view).toList();
+    }
+
+    /**
+     * 查询可用于资源授权的非管理员角色（不含功能权限明细）。
+     *
+     * @return 可授权角色列表
+     */
+    public List<AssignableRoleView> listAssignable() {
+        return mapper.selectList(Wrappers.<SysRoleEntity>lambdaQuery()
+                        .ne(SysRoleEntity::getCode, "ADMIN")
+                        .orderByAsc(SysRoleEntity::getCode))
+                .stream()
+                .map(role -> new AssignableRoleView(role.getId(), role.getCode(), role.getName(),
+                        Boolean.TRUE.equals(role.getEnabled())))
+                .toList();
     }
 
     /**
@@ -214,5 +230,17 @@ public class RoleService {
     public record RoleView(@JsonSerialize(using = ToStringSerializer.class) long id,
                            String code, String name, String description, boolean enabled,
                            boolean builtIn, List<String> permissions) {
+    }
+
+    /**
+     * 资源授权可选角色。
+     *
+     * @param id      角色标识
+     * @param code    角色编码
+     * @param name    角色名称
+     * @param enabled 是否启用
+     */
+    public record AssignableRoleView(@JsonSerialize(using = ToStringSerializer.class) long id,
+                                     String code, String name, boolean enabled) {
     }
 }

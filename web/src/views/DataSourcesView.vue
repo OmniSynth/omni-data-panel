@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { confirmBox } from '@/i18n/dialog'
 import { dataSourceApi } from '@/api'
 import { displayLabel } from '@/display'
+import { requiredRule, validateForm } from '@/form/rules'
 import { useUserStore } from '@/stores/user'
 import type { DataSource, DialectInfo, Id } from '@/types'
 import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
@@ -22,6 +24,7 @@ const objectAclVisible = ref(false)
 const objectAclSource = ref<DataSource>()
 const saving = ref(false)
 const editingId = ref<Id>()
+const formRef = ref<FormInstance>()
 
 function defaultDialectCode() {
   return dialects.value[0]?.code || 'MYSQL'
@@ -45,6 +48,28 @@ const emptyForm = () => {
   }
 }
 const form = reactive(emptyForm())
+
+const formRules = computed<FormRules>(() => {
+  const rules: FormRules = {
+    name: [requiredRule(t('common.pleaseEnter', { field: t('common.name') }))],
+    dialect: [requiredRule(t('common.pleaseSelect', { field: t('dataSource.dialect') }), 'change')],
+    host: [requiredRule(t('common.pleaseEnter', { field: t('dataSource.host') }))],
+    port: [{
+      required: true,
+      trigger: 'change',
+      validator: (_rule, value, callback) => {
+        const port = Number(value)
+        if (!port || port < 1 || port > 65535) callback(new Error(t('dataSource.portRange')))
+        else callback()
+      },
+    }],
+    username: [requiredRule(t('common.pleaseEnter', { field: t('dataSource.username') }))],
+  }
+  if (editingId.value === undefined) {
+    rules.password = [requiredRule(t('common.pleaseEnter', { field: t('dataSource.password') }))]
+  }
+  return rules
+})
 
 async function loadDialects() {
   try {
@@ -92,10 +117,7 @@ function onDialectChange(code: string) {
 }
 
 async function save() {
-  if (!form.name || !form.host || !form.username) return ElMessage.warning(t('dataSource.needFields'))
-  if (!form.port || form.port < 1 || form.port > 65535) return ElMessage.warning(t('dataSource.portRange'))
-  if (!form.dialect) return ElMessage.warning(t('dataSource.needDialect'))
-  if (editingId.value === undefined && !form.password) return ElMessage.warning(t('dataSource.needPassword'))
+  if (!(await validateForm(formRef.value))) return
   const data: Partial<DataSource> = {
     name: form.name.trim(),
     host: form.host.trim(),
@@ -196,9 +218,9 @@ onMounted(async () => {
       </el-table-column>
     </el-table>
     <el-dialog v-model="visible" :title="editingId === undefined ? t('dataSource.createTitle') : t('dataSource.editTitle')" width="640px">
-      <el-form label-width="100px">
-        <el-form-item :label="t('common.name')"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item :label="t('dataSource.dialect')">
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">
+        <el-form-item :label="t('common.name')" prop="name"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="t('dataSource.dialect')" prop="dialect">
           <el-select
             :model-value="form.dialect"
             class="full-width"
@@ -213,8 +235,8 @@ onMounted(async () => {
             />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('dataSource.host')"><el-input v-model="form.host" placeholder="127.0.0.1" /></el-form-item>
-        <el-form-item :label="t('dataSource.port')">
+        <el-form-item :label="t('dataSource.host')" prop="host"><el-input v-model="form.host" placeholder="127.0.0.1" /></el-form-item>
+        <el-form-item :label="t('dataSource.port')" prop="port">
           <el-input-number v-model="form.port" :min="1" :max="65535" controls-position="right" class="full-width" />
         </el-form-item>
         <el-form-item :label="t('dataSource.database')">
@@ -223,8 +245,8 @@ onMounted(async () => {
             {{ t('dataSource.databaseHint') }}
           </div>
         </el-form-item>
-        <el-form-item :label="t('dataSource.username')"><el-input v-model="form.username" /></el-form-item>
-        <el-form-item :label="t('dataSource.password')">
+        <el-form-item :label="t('dataSource.username')" prop="username"><el-input v-model="form.username" /></el-form-item>
+        <el-form-item :label="t('dataSource.password')" prop="password">
           <el-input
             v-model="form.password"
             type="password"

@@ -8,8 +8,18 @@ const router = createRouter({
   routes: [
     { path: '/login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
     {
+      path: '/setup-password',
+      component: () => import('@/views/SetupPasswordView.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/public/dashboard/:token',
       component: () => import('@/views/PublicDashboardView.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/print/dashboard/:token',
+      component: () => import('@/views/PrintDashboardView.vue'),
       meta: { public: true },
     },
     {

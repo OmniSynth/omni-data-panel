@@ -6,10 +6,15 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
+
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.omni.panel.common.BusinessException;
 import com.omni.panel.config.AuthenticatedUser;
+import com.omni.panel.datasource.CredentialCrypto;
 import com.omni.panel.entity.SettingEntity;
 import com.omni.panel.mapper.SettingMapper;
 
@@ -20,54 +25,101 @@ import com.omni.panel.mapper.SettingMapper;
 public class SettingService {
     static final String CACHE_QUERY_ENABLED = "cache.query.enabled";
     static final String CACHE_QUERY_TTL_SECONDS = "cache.query.ttl-seconds";
+    static final String MAIL_HOST = "mail.host";
+    static final String MAIL_PORT = "mail.port";
+    static final String MAIL_USERNAME = "mail.username";
+    static final String MAIL_PASSWORD = "mail.password";
+    static final String MAIL_PASSWORD_SET = "mail.password.set";
+    static final String MAIL_FROM = "mail.from";
+    static final String MAIL_SMTP_AUTH = "mail.smtp.auth";
+    static final String MAIL_SMTP_STARTTLS = "mail.smtp.starttls";
+
     private static final int DEFAULT_CACHE_TTL_SECONDS = 300;
     private static final int MIN_CACHE_TTL_SECONDS = 30;
     private static final int MAX_CACHE_TTL_SECONDS = 86_400;
+    private static final int DEFAULT_MAIL_PORT = 25;
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+
     private static final List<String> ALLOWED_KEYS = List.of(
             "site.name",
             "embed.enabled",
             CACHE_QUERY_ENABLED,
-            CACHE_QUERY_TTL_SECONDS);
+            CACHE_QUERY_TTL_SECONDS,
+            MAIL_HOST,
+            MAIL_PORT,
+            MAIL_USERNAME,
+            MAIL_PASSWORD,
+            MAIL_FROM,
+            MAIL_SMTP_AUTH,
+            MAIL_SMTP_STARTTLS);
     private static final Set<String> ALLOWED = new LinkedHashSet<>(ALLOWED_KEYS);
-    private static final Map<String, String> DEFAULTS = Map.of(
-            "site.name", "全域数据分析",
-            "embed.enabled", "true",
-            CACHE_QUERY_ENABLED, "false",
-            CACHE_QUERY_TTL_SECONDS, String.valueOf(DEFAULT_CACHE_TTL_SECONDS));
+    private static final Set<String> BOOLEAN_KEYS = Set.of(
+            "embed.enabled",
+            CACHE_QUERY_ENABLED,
+            MAIL_SMTP_AUTH,
+            MAIL_SMTP_STARTTLS);
+    private static final Map<String, String> DEFAULTS = Map.ofEntries(
+            Map.entry("site.name", "全域数据分析"),
+            Map.entry("embed.enabled", "true"),
+            Map.entry(CACHE_QUERY_ENABLED, "false"),
+            Map.entry(CACHE_QUERY_TTL_SECONDS, String.valueOf(DEFAULT_CACHE_TTL_SECONDS)),
+            Map.entry(MAIL_HOST, ""),
+            Map.entry(MAIL_PORT, String.valueOf(DEFAULT_MAIL_PORT)),
+            Map.entry(MAIL_USERNAME, ""),
+            Map.entry(MAIL_PASSWORD, ""),
+            Map.entry(MAIL_FROM, ""),
+            Map.entry(MAIL_SMTP_AUTH, "false"),
+            Map.entry(MAIL_SMTP_STARTTLS, "false"));
 
     private final SettingMapper mapper;
+    private final CredentialCrypto crypto;
 
-    public SettingService(SettingMapper mapper) {
+    public SettingService(SettingMapper mapper, CredentialCrypto crypto) {
         this.mapper = mapper;
+        this.crypto = crypto;
     }
 
     /**
-     * 读取全部允许的设置；库中缺失时回落默认值。
+     * 读取全部允许的设置；库中缺失时回落默认值。密码永不返回，仅暴露是否已配置。
      *
      * @return 设置映射
      */
     public Map<String, String> list() {
         Map<String, String> values = new LinkedHashMap<>();
         for (String key : ALLOWED_KEYS) {
-            SettingEntity entity = mapper.selectById(key);
-            if (entity != null) {
-                values.put(key, entity.getSettingValue());
-            } else {
-                values.put(key, DEFAULTS.get(key));
+            if (MAIL_PASSWORD.equals(key)) {
+                String stored = rawValue(MAIL_PASSWORD);
+                values.put(MAIL_PASSWORD_SET, stored != null && !stored.isBlank() ? "true" : "false");
+                continue;
             }
+            String stored = rawValue(key);
+            values.put(key, stored != null ? stored : DEFAULTS.get(key));
         }
         return values;
     }
 
     /**
-     * 读取单个设置值。
+     * 读取单个设置值（含邮件密码密文）；库中不存在时返回 {@code null}。
      *
      * @param key 设置键
      * @return 设置值；不存在时返回 {@code null}
      */
     public String get(String key) {
-        SettingEntity entity = mapper.selectById(key);
-        return entity == null ? null : entity.getSettingValue();
+        return rawValue(key);
+    }
+
+    /**
+     * 读取设置值；缺失时回落默认值。
+     *
+     * @param key 设置键
+     * @return 非空字符串（可能为空串）
+     */
+    public String getOrDefault(String key) {
+        String value = rawValue(key);
+        if (value != null) {
+            return value;
+        }
+        return DEFAULTS.getOrDefault(key, "");
     }
 
     /**
@@ -126,29 +178,49 @@ public class SettingService {
             throw new BusinessException("设置不能为空");
         }
         for (Map.Entry<String, String> entry : values.entrySet()) {
-            if (!ALLOWED.contains(entry.getKey())) {
-                throw new BusinessException("不支持的设置键：" + entry.getKey());
+            String key = entry.getKey();
+            if (MAIL_PASSWORD_SET.equals(key)) {
+                continue;
             }
-            String normalized = normalizeValue(entry.getKey(), entry.getValue());
-            SettingEntity entity = mapper.selectById(entry.getKey());
-            boolean insert = entity == null;
-            if (insert) {
-                entity = new SettingEntity();
-                entity.setSettingKey(entry.getKey());
+            if (!ALLOWED.contains(key)) {
+                throw new BusinessException("不支持的设置键：" + key);
             }
-            entity.setSettingValue(normalized);
-            entity.setUpdatedAt(LocalDateTime.now());
-            if (insert) {
-                mapper.insert(entity);
-            } else {
-                mapper.updateById(entity);
+            if (MAIL_PASSWORD.equals(key)) {
+                String raw = entry.getValue() == null ? "" : entry.getValue().trim();
+                if (raw.isEmpty() || "********".equals(raw)) {
+                    continue;
+                }
+                upsert(key, crypto.encrypt(raw));
+                continue;
             }
+            upsert(key, normalizeValue(key, entry.getValue()));
         }
         return list();
     }
 
+    private void upsert(String key, String normalized) {
+        SettingEntity entity = mapper.selectById(key);
+        boolean insert = entity == null;
+        if (insert) {
+            entity = new SettingEntity();
+            entity.setSettingKey(key);
+        }
+        entity.setSettingValue(normalized);
+        entity.setUpdatedAt(LocalDateTime.now());
+        if (insert) {
+            mapper.insert(entity);
+        } else {
+            mapper.updateById(entity);
+        }
+    }
+
+    private String rawValue(String key) {
+        SettingEntity entity = mapper.selectById(key);
+        return entity == null ? null : entity.getSettingValue();
+    }
+
     /**
-     * 校验并规范化单个设置值（布尔开关、TTL 范围等）。
+     * 校验并规范化单个设置值（布尔开关、TTL 范围、邮件端口等）。
      *
      * @param key   设置键
      * @param value 原始值
@@ -156,9 +228,9 @@ public class SettingService {
      */
     private String normalizeValue(String key, String value) {
         String raw = value == null ? "" : value.trim();
-        if (CACHE_QUERY_ENABLED.equals(key)) {
+        if (BOOLEAN_KEYS.contains(key)) {
             if (!"true".equalsIgnoreCase(raw) && !"false".equalsIgnoreCase(raw)) {
-                throw new BusinessException("缓存开关仅支持 true 或 false");
+                throw new BusinessException("开关仅支持 true 或 false：" + key);
             }
             return Boolean.parseBoolean(raw) ? "true" : "false";
         }
@@ -175,6 +247,42 @@ public class SettingService {
             }
             return String.valueOf(seconds);
         }
+        if (MAIL_PORT.equals(key)) {
+            if (raw.isEmpty()) {
+                return String.valueOf(DEFAULT_MAIL_PORT);
+            }
+            int port;
+            try {
+                port = Integer.parseInt(raw);
+            } catch (NumberFormatException exception) {
+                throw new BusinessException("邮件端口必须是整数");
+            }
+            if (port < 1 || port > 65_535) {
+                throw new BusinessException("邮件端口需在 1–65535 之间");
+            }
+            return String.valueOf(port);
+        }
+        if (MAIL_FROM.equals(key) && !raw.isEmpty()) {
+            validateEmail(raw, "发件人邮箱格式不合法");
+        }
+        if (MAIL_USERNAME.equals(key) && !raw.isEmpty() && raw.contains("@")) {
+            validateEmail(raw, "邮件账号格式不合法");
+        }
         return raw;
+    }
+
+    private static void validateEmail(String value, String message) {
+        if (!EMAIL_PATTERN.matcher(value).matches()) {
+            throw new BusinessException(message);
+        }
+        try {
+            InternetAddress address = new InternetAddress(value);
+            address.validate();
+            if (!value.equals(address.getAddress())) {
+                throw new AddressException();
+            }
+        } catch (AddressException exception) {
+            throw new BusinessException(message);
+        }
     }
 }

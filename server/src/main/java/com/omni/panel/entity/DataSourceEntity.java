@@ -1,6 +1,7 @@
 package com.omni.panel.entity;
 
 import java.time.LocalDateTime;
+
 import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;

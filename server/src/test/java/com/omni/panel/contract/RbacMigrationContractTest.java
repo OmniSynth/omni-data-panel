@@ -1,7 +1,9 @@
 package com.omni.panel.contract;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 import java.nio.charset.StandardCharsets;
+
 import org.junit.jupiter.api.Test;
 
 class RbacMigrationContractTest {

@@ -16,10 +16,11 @@ import com.omni.panel.mapper.ResourcePermissionMapper;
 import com.omni.panel.service.PermissionService;
 
 /**
- * 提供仅管理员可调用的角色资源授权接口。
+ * 提供管理员或资源所有者可调用的角色资源授权接口。
  */
 @RestController
 @RequestMapping("/api/resources/{resourceType}/{resourceId}/permissions")
+@PreAuthorize("isAuthenticated()")
 public class PermissionController {
     private final PermissionService service;
 
@@ -36,7 +37,6 @@ public class PermissionController {
      * @return 空成功响应
      */
     @RequestMapping(method = {RequestMethod.POST, RequestMethod.PUT})
-    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> grant(@PathVariable String resourceType, @PathVariable long resourceId,
                                    @Valid @RequestBody GrantRequest request) {
         service.grant(resourceType.toUpperCase(), resourceId, request.roleId(), request.permission().toUpperCase());
@@ -52,7 +52,6 @@ public class PermissionController {
      * @return 空成功响应
      */
     @DeleteMapping("/{roleId}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> revoke(@PathVariable String resourceType, @PathVariable long resourceId,
                                     @PathVariable long roleId) {
         service.revoke(resourceType.toUpperCase(), resourceId, roleId);
@@ -67,7 +66,6 @@ public class PermissionController {
      * @return ACL 列表
      */
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<java.util.List<ResourcePermissionMapper.AclView>> list(
             @PathVariable String resourceType, @PathVariable long resourceId) {
         return ApiResponse.ok(service.list(resourceType.toUpperCase(), resourceId));

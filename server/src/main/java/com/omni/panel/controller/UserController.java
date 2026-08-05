@@ -1,7 +1,9 @@
 package com.omni.panel.controller;
 
 import java.util.List;
+
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -61,7 +63,8 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserService.UserView> create(@Valid @RequestBody CreateRequest request) {
         return ApiResponse.ok(service.create(
-                request.username(), request.password(), request.displayName(), request.roleIds()));
+                request.username(), request.password(), request.displayName(), request.email(),
+                request.roleIds()));
     }
 
     /**
@@ -75,21 +78,35 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<UserService.UserView> update(@PathVariable long id,
                                                     @Valid @RequestBody UpdateRequest request) {
-        return ApiResponse.ok(service.update(id, request.displayName(), request.enabled(), request.roleIds()));
+        return ApiResponse.ok(service.update(id, request.displayName(), request.email(),
+                request.enabled(), request.roleIds()));
     }
 
     /**
-     * 重置普通用户密码。
+     * 重置普通用户密码；系统邮箱可用时发送重置链接。
      *
      * @param id      用户标识
-     * @param request 新密码
+     * @param request 新密码（邮件模式下可省略）
      * @return 空成功响应
      */
     @PutMapping("/{id}/password")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> resetPassword(@PathVariable long id,
-                                           @Valid @RequestBody PasswordRequest request) {
-        service.resetPassword(id, request.password());
+                                           @RequestBody(required = false) PasswordRequest request) {
+        service.resetPassword(id, request == null ? null : request.password());
+        return ApiResponse.ok();
+    }
+
+    /**
+     * 向未激活用户重发激活邮件。
+     *
+     * @param id 用户标识
+     * @return 空成功响应
+     */
+    @PostMapping("/{id}/activation-email")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<Void> resendActivation(@PathVariable long id) {
+        service.resendActivation(id);
         return ApiResponse.ok();
     }
 
@@ -97,13 +114,15 @@ public class UserController {
      * 用户创建请求。
      *
      * @param username    唯一且创建后不可修改的用户名
-     * @param password    至少十位的初始密码
+     * @param password    初始密码；系统邮箱可用时可省略
      * @param displayName 展示名称
+     * @param email       邮箱
      * @param roleIds     初始角色标识集合
      */
     public record CreateRequest(@NotBlank String username,
-                                @NotBlank @Size(min = 10, message = "密码至少需要10位") String password,
+                                @Size(min = 10, message = "密码至少需要10位") String password,
                                 @NotBlank String displayName,
+                                @NotBlank @Email String email,
                                 @NotEmpty List<Long> roleIds) {
     }
 
@@ -111,19 +130,22 @@ public class UserController {
      * 用户资料更新请求。
      *
      * @param displayName 展示名称
+     * @param email       邮箱；为空时保留原值
      * @param enabled     是否启用
      * @param roleIds     替换后的角色标识集合
      */
-    public record UpdateRequest(@NotBlank String displayName, @NotNull Boolean enabled,
+    public record UpdateRequest(@NotBlank String displayName,
+                                String email,
+                                @NotNull Boolean enabled,
                                 @NotEmpty List<Long> roleIds) {
     }
 
     /**
      * 管理员密码重置请求。
      *
-     * @param password 至少十位的新密码
+     * @param password 至少十位的新密码；邮件模式下可省略
      */
     public record PasswordRequest(
-            @NotBlank @Size(min = 10, message = "密码至少需要10位") String password) {
+            @Size(min = 10, message = "密码至少需要10位") String password) {
     }
 }

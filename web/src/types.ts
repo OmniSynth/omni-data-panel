@@ -9,6 +9,7 @@ export interface User {
   id: Id
   username: string
   displayName: string
+  email?: string
   roles: string[]
   admin: boolean
   permissions: string[]
@@ -20,8 +21,8 @@ export interface Role {
   name: string
   description?: string
   enabled: boolean
-  builtIn: boolean
-  permissions: string[]
+  builtIn?: boolean
+  permissions?: string[]
 }
 
 export interface Permission {
@@ -34,7 +35,9 @@ export interface AdminUser {
   id: Id
   username: string
   displayName: string
+  email?: string
   enabled: boolean
+  activated: boolean
   roleIds: Id[]
   roles: string[]
   permissions: string[]
@@ -44,6 +47,7 @@ export interface UserDirectoryItem {
   id: Id
   username: string
   displayName: string
+  email?: string | null
 }
 
 export interface FieldPermissionRow {
@@ -354,6 +358,13 @@ export interface DashboardLayout {
   y: number
   w: number
   h: number
+  /** 所属 Tab；缺省归入第一个 Tab */
+  tabId?: string
+}
+
+export interface DashboardTab {
+  id: string
+  name: string
 }
 
 export type DashboardParameterType =
@@ -387,6 +398,8 @@ export interface DashboardParameter {
 
 export interface DashboardConfig {
   parameters?: DashboardParameter[]
+  /** 仪表盘内多页签；缺省或空数组表示单页（兼容旧数据） */
+  tabs?: DashboardTab[]
 }
 
 export interface CardParameterBinding {
@@ -451,7 +464,8 @@ export interface Subscription {
   name: string
   dashboardId: Id
   cronExpression: string
-  recipients: string
+  recipientUserIds: Id[]
+  recipientsLabel?: string
   enabled: boolean
   ownerId?: Id
 }
@@ -540,5 +554,13 @@ export interface SiteSettings {
   'embed.enabled'?: string | boolean
   'cache.query.enabled'?: string | boolean
   'cache.query.ttl-seconds'?: string | number
+  'mail.host'?: string
+  'mail.port'?: string | number
+  'mail.username'?: string
+  'mail.password.set'?: string | boolean
+  'mail.from'?: string
+  'mail.smtp.auth'?: string | boolean
+  'mail.smtp.starttls'?: string | boolean
+  'mail.ready'?: string | boolean
   [key: string]: string | boolean | number | undefined
 }

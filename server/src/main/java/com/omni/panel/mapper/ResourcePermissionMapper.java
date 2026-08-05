@@ -1,6 +1,7 @@
 package com.omni.panel.mapper;
 
 import java.util.List;
+
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import org.apache.ibatis.annotations.Delete;

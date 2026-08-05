@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
+
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 import com.omni.panel.common.BusinessException;
@@ -240,9 +241,9 @@ public class JdbcQueryExecutor {
     /**
      * 结果集列元数据。
      *
-     * @param name         列标签（已消重）
-     * @param jdbcType     {@link Types} 常量
-     * @param typeName     驱动报告的类型名
+     * @param name     列标签（已消重）
+     * @param jdbcType {@link Types} 常量
+     * @param typeName 驱动报告的类型名
      */
     public record ColumnMeta(String name, int jdbcType, String typeName) {
     }

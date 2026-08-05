@@ -75,3 +75,5 @@ omni:
   subscription:
     from: ${MAIL_FROM:}
     frontend-url: ${FRONTEND_URL:http://localhost:5173}
+    pdf-enabled: ${SUBSCRIPTION_PDF_ENABLED:true}
+    pdf-timeout-ms: ${SUBSCRIPTION_PDF_TIMEOUT_MS:90000}

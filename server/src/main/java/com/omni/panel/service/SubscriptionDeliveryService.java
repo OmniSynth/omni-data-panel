@@ -1,94 +1,227 @@
 package com.omni.panel.service;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
-import jakarta.mail.internet.AddressException;
-import jakarta.mail.internet.InternetAddress;
-import org.springframework.beans.factory.annotation.Value;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
+
 import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import com.omni.panel.common.BusinessException;
 import com.omni.panel.entity.DashboardEntity;
 import com.omni.panel.entity.SubscriptionEntity;
+import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.DashboardMapper;
 import com.omni.panel.mapper.SubscriptionMapper;
+import com.omni.panel.mapper.UserMapper;
 import com.omni.panel.subscription.SubscriptionProperties;
 
 /**
- * 校验订阅并通过 Spring Mail 发送仪表盘访问链接。
+ * 校验订阅并通过系统邮箱向选定用户发送仪表盘 PDF（或访问链接）。
  */
 @Service
 public class SubscriptionDeliveryService {
     private final SubscriptionMapper subscriptionMapper;
     private final DashboardMapper dashboardMapper;
-    private final JavaMailSender mailSender;
+    private final UserMapper userMapper;
+    private final SystemMailService mailService;
+    private final DashboardPdfService pdfService;
     private final SubscriptionProperties properties;
-    private final String mailHost;
 
     public SubscriptionDeliveryService(SubscriptionMapper subscriptionMapper, DashboardMapper dashboardMapper,
-                                       JavaMailSender mailSender, SubscriptionProperties properties,
-                                       @Value("${spring.mail.host:}") String mailHost) {
+                                       UserMapper userMapper, SystemMailService mailService,
+                                       DashboardPdfService pdfService, SubscriptionProperties properties) {
         this.subscriptionMapper = subscriptionMapper;
         this.dashboardMapper = dashboardMapper;
-        this.mailSender = mailSender;
+        this.userMapper = userMapper;
+        this.mailService = mailService;
+        this.pdfService = pdfService;
         this.properties = properties;
-        this.mailHost = mailHost;
     }
 
     /**
-     * 向订阅配置的全部收件人发送仪表盘邮件。
-     * 订阅缺失或禁用、仪表盘缺失、收件人非法时抛出业务异常；未配置
-     * {@code spring.mail.host} 或 {@code MAIL_FROM} 时明确以 503 失败，不会静默跳过发送。
-     * 邮件传输异常由邮件发送器向调用方传播。
+     * 向订阅配置的全部收件用户发送仪表盘邮件（定时任务路径，要求订阅已启用）。
      *
      * @param subscriptionId 订阅标识
      */
     public void send(long subscriptionId) {
+        send(subscriptionId, true);
+    }
+
+    /**
+     * 向订阅配置的全部收件用户发送仪表盘邮件。
+     *
+     * @param subscriptionId 订阅标识
+     * @param requireEnabled 为 true 时禁用订阅不可发送
+     */
+    public void send(long subscriptionId, boolean requireEnabled) {
         SubscriptionEntity subscription = subscriptionMapper.selectById(subscriptionId);
-        if (subscription == null || !Boolean.TRUE.equals(subscription.getEnabled())) {
+        if (subscription == null) {
+            throw new BusinessException(404, "订阅不存在");
+        }
+        if (requireEnabled && !Boolean.TRUE.equals(subscription.getEnabled())) {
             throw new BusinessException("订阅不存在或已禁用");
         }
         DashboardEntity dashboard = dashboardMapper.selectById(subscription.getDashboardId());
         if (dashboard == null) {
             throw new BusinessException(404, "仪表盘不存在");
         }
-        if (mailHost.isBlank() || properties.getFrom() == null || properties.getFrom().isBlank()) {
+        if (!mailService.ready()) {
             throw new BusinessException(503, "邮件服务未配置");
         }
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(properties.getFrom());
-        message.setTo(parseRecipients(subscription.getRecipients()).toArray(String[]::new));
-        message.setSubject("仪表盘订阅：" + dashboard.getName());
+        List<String> emails = resolveEmails(parseRecipientUserIds(subscription.getRecipients()));
         String baseUrl = properties.getFrontendUrl() == null ? "" : properties.getFrontendUrl().replaceAll("/+$", "");
-        message.setText("仪表盘：" + dashboard.getName() + "\n访问链接："
-                + baseUrl + "/dashboards/" + dashboard.getId() + "/edit");
-        mailSender.send(message);
+        String viewUrl = baseUrl + "/dashboards/" + dashboard.getId() + "/view";
+        String subject = "仪表盘订阅：" + dashboard.getName();
+        String text = "仪表盘：" + dashboard.getName()
+                + "\n请查收附件中的 PDF 报告。"
+                + "\n也可在线查看：" + viewUrl;
+
+        if (properties.isPdfEnabled()) {
+            byte[] pdf = pdfService.renderDashboardPdf(dashboard.getId(), dashboard.getName());
+            String filename = DashboardPdfService.sanitizeFilename(dashboard.getName());
+            mailService.sendWithPdfAttachment(emails.toArray(String[]::new), subject, text, filename, pdf);
+            return;
+        }
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(emails.toArray(String[]::new));
+        message.setSubject(subject);
+        message.setText("仪表盘：" + dashboard.getName() + "\n访问链接：" + viewUrl);
+        mailService.send(message);
     }
 
     /**
-     * 按逗号、分号或换行拆分并严格校验收件人邮箱地址。
+     * 校验收件用户并编码为持久化文本（逗号分隔的用户标识）。
      *
-     * @param recipients 收件人地址文本
-     * @return 去除空白后的有效邮箱地址列表
+     * @param recipientUserIds 收件用户标识
+     * @return 持久化用收件人文本
      */
-    public List<String> parseRecipients(String recipients) {
-        List<String> values = Arrays.stream(recipients.split("[,;\\r\\n]+"))
-                .map(String::trim).filter(value -> !value.isEmpty()).toList();
-        if (values.isEmpty()) {
+    public String encodeRecipientUserIds(List<Long> recipientUserIds) {
+        List<Long> normalized = normalizeRecipientUserIds(recipientUserIds);
+        requireMailableUsers(normalized);
+        return normalized.stream().map(String::valueOf).reduce((a, b) -> a + "," + b).orElse("");
+    }
+
+    /**
+     * 解析持久化收件人：优先按用户标识；兼容历史自由文本邮箱（按邮箱反查用户）。
+     *
+     * @param recipients 收件人持久化文本
+     * @return 去重后的用户标识
+     */
+    public List<Long> parseRecipientUserIds(String recipients) {
+        if (recipients == null || recipients.isBlank()) {
             throw new BusinessException("订阅收件人不能为空");
         }
-        try {
-            for (String value : values) {
-                InternetAddress address = new InternetAddress(value);
-                address.validate();
-                if (!value.equals(address.getAddress())) {
-                    throw new AddressException();
-                }
-            }
-        } catch (AddressException exception) {
-            throw new BusinessException("订阅收件人邮箱格式不合法");
+        List<String> tokens = Arrays.stream(recipients.split("[,;\\r\\n]+"))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .toList();
+        if (tokens.isEmpty()) {
+            throw new BusinessException("订阅收件人不能为空");
         }
-        return values;
+        boolean allIds = tokens.stream().allMatch(this::isUserIdToken);
+        if (allIds) {
+            return normalizeRecipientUserIds(tokens.stream().map(Long::valueOf).toList());
+        }
+        List<SysUser> allUsers = userMapper.findAll();
+        Set<Long> userIds = new LinkedHashSet<>();
+        for (String token : tokens) {
+            String email = token.toLowerCase(Locale.ROOT);
+            SysUser user = allUsers.stream()
+                    .filter(item -> item.getEmail() != null && email.equals(item.getEmail().toLowerCase(Locale.ROOT)))
+                    .findFirst()
+                    .orElse(null);
+            if (user == null) {
+                throw new BusinessException("订阅收件人未匹配到系统用户：" + token);
+            }
+            userIds.add(user.getId());
+        }
+        return normalizeRecipientUserIds(new ArrayList<>(userIds));
+    }
+
+    /**
+     * 将用户标识解析为可投递邮箱地址。
+     *
+     * @param recipientUserIds 收件用户标识
+     * @return 邮箱列表
+     */
+    public List<String> resolveEmails(List<Long> recipientUserIds) {
+        return requireMailableUsers(normalizeRecipientUserIds(recipientUserIds)).stream()
+                .map(SysUser::getEmail)
+                .map(String::trim)
+                .toList();
+    }
+
+    /**
+     * 生成收件人展示文案（显示名优先，否则用户名）。
+     *
+     * @param recipientUserIds 收件用户标识
+     * @return 展示文案
+     */
+    public String recipientsLabel(List<Long> recipientUserIds) {
+        List<Long> normalized = normalizeRecipientUserIds(recipientUserIds);
+        List<String> labels = new ArrayList<>();
+        for (Long userId : normalized) {
+            SysUser user = userMapper.selectById(userId);
+            if (user == null) {
+                labels.add("用户" + userId);
+                continue;
+            }
+            if (user.getDisplayName() != null && !user.getDisplayName().isBlank()) {
+                labels.add(user.getDisplayName().trim());
+            } else {
+                labels.add(user.getUsername());
+            }
+        }
+        return String.join("、", labels);
+    }
+
+    private List<Long> normalizeRecipientUserIds(List<Long> recipientUserIds) {
+        if (recipientUserIds == null || recipientUserIds.isEmpty()) {
+            throw new BusinessException("订阅收件人不能为空");
+        }
+        Set<Long> unique = new LinkedHashSet<>();
+        for (Long userId : recipientUserIds) {
+            if (userId == null || userId <= 0) {
+                throw new BusinessException("订阅收件人不合法");
+            }
+            unique.add(userId);
+        }
+        if (unique.isEmpty()) {
+            throw new BusinessException("订阅收件人不能为空");
+        }
+        return List.copyOf(unique);
+    }
+
+    private List<SysUser> requireMailableUsers(List<Long> recipientUserIds) {
+        List<SysUser> users = new ArrayList<>();
+        for (Long userId : recipientUserIds) {
+            SysUser user = userMapper.selectById(userId);
+            if (user == null || !Boolean.TRUE.equals(user.getEnabled())) {
+                throw new BusinessException("收件用户不存在或已禁用：" + userId);
+            }
+            if (user.getEmail() == null || user.getEmail().isBlank()) {
+                throw new BusinessException("收件用户未配置邮箱："
+                        + Objects.requireNonNullElse(user.getDisplayName(), user.getUsername()));
+            }
+            users.add(user);
+        }
+        return users;
+    }
+
+    private boolean isUserIdToken(String token) {
+        if (token == null || token.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < token.length(); i++) {
+            if (!Character.isDigit(token.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

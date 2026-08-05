@@ -1,8 +1,10 @@
 package com.omni.panel.contract;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 import java.util.LinkedHashMap;
 import java.util.List;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -25,11 +27,13 @@ class ApiContractJsonTest {
         JsonNode login = objectMapper.valueToTree(new AuthController.LoginResult("jwt", "Bearer"));
         JsonNode user = objectMapper.valueToTree(
                 new AuthController.UserView(
-                        1, "admin", "系统管理员", List.of("ADMIN"), true, List.of("data-source:manage")));
+                        1, "admin", "系统管理员", "admin@example.com",
+                        List.of("ADMIN"), true, List.of("data-source:manage")));
 
         assertThat(login.path("accessToken").asText()).isEqualTo("jwt");
         assertThat(login.has("token")).isFalse();
         assertThat(user.path("admin").asBoolean()).isTrue();
+        assertThat(user.path("email").asText()).isEqualTo("admin@example.com");
         assertThat(user.path("permissions").get(0).asText()).isEqualTo("data-source:manage");
     }
 

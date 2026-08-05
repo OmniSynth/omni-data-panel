@@ -16,6 +16,7 @@ import type {
   DashboardParameter,
   DashboardParameterType,
   DashboardRenderCard,
+  DashboardTab,
   Dataset,
   Id,
   QueryResult,
@@ -23,13 +24,18 @@ import type {
 import ChartPreview from '@/components/ChartPreview.vue'
 import DashboardParameterBar from '@/components/DashboardParameterBar.vue'
 import {
+  createDashboardTab,
   defaultParameterValues,
+  filterCardsByTab,
   parseBindings,
   parseClickAction,
   parseDashboardConfig,
+  parseLayoutJson,
+  resolveCardTabId,
   serializeBindings,
   serializeClickAction,
   serializeDashboardConfig,
+  stringifyLayout,
 } from '@/dashboard/config'
 
 const { t } = useI18n()
@@ -43,6 +49,8 @@ const renderedCards = ref<Record<string, DashboardRenderCard>>({})
 const selectedChartId = ref<Id>()
 const selectedCardId = ref<Id>()
 const parameters = ref<DashboardParameter[]>([])
+const tabs = ref<DashboardTab[]>([])
+const activeTabId = ref<string>()
 const parameterValues = ref<Record<string, unknown>>({})
 const datasets = ref<Dataset[]>([])
 const bindingDraft = ref<CardParameterBinding[]>([])
@@ -54,6 +62,9 @@ let mounted = true
 
 const selectedCard = computed(() =>
   cards.value.find((item) => String(item.id) === String(selectedCardId.value)))
+
+const visibleCards = computed(() =>
+  filterCardsByTab(cards.value, activeTabId.value, tabs.value))
 
 const parameterTypeOptions = computed(() => [
   { value: 'text' as DashboardParameterType, label: t('dashboard.typeText') },
@@ -84,7 +95,10 @@ async function load() {
     charts.value = chartList
     cards.value = cardList
     datasets.value = datasetList
-    parameters.value = parseDashboardConfig(dashboardData.configJson).parameters || []
+    const config = parseDashboardConfig(dashboardData.configJson)
+    parameters.value = config.parameters || []
+    tabs.value = config.tabs || []
+    activeTabId.value = tabs.value[0]?.id
     parameterValues.value = defaultParameterValues(parameters.value)
     await nextTick()
     initializeGrid()
@@ -99,29 +113,33 @@ function initializeGrid() {
   grid = GridStack.init({ column: 12, cellHeight: 90, margin: 8, float: true })
 }
 
+async function reinitializeGrid() {
+  await nextTick()
+  initializeGrid()
+}
+
+function syncActiveTab() {
+  if (!tabs.value.length) {
+    activeTabId.value = undefined
+    return
+  }
+  if (!activeTabId.value || !tabs.value.some((item) => item.id === activeTabId.value)) {
+    activeTabId.value = tabs.value[0]?.id
+  }
+}
+
+async function onActiveTabChange(tabId: string | number) {
+  activeTabId.value = String(tabId)
+  selectedCardId.value = undefined
+  await reinitializeGrid()
+}
+
 function chartOf(id: Id) {
   return charts.value.find((item) => String(item.id) === String(id))
 }
 
 function layoutOf(card: DashboardCard): DashboardLayout {
-  const fallback = { x: 0, y: 0, w: 6, h: 4 }
-  try {
-    const parsed = JSON.parse(card.layoutJson) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback
-    const layout = parsed as DashboardLayout
-    if (![layout.x, layout.y, layout.w, layout.h].every(Number.isFinite)
-      || layout.x < 0 || layout.y < 0 || layout.w <= 0 || layout.h <= 0) {
-      return fallback
-    }
-    return {
-      x: Math.floor(layout.x),
-      y: Math.floor(layout.y),
-      w: Math.floor(layout.w),
-      h: Math.floor(layout.h),
-    }
-  } catch {
-    return fallback
-  }
+  return parseLayoutJson(card.layoutJson)
 }
 
 function chartOption(configJson?: string) {
@@ -143,6 +161,80 @@ function selectCard(card: DashboardCard) {
     setParameterId: parameters.value[0]?.id || '',
     valueMode: 'replace',
   }
+}
+
+function addTab() {
+  const tab = createDashboardTab(t('dashboard.tabN', { n: tabs.value.length + 1 }), tabs.value)
+  tabs.value.push(tab)
+  if (!activeTabId.value) activeTabId.value = tab.id
+}
+
+async function removeTab(index: number) {
+  const removed = tabs.value[index]
+  if (!removed || !dashboard.value) return
+  const remaining = tabs.value.filter((_, i) => i !== index)
+  const fallbackId = remaining[0]?.id
+  const affected = cards.value.filter((card) =>
+    resolveCardTabId(card.layoutJson, tabs.value) === removed.id)
+  try {
+    await Promise.all(affected.map(async (card) => {
+      const layout = parseLayoutJson(card.layoutJson)
+      if (fallbackId) layout.tabId = fallbackId
+      else delete layout.tabId
+      const updated = await dashboardApi.updateCard(dashboard.value!.id, card.id, {
+        chartId: card.chartId,
+        title: card.title,
+        layoutJson: stringifyLayout(layout),
+        bindingsJson: card.bindingsJson ?? '[]',
+        clickActionJson: card.clickActionJson,
+      })
+      Object.assign(card, updated)
+    }))
+    tabs.value = remaining
+    const configJson = serializeDashboardConfig({
+      parameters: parameters.value,
+      tabs: tabs.value,
+    })
+    dashboard.value = await dashboardApi.update(dashboard.value.id, {
+      name: dashboard.value.name,
+      description: dashboard.value.description,
+      configJson,
+      collectionId: dashboard.value.collectionId,
+    })
+    syncActiveTab()
+    selectedCardId.value = undefined
+    await reinitializeGrid()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('dashboard.tabsSaveFailed'))
+  }
+}
+
+async function moveSelectedCardToTab(tabId: string) {
+  if (!dashboard.value || !selectedCard.value || !tabs.value.length) return
+  const layout = parseLayoutJson(selectedCard.value.layoutJson)
+  if (layout.tabId === tabId) return
+  layout.tabId = tabId
+  try {
+    const updated = await dashboardApi.updateCard(dashboard.value.id, selectedCard.value.id, {
+      chartId: selectedCard.value.chartId,
+      title: selectedCard.value.title,
+      layoutJson: stringifyLayout(layout),
+      bindingsJson: selectedCard.value.bindingsJson ?? '[]',
+      clickActionJson: selectedCard.value.clickActionJson,
+    })
+    Object.assign(selectedCard.value, updated)
+    if (tabId !== activeTabId.value) {
+      selectedCardId.value = undefined
+      await reinitializeGrid()
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('dashboard.moveCardFailed'))
+  }
+}
+
+function selectedCardTabId(): string | undefined {
+  if (!selectedCard.value || !tabs.value.length) return undefined
+  return resolveCardTabId(selectedCard.value.layoutJson, tabs.value)
 }
 
 function addParameter() {
@@ -249,18 +341,23 @@ async function saveParameters() {
   if (!dashboard.value) return
   savingMeta.value = true
   try {
-    const configJson = serializeDashboardConfig({ parameters: parameters.value })
+    const configJson = serializeDashboardConfig({
+      parameters: parameters.value,
+      tabs: tabs.value,
+    })
     dashboard.value = await dashboardApi.update(dashboard.value.id, {
       name: dashboard.value.name,
       description: dashboard.value.description,
       configJson,
       collectionId: dashboard.value.collectionId,
     })
+    syncActiveTab()
     parameterValues.value = {
       ...defaultParameterValues(parameters.value),
       ...parameterValues.value,
     }
     ElMessage.success(t('dashboard.paramsSaved'))
+    await reinitializeGrid()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('dashboard.paramsSaveFailed'))
   } finally {
@@ -295,10 +392,17 @@ async function addChart() {
   if (!chart) return
   try {
     const defaultH = chart.chartType === 'kpi' ? 2 : 4
+    const layout: DashboardLayout = {
+      x: 0,
+      y: 0,
+      w: chart.chartType === 'kpi' ? 3 : 6,
+      h: defaultH,
+    }
+    if (activeTabId.value) layout.tabId = activeTabId.value
     const card = await dashboardApi.createCard(dashboard.value.id, {
       chartId: chart.id,
       title: chart.name,
-      layoutJson: JSON.stringify({ x: 0, y: 0, w: chart.chartType === 'kpi' ? 3 : 6, h: defaultH }),
+      layoutJson: stringifyLayout(layout),
       bindingsJson: '[]',
     })
     cards.value.push(card)
@@ -348,7 +452,16 @@ async function save() {
     await Promise.all(grid.engine.nodes.map((node) => {
       const card = cards.value.find((item) => String(item.id) === String(node.id))
       if (!card) throw new Error(t('dashboard.cardMissing', { id: node.id }))
-      const layoutJson = JSON.stringify({ x: node.x || 0, y: node.y || 0, w: node.w || 6, h: node.h || 4 })
+      const existing = parseLayoutJson(card.layoutJson)
+      const layout: DashboardLayout = {
+        x: node.x || 0,
+        y: node.y || 0,
+        w: node.w || 6,
+        h: node.h || 4,
+      }
+      const tabId = existing.tabId || activeTabId.value
+      if (tabId) layout.tabId = tabId
+      const layoutJson = stringifyLayout(layout)
       return dashboardApi.updateCard(dashboard.value!.id, card.id, {
         chartId: card.chartId,
         title: card.title,
@@ -369,6 +482,8 @@ watch(() => route.params.id, () => {
   renderedCards.value = {}
   selectedChartId.value = undefined
   selectedCardId.value = undefined
+  tabs.value = []
+  activeTabId.value = undefined
   load()
 })
 onBeforeUnmount(() => {
@@ -387,6 +502,24 @@ onBeforeUnmount(() => {
         <el-button type="primary" @click="save">{{ t('dashboard.saveLayout') }}</el-button>
       </div>
     </div>
+
+    <el-card class="section">
+      <template #header>
+        <div class="section-head">
+          <strong>{{ t('dashboard.tabs') }}</strong>
+          <div>
+            <el-button @click="addTab">{{ t('dashboard.addTab') }}</el-button>
+            <el-button type="primary" :loading="savingMeta" @click="saveParameters">{{ t('dashboard.saveTabs') }}</el-button>
+          </div>
+        </div>
+      </template>
+      <p class="tabs-hint">{{ t('dashboard.tabsHint') }}</p>
+      <el-empty v-if="!tabs.length" :description="t('dashboard.noTabs')" />
+      <div v-for="(tab, index) in tabs" :key="tab.id" class="param-row">
+        <el-input v-model="tab.name" :placeholder="t('dashboard.tabName')" style="width:220px" />
+        <el-button link type="danger" @click="removeTab(index)">{{ t('common.remove') }}</el-button>
+      </div>
+    </el-card>
 
     <el-card class="section">
       <template #header>
@@ -509,17 +642,32 @@ onBeforeUnmount(() => {
     </el-card>
 
     <el-card class="toolbar">
-      <el-select v-model="selectedChartId" :placeholder="t('dashboard.selectChart')" style="width:240px">
-        <el-option v-for="chart in charts" :key="chart.id" :label="chart.name" :value="chart.id" />
-      </el-select>
-      <el-button @click="addChart">{{ t('dashboard.addChart') }}</el-button>
-      <el-button type="primary" @click="refresh()">{{ t('dashboard.refreshCards') }}</el-button>
+      <el-tabs
+        v-if="tabs.length"
+        :model-value="activeTabId"
+        class="editor-tabs"
+        @tab-change="onActiveTabChange"
+      >
+        <el-tab-pane
+          v-for="tab in tabs"
+          :key="tab.id"
+          :label="tab.name"
+          :name="tab.id"
+        />
+      </el-tabs>
+      <div class="toolbar-actions">
+        <el-select v-model="selectedChartId" :placeholder="t('dashboard.selectChart')" style="width:240px">
+          <el-option v-for="chart in charts" :key="chart.id" :label="chart.name" :value="chart.id" />
+        </el-select>
+        <el-button @click="addChart">{{ t('dashboard.addChart') }}</el-button>
+        <el-button type="primary" @click="refresh()">{{ t('dashboard.refreshCards') }}</el-button>
+      </div>
     </el-card>
 
     <div class="editor-body">
       <div v-if="dashboard" class="grid-stack">
         <div
-          v-for="card in cards"
+          v-for="card in visibleCards"
           :key="card.id"
           class="grid-stack-item"
           :gs-id="String(card.id)"
@@ -561,6 +709,17 @@ onBeforeUnmount(() => {
             >{{ t('chart.edit') }}</el-button>
           </div>
         </template>
+        <el-form v-if="tabs.length" label-width="90px" class="card-tab-form">
+          <el-form-item :label="t('dashboard.moveToTab')">
+            <el-select
+              :model-value="selectedCardTabId()"
+              style="width:100%"
+              @change="moveSelectedCardToTab(String($event))"
+            >
+              <el-option v-for="tab in tabs" :key="tab.id" :label="tab.name" :value="tab.id" />
+            </el-select>
+          </el-form-item>
+        </el-form>
         <h4>{{ t('dashboard.bindings') }}</h4>
         <div v-for="(binding, index) in bindingDraft" :key="index" class="binding-row">
           <el-select v-model="binding.parameterId" :placeholder="t('dashboard.parameter')" style="width:120px">
@@ -624,6 +783,12 @@ onBeforeUnmount(() => {
 <style scoped>
 .section { margin-bottom: 12px; }
 .section-head { display: flex; justify-content: space-between; align-items: center; }
+.tabs-hint {
+  margin: 0 0 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .param-row, .binding-row {
   display: flex;
   flex-wrap: wrap;
@@ -633,7 +798,10 @@ onBeforeUnmount(() => {
 }
 .param-block { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--el-border-color-lighter); }
 .param-options { margin: 0 0 8px 4px; }
-.toolbar { margin-bottom: 12px; display: flex; gap: 8px; align-items: center; }
+.toolbar { margin-bottom: 12px; }
+.toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.editor-tabs { margin-bottom: 8px; }
+.card-tab-form { margin-bottom: 8px; }
 .editor-body { display: grid; grid-template-columns: 1fr 320px; gap: 12px; }
 .grid-stack { min-height: 500px; background: #e9edf3; }
 .grid-stack-item-content {

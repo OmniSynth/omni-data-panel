@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { confirmBox } from '@/i18n/dialog'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { chartApi, collectionApi, publicLinkApi, queryApi } from '@/api'
 import { displayLabel } from '@/display'
+import { requiredRule, validateForm } from '@/form/rules'
 import { useUserStore } from '@/stores/user'
 import type { Chart, Collection, Id, QueryResult, QuerySubmission } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
 import ChartEncodingForm from '@/components/ChartEncodingForm.vue'
+import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
 import { chartTypeOptions, mergeChartConfig, parseChartConfig, type ChartEncoding } from '@/dashboard/config'
 
 const { t } = useI18n()
@@ -18,11 +21,18 @@ const router = useRouter()
 const rows = ref<Chart[]>([])
 const collections = ref<Collection[]>([])
 const visible = ref(false)
+const formRef = ref<FormInstance>()
+const formRules = computed<FormRules>(() => ({
+  name: [requiredRule(t('common.pleaseEnter', { field: t('common.name') }))],
+  chartType: [requiredRule(t('common.pleaseSelect', { field: t('common.type') }), 'change')],
+}))
 const preview = ref<Chart>()
 const previewResult = ref<QueryResult>()
 const previewEncoding = ref<ChartEncoding>({})
 const previewDrillPath = ref<string[]>([])
 const previewSaving = ref(false)
+const permissionVisible = ref(false)
+const permissionChart = ref<Chart>()
 const chartTypeOptionList = computed(() => chartTypeOptions())
 const form = reactive<Chart>({
   id: '', name: '', datasetId: '', queryJson: '{}', chartType: 'bar', configJson: '{}',
@@ -55,6 +65,7 @@ function edit(row: Chart) {
 }
 
 async function save() {
+  if (!(await validateForm(formRef.value))) return
   try {
     await chartApi.update(form.id, {
       name: form.name,
@@ -152,6 +163,15 @@ function collectionName(id?: Id) {
   return collections.value.find((item) => String(item.id) === String(id))?.name || String(id)
 }
 
+function canShare(row: Chart) {
+  return userStore.isAdmin || String(row.ownerId) === String(userStore.user?.id)
+}
+
+function authorize(row: Chart) {
+  permissionChart.value = row
+  permissionVisible.value = true
+}
+
 onMounted(load)
 </script>
 
@@ -174,22 +194,32 @@ onMounted(load)
       <el-table-column :label="t('common.collection')" width="160">
         <template #default="{ row }">{{ collectionName(row.collectionId) }}</template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="320">
+      <el-table-column :label="t('common.actions')" width="380">
         <template #default="{ row }">
           <el-button link @click="showPreview(row)">{{ t('common.preview') }}</el-button>
           <el-button link type="primary" @click="router.push({ path: '/query', query: { questionId: String(row.id) } })">{{ t('common.edit') }}</el-button>
           <el-button link @click="edit(row)">{{ t('chart.properties') }}</el-button>
           <el-button link @click="share(row)">{{ t('common.share') }}</el-button>
+          <el-button v-if="canShare(row)" link type="primary" @click="authorize(row)">{{ t('chart.roleShare') }}</el-button>
           <el-button link type="danger" @click="remove(row.id)">{{ t('common.delete') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="visible" :title="t('chart.properties')" width="560px">
-      <el-form label-width="80px">
-        <el-form-item :label="t('common.name')"><el-input v-model="form.name" /></el-form-item>
+    <RoleResourcePermissionPanel
+      v-model="permissionVisible"
+      resource-type="CHART"
+      :resource-id="permissionChart?.id"
+      :allowed-permissions="['READ', 'WRITE']"
+      :title="`${t('chart.roleShareTitle')}${permissionChart?.name || ''}`"
+      :hint="t('roleGrant.resourceHint')"
+    />
+
+    <el-dialog v-model="visible" :title="t('chart.properties')" width="560px" destroy-on-close>
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="80px">
+        <el-form-item :label="t('common.name')" prop="name"><el-input v-model="form.name" /></el-form-item>
         <el-form-item :label="t('common.description')"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item :label="t('common.type')">
+        <el-form-item :label="t('common.type')" prop="chartType">
           <el-select v-model="form.chartType" class="full-width">
             <el-option
               v-for="option in chartTypeOptionList"

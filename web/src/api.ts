@@ -31,7 +31,9 @@ http.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem(TOKEN_KEY)
       if (!location.pathname.startsWith('/login')
+        && !location.pathname.startsWith('/setup-password')
         && !location.pathname.startsWith('/public/')
+        && !location.pathname.startsWith('/print/')
         && !location.pathname.startsWith('/embed/')) {
         location.href = '/login'
       }
@@ -61,6 +63,13 @@ export const authApi = {
   me: () => request<User>({ url: '/auth/me' }),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     request<void>({ url: '/auth/password', method: 'PUT', data }),
+  previewSetupPassword: (token: string) =>
+    request<{ username: string; displayName: string; purpose: string }>({
+      url: '/auth/setup-password',
+      params: { token },
+    }),
+  completeSetupPassword: (token: string, password: string) =>
+    request<void>({ url: '/auth/setup-password', method: 'POST', data: { token, password } }),
 }
 
 export const dataSourceApi = {
@@ -310,6 +319,7 @@ export const dataSourceHealthApi = {
 
 export const roleApi = {
   list: () => request<Role[]>({ url: '/roles' }),
+  assignable: () => request<Role[]>({ url: '/roles/assignable' }),
   permissions: () => request<Permission[]>({ url: '/permissions' }),
   create: (data: { code: string; name: string; description?: string; enabled: boolean }) =>
     request<Role>({ url: '/roles', method: 'POST', data }),
@@ -323,16 +333,28 @@ export const roleApi = {
 export const userApi = {
   list: () => request<AdminUser[]>({ url: '/users' }),
   directory: () => request<UserDirectoryItem[]>({ url: '/users/directory' }),
-  create: (data: { username: string; password: string; displayName: string; roleIds: Id[] }) =>
+  create: (data: {
+    username: string
+    password?: string
+    displayName: string
+    email: string
+    roleIds: Id[]
+  }) =>
     request<AdminUser>({ url: '/users', method: 'POST', data: { ...data, roleIds: data.roleIds.map(String) } }),
-  update: (id: Id, data: { displayName: string; enabled: boolean; roleIds: Id[] }) =>
+  update: (id: Id, data: { displayName: string; email?: string; enabled: boolean; roleIds: Id[] }) =>
     request<AdminUser>({
       url: `/users/${String(id)}`,
       method: 'PUT',
       data: { ...data, roleIds: data.roleIds.map(String) },
     }),
-  resetPassword: (id: Id, password: string) =>
-    request<void>({ url: `/users/${String(id)}/password`, method: 'PUT', data: { password } }),
+  resetPassword: (id: Id, password?: string) =>
+    request<void>({
+      url: `/users/${String(id)}/password`,
+      method: 'PUT',
+      data: password ? { password } : {},
+    }),
+  resendActivation: (id: Id) =>
+    request<void>({ url: `/users/${String(id)}/activation-email`, method: 'POST' }),
 }
 
 export const resourcePermissionApi = {
@@ -399,7 +421,7 @@ const subscriptionSave = (data: Partial<Subscription>) => ({
   name: data.name || '',
   dashboardId: String(data.dashboardId),
   cronExpression: data.cronExpression || '',
-  recipients: data.recipients || '',
+  recipientUserIds: (data.recipientUserIds || []).map((id) => String(id)),
   enabled: data.enabled ?? true,
 })
 
@@ -413,6 +435,7 @@ export const subscriptionApi = {
     url: `/subscriptions/${String(id)}`, method: 'PUT', data: subscriptionSave(data),
   }),
   remove: (id: Id) => request<void>({ url: `/subscriptions/${String(id)}`, method: 'DELETE' }),
+  runNow: (id: Id) => request<void>({ url: `/subscriptions/${String(id)}/run`, method: 'POST' }),
 }
 
 export const exportApi = {
@@ -534,6 +557,7 @@ export const publicLinkApi = {
 
 export const publicApi = {
   dashboard: (token: string) => request<DashboardRender>({ url: `/public/dashboards/${token}` }),
+  printDashboard: (token: string) => request<DashboardRender>({ url: `/public/print/dashboards/${token}` }),
   question: (token: string) => request<PublicQuestion>({ url: `/public/questions/${token}` }),
 }
 
@@ -545,4 +569,5 @@ export const embedApi = {
 export const settingsApi = {
   get: () => request<SiteSettings>({ url: '/settings' }),
   update: (data: SiteSettings) => request<SiteSettings>({ url: '/settings', method: 'PUT', data }),
+  testMail: (to: string) => request<void>({ url: '/settings/mail/test', method: 'POST', data: { to } }),
 }

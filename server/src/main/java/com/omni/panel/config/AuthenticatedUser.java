@@ -1,6 +1,7 @@
 package com.omni.panel.config;
 
 import java.util.List;
+
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import com.omni.panel.common.BusinessException;

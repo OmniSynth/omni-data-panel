@@ -1,8 +1,10 @@
 package com.omni.panel.controller;
 
 import java.util.List;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,7 +16,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.omni.panel.common.ApiResponse;
-import com.omni.panel.entity.SubscriptionEntity;
 import com.omni.panel.service.SubscriptionService;
 
 /**
@@ -36,7 +37,7 @@ public class SubscriptionController {
      * @return 订阅列表
      */
     @GetMapping
-    public ApiResponse<List<SubscriptionEntity>> list() {
+    public ApiResponse<List<SubscriptionService.SubscriptionView>> list() {
         return ApiResponse.ok(service.list());
     }
 
@@ -48,9 +49,9 @@ public class SubscriptionController {
      */
     @PostMapping
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('schedule:manage')")
-    public ApiResponse<SubscriptionEntity> create(@Valid @RequestBody SaveRequest request) {
+    public ApiResponse<SubscriptionService.SubscriptionView> create(@Valid @RequestBody SaveRequest request) {
         return ApiResponse.ok(service.save(null, request.name(), request.dashboardId(), request.cronExpression(),
-                request.recipients(), request.enabled()));
+                request.recipientUserIds(), request.enabled()));
     }
 
     /**
@@ -62,9 +63,10 @@ public class SubscriptionController {
      */
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('schedule:manage')")
-    public ApiResponse<SubscriptionEntity> update(@PathVariable long id, @Valid @RequestBody SaveRequest request) {
+    public ApiResponse<SubscriptionService.SubscriptionView> update(@PathVariable long id,
+                                                                    @Valid @RequestBody SaveRequest request) {
         return ApiResponse.ok(service.save(id, request.name(), request.dashboardId(), request.cronExpression(),
-                request.recipients(), request.enabled()));
+                request.recipientUserIds(), request.enabled()));
     }
 
     /**
@@ -81,16 +83,30 @@ public class SubscriptionController {
     }
 
     /**
+     * 立即执行一次订阅邮件发送。
+     *
+     * @param id 订阅标识
+     * @return 空成功响应
+     */
+    @PostMapping("/{id}/run")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('schedule:manage')")
+    public ApiResponse<Void> runNow(@PathVariable long id) {
+        service.runNow(id);
+        return ApiResponse.ok();
+    }
+
+    /**
      * 订阅创建与更新请求。
      *
-     * @param name           订阅名称
-     * @param dashboardId    仪表盘标识
-     * @param cronExpression Quartz Cron 表达式
-     * @param recipients     以逗号、分号或换行分隔的收件人地址
-     * @param enabled        是否启用
+     * @param name              订阅名称
+     * @param dashboardId       仪表盘标识
+     * @param cronExpression    Quartz Cron 表达式
+     * @param recipientUserIds  收件用户标识列表
+     * @param enabled           是否启用
      */
     public record SaveRequest(@NotBlank String name, @NotNull Long dashboardId,
-                              @NotBlank String cronExpression, @NotBlank String recipients,
+                              @NotBlank String cronExpression,
+                              @NotEmpty List<Long> recipientUserIds,
                               @NotNull Boolean enabled) {
     }
 }

@@ -1,6 +1,7 @@
 package com.omni.panel.datasource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.Test;
 import com.omni.panel.service.DataSourceHealthService;
 

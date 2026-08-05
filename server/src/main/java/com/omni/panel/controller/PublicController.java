@@ -9,6 +9,7 @@ import com.omni.panel.common.BusinessException;
 import com.omni.panel.entity.PublicLinkEntity;
 import com.omni.panel.service.DashboardRenderService;
 import com.omni.panel.service.PublicLinkService;
+import com.omni.panel.service.SubscriptionPrintTokenService;
 
 /**
  * 提供无需登录的公开仪表盘与图表只读访问。
@@ -18,10 +19,13 @@ import com.omni.panel.service.PublicLinkService;
 public class PublicController {
     private final PublicLinkService publicLinkService;
     private final DashboardRenderService renderService;
+    private final SubscriptionPrintTokenService printTokenService;
 
-    public PublicController(PublicLinkService publicLinkService, DashboardRenderService renderService) {
+    public PublicController(PublicLinkService publicLinkService, DashboardRenderService renderService,
+                            SubscriptionPrintTokenService printTokenService) {
         this.publicLinkService = publicLinkService;
         this.renderService = renderService;
+        this.printTokenService = printTokenService;
     }
 
     /**
@@ -37,6 +41,18 @@ public class PublicController {
             throw new BusinessException(404, "公开链接不存在或已失效");
         }
         return ApiResponse.ok(renderService.renderAsOwner(link.getResourceId()));
+    }
+
+    /**
+     * 通过订阅打印令牌渲染仪表盘（供无头浏览器导出 PDF）。
+     *
+     * @param token 打印令牌
+     * @return 脱敏渲染结果
+     */
+    @GetMapping("/print/dashboards/{token}")
+    public ApiResponse<DashboardRenderService.RenderedDashboard> printDashboard(@PathVariable String token) {
+        long dashboardId = printTokenService.parseDashboardId(token);
+        return ApiResponse.ok(renderService.renderAsOwner(dashboardId));
     }
 
     /**

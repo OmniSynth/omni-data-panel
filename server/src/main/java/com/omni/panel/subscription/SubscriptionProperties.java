@@ -5,16 +5,16 @@ import org.springframework.stereotype.Component;
 
 /**
  * 邮件订阅配置。
- * <p>
- * {@code from} 由环境变量 {@code MAIL_FROM} 提供，{@code frontendUrl} 由
- * {@code FRONTEND_URL} 提供并默认指向本地前端。只有同时配置发件人和
- * {@code spring.mail.host} 时邮件发送能力才可用。
  */
 @Component
 @ConfigurationProperties(prefix = "omni.subscription")
 public class SubscriptionProperties {
     private String from;
     private String frontendUrl;
+    /** 是否在订阅邮件中附带仪表盘 PDF */
+    private boolean pdfEnabled = true;
+    /** 无头浏览器等待打印页就绪的超时（毫秒） */
+    private long pdfTimeoutMs = 90_000L;
 
     public String getFrom() {
         return from;
@@ -30,5 +30,21 @@ public class SubscriptionProperties {
 
     public void setFrontendUrl(String frontendUrl) {
         this.frontendUrl = frontendUrl;
+    }
+
+    public boolean isPdfEnabled() {
+        return pdfEnabled;
+    }
+
+    public void setPdfEnabled(boolean pdfEnabled) {
+        this.pdfEnabled = pdfEnabled;
+    }
+
+    public long getPdfTimeoutMs() {
+        return pdfTimeoutMs;
+    }
+
+    public void setPdfTimeoutMs(long pdfTimeoutMs) {
+        this.pdfTimeoutMs = pdfTimeoutMs;
     }
 }

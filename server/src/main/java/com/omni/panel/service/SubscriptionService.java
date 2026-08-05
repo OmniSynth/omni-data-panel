@@ -1,6 +1,9 @@
 package com.omni.panel.service;
 
 import java.util.List;
+
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import org.quartz.CronExpression;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
@@ -44,31 +47,33 @@ public class SubscriptionService {
      *
      * @return 当前用户可管理的订阅列表
      */
-    public List<SubscriptionEntity> list() {
+    public List<SubscriptionView> list() {
         AuthenticatedUser user = AuthenticatedUser.current();
         return mapper.selectList(null).stream()
-                .filter(item -> user.admin() || item.getOwnerId() == user.id()).toList();
+                .filter(item -> user.admin() || item.getOwnerId() == user.id())
+                .map(this::toView)
+                .toList();
     }
 
     /**
      * 创建或更新订阅，并用最新配置替换对应 Quartz 作业。
-     * 保存前要求当前用户可读目标仪表盘，并校验 Cron 与收件人；禁用订阅会保留数据库记录但移除 Quartz 作业。
+     * 保存前要求当前用户可读目标仪表盘，并校验 Cron 与收件用户；禁用订阅会保留数据库记录但移除 Quartz 作业。
      *
-     * @param id          订阅标识，为 {@code null} 时创建订阅
-     * @param name        订阅名称
-     * @param dashboardId 仪表盘标识
-     * @param cron        Quartz Cron 表达式
-     * @param recipients  收件人地址文本
-     * @param enabled     是否启用
-     * @return 已持久化的订阅
+     * @param id                订阅标识，为 {@code null} 时创建订阅
+     * @param name              订阅名称
+     * @param dashboardId       仪表盘标识
+     * @param cron              Quartz Cron 表达式
+     * @param recipientUserIds  收件用户标识
+     * @param enabled           是否启用
+     * @return 已持久化的订阅视图
      */
-    public SubscriptionEntity save(Long id, String name, long dashboardId, String cron,
-                                   String recipients, boolean enabled) {
+    public SubscriptionView save(Long id, String name, long dashboardId, String cron,
+                                 List<Long> recipientUserIds, boolean enabled) {
         permissionService.require("DASHBOARD", dashboardId, dashboardOwner(dashboardId), "READ");
         if (!CronExpression.isValidExpression(cron)) {
             throw new BusinessException("Cron 表达式不合法");
         }
-        deliveryService.parseRecipients(recipients);
+        String recipients = deliveryService.encodeRecipientUserIds(recipientUserIds);
         SubscriptionEntity entity = id == null ? new SubscriptionEntity() : require(id);
         entity.setName(name);
         entity.setDashboardId(dashboardId);
@@ -82,7 +87,52 @@ public class SubscriptionService {
             mapper.updateById(entity);
         }
         register(entity);
-        return entity;
+        return toView(entity);
+    }
+
+    /**
+     * 立即执行一次订阅邮件发送（不要求订阅处于启用状态）。
+     *
+     * @param id 订阅标识
+     */
+    public void runNow(long id) {
+        require(id);
+        deliveryService.send(id, false);
+    }
+
+    private SubscriptionView toView(SubscriptionEntity entity) {
+        List<Long> recipientUserIds;
+        String recipientsLabel;
+        try {
+            recipientUserIds = deliveryService.parseRecipientUserIds(entity.getRecipients());
+            recipientsLabel = deliveryService.recipientsLabel(recipientUserIds);
+        } catch (BusinessException exception) {
+            // 兼容尚未迁移的历史自由文本邮箱，避免列表接口整体失败
+            recipientUserIds = List.of();
+            recipientsLabel = entity.getRecipients() == null ? "" : entity.getRecipients();
+        }
+        return new SubscriptionView(
+                entity.getId(),
+                entity.getName(),
+                entity.getDashboardId(),
+                entity.getCronExpression(),
+                recipientUserIds,
+                recipientsLabel,
+                entity.getEnabled(),
+                entity.getOwnerId());
+    }
+
+    /**
+     * 订阅对外视图。
+     */
+    public record SubscriptionView(@JsonSerialize(using = ToStringSerializer.class) long id,
+                                   String name,
+                                   @JsonSerialize(using = ToStringSerializer.class) long dashboardId,
+                                   String cronExpression,
+                                   @JsonSerialize(contentUsing = ToStringSerializer.class) List<Long> recipientUserIds,
+                                   String recipientsLabel,
+                                   Boolean enabled,
+                                   @JsonSerialize(using = ToStringSerializer.class) long ownerId) {
     }
 
     /**

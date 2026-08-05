@@ -7,11 +7,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { chartApi, collectionApi, dashboardApi, datasetApi, metricApi } from '@/api'
 import { formatDateTime } from '@/display'
 import { resourcePath, resourceTypeLabel } from '@/nav'
+import { useUserStore } from '@/stores/user'
 import type { Collection, CollectionItem, Id, ResourceType } from '@/types'
+import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 const collection = ref<Collection>()
 const items = ref<CollectionItem[]>([])
@@ -19,6 +22,7 @@ const tree = ref<Collection[]>([])
 const moveVisible = ref(false)
 const movingItem = ref<CollectionItem>()
 const targetCollectionId = ref<Id>()
+const permissionVisible = ref(false)
 
 const collectionId = computed(() => String(route.params.id))
 
@@ -32,6 +36,10 @@ function flatten(nodes: Collection[], acc: Collection[] = []): Collection[] {
 
 const flatCollections = computed(() => flatten(tree.value))
 const isPersonalRoot = computed(() => collection.value?.personalOwnerId != null)
+const canShare = computed(() => {
+  if (!collection.value || isPersonalRoot.value) return false
+  return userStore.isAdmin || String(collection.value.ownerId) === String(userStore.user?.id)
+})
 
 function findCollection(nodes: Collection[], id: string): Collection | undefined {
   for (const node of nodes) {
@@ -155,6 +163,12 @@ onMounted(load)
         <p class="muted">{{ collection?.description || t('collection.subtitle') }}</p>
       </div>
       <div class="toolbar" style="margin:0">
+        <el-button
+          v-if="canShare"
+          type="primary"
+          plain
+          @click="permissionVisible = true"
+        >{{ t('collection.roleShare') }}</el-button>
         <el-button @click="rename">{{ t('collection.rename') }}</el-button>
         <el-button
           v-if="!isPersonalRoot"
@@ -210,5 +224,14 @@ onMounted(load)
         <el-button type="primary" @click="submitMove">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
+
+    <RoleResourcePermissionPanel
+      v-model="permissionVisible"
+      resource-type="COLLECTION"
+      :resource-id="collection?.id"
+      :allowed-permissions="['READ', 'WRITE']"
+      :title="`${t('collection.roleShareTitle')}${collection?.name || ''}`"
+      :hint="t('roleGrant.collectionHint')"
+    />
   </div>
 </template>

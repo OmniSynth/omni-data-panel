@@ -23,7 +23,10 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/auth/login", "/actuator/health").permitAll()
+                        .requestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/setup-password",
+                                "/actuator/health").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/embed/**").permitAll()
                         .anyRequest().authenticated())

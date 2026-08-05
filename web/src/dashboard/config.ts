@@ -2,27 +2,112 @@ import type {
   CardClickAction,
   CardParameterBinding,
   DashboardConfig,
+  DashboardLayout,
   DashboardParameter,
+  DashboardTab,
 } from '@/types'
 import { displayLabel } from '@/display'
 
 export function parseDashboardConfig(configJson?: string): DashboardConfig {
   try {
     const parsed = JSON.parse(configJson || '{}') as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { parameters: [] }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { parameters: [], tabs: [] }
+    }
     const config = parsed as DashboardConfig
     return {
       parameters: Array.isArray(config.parameters) ? config.parameters : [],
+      tabs: normalizeTabs(config.tabs),
     }
   } catch {
-    return { parameters: [] }
+    return { parameters: [], tabs: [] }
   }
 }
 
 export function serializeDashboardConfig(config: DashboardConfig): string {
-  return JSON.stringify({
+  const tabs = normalizeTabs(config.tabs)
+  const payload: DashboardConfig = {
     parameters: config.parameters || [],
-  })
+  }
+  if (tabs.length) payload.tabs = tabs
+  return JSON.stringify(payload)
+}
+
+/** 规范化 tabs：过滤非法项并去重 id。 */
+export function normalizeTabs(tabs?: DashboardTab[] | null): DashboardTab[] {
+  if (!Array.isArray(tabs)) return []
+  const seen = new Set<string>()
+  const result: DashboardTab[] = []
+  for (const item of tabs) {
+    if (!item || typeof item !== 'object') continue
+    const id = typeof item.id === 'string' ? item.id.trim() : ''
+    const name = typeof item.name === 'string' ? item.name.trim() : ''
+    if (!id || !name || seen.has(id)) continue
+    seen.add(id)
+    result.push({ id, name })
+  }
+  return result
+}
+
+export function createDashboardTab(name: string, existing: DashboardTab[] = []): DashboardTab {
+  let index = existing.length + 1
+  let id = `tab_${index}`
+  while (existing.some((item) => item.id === id)) {
+    index += 1
+    id = `tab_${index}`
+  }
+  return { id, name: name.trim() || `Tab ${index}` }
+}
+
+export function parseLayoutJson(layoutJson?: string): DashboardLayout {
+  const fallback: DashboardLayout = { x: 0, y: 0, w: 6, h: 4 }
+  try {
+    const parsed = JSON.parse(layoutJson || '{}') as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return fallback
+    const layout = parsed as DashboardLayout
+    if (![layout.x, layout.y, layout.w, layout.h].every(Number.isFinite)
+      || layout.x < 0 || layout.y < 0 || layout.w <= 0 || layout.h <= 0) {
+      return { ...fallback, tabId: typeof layout.tabId === 'string' ? layout.tabId : undefined }
+    }
+    return {
+      x: Math.floor(layout.x),
+      y: Math.floor(layout.y),
+      w: Math.floor(layout.w),
+      h: Math.floor(layout.h),
+      tabId: typeof layout.tabId === 'string' && layout.tabId.trim() ? layout.tabId.trim() : undefined,
+    }
+  } catch {
+    return fallback
+  }
+}
+
+export function stringifyLayout(layout: DashboardLayout): string {
+  const payload: DashboardLayout = {
+    x: layout.x,
+    y: layout.y,
+    w: layout.w,
+    h: layout.h,
+  }
+  if (layout.tabId) payload.tabId = layout.tabId
+  return JSON.stringify(payload)
+}
+
+/** 卡片归属的 tabId；无 tabs 时返回 undefined；无匹配时归入首个 tab。 */
+export function resolveCardTabId(layoutJson: string | undefined, tabs: DashboardTab[]): string | undefined {
+  if (!tabs.length) return undefined
+  const tabId = parseLayoutJson(layoutJson).tabId
+  if (tabId && tabs.some((item) => item.id === tabId)) return tabId
+  return tabs[0]?.id
+}
+
+export function filterCardsByTab<T extends { layoutJson: string }>(
+  cards: T[],
+  tabId: string | undefined,
+  tabs: DashboardTab[],
+): T[] {
+  if (!tabs.length) return cards
+  const active = tabId && tabs.some((item) => item.id === tabId) ? tabId : tabs[0]?.id
+  return cards.filter((card) => resolveCardTabId(card.layoutJson, tabs) === active)
 }
 
 export function defaultParameterValues(parameters: DashboardParameter[]): Record<string, unknown> {

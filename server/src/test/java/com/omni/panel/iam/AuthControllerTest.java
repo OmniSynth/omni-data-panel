@@ -6,7 +6,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
 import java.util.List;
+
 import jakarta.validation.Validation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -19,13 +21,15 @@ import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.UserMapper;
 import com.omni.panel.service.JwtService;
 import com.omni.panel.service.LoginAuditService;
+import com.omni.panel.service.UserService;
 
 class AuthControllerTest {
     private final UserMapper userMapper = mock(UserMapper.class);
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder =
             mock(org.springframework.security.crypto.password.PasswordEncoder.class);
     private final AuthController controller = new AuthController(
-            userMapper, passwordEncoder, mock(JwtService.class), mock(LoginAuditService.class));
+            userMapper, passwordEncoder, mock(JwtService.class), mock(LoginAuditService.class),
+            mock(UserService.class));
 
     @AfterEach
     void 清理认证上下文() {

@@ -154,7 +154,16 @@ MinIO：
 - `MAIL_SMTP_AUTH`：是否启用 SMTP 认证
 - `MAIL_STARTTLS`：是否启用 STARTTLS
 - `MAIL_FROM`：订阅邮件发件人
-- `FRONTEND_URL`：邮件中仪表盘链接使用的前端地址
+- `FRONTEND_URL`：前端地址（邮件链接 + 无头浏览器打开打印页生成 PDF，后端必须能访问）
+- `SUBSCRIPTION_PDF_ENABLED`：是否附带仪表盘 PDF（默认 `true`）；设为 `false` 时仅发送链接
+- `SUBSCRIPTION_PDF_TIMEOUT_MS`：PDF 渲染超时毫秒（默认 `90000`）
+
+订阅默认会用 Chromium 打开 `{FRONTEND_URL}/print/dashboard/{token}` 导出 PDF 并作为附件发送。本地首次需安装浏览器：
+
+```bash
+cd server
+./mvnw.cmd exec:java -e "-Dexec.mainClass=com.microsoft.playwright.CLI" "-Dexec.args=install chromium"
+```
 
 邮件变量不使用 Compose 强制校验。未配置邮件服务时订阅仍可创建和保存，但任务执行发送时会明确失败。
 

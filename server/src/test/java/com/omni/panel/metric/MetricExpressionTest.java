@@ -2,6 +2,7 @@ package com.omni.panel.metric;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import org.junit.jupiter.api.Test;
 import com.omni.panel.common.BusinessException;
 

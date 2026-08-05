@@ -1,6 +1,7 @@
 package com.omni.panel.iam;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -19,7 +20,10 @@ class MethodSecurityContractTest {
         assertThat(ScheduleController.class.getAnnotation(PreAuthorize.class).value()).contains("schedule:manage");
         assertThat(DataSourceController.class.getMethod("create", DataSourceController.CreateRequest.class)
                 .getAnnotation(PreAuthorize.class).value()).contains("ADMIN");
-        assertThat(RoleController.class.getAnnotation(PreAuthorize.class).value()).contains("ADMIN");
+        assertThat(RoleController.class.getMethod("list")
+                .getAnnotation(PreAuthorize.class).value()).contains("ADMIN");
+        assertThat(RoleController.class.getMethod("assignable")
+                .getAnnotation(PreAuthorize.class).value()).contains("Authenticated");
         assertThat(ExportController.class.getMethod("submit", ExportController.ExportRequest.class)
                 .getAnnotation(PreAuthorize.class).value()).contains("export:execute");
     }

@@ -1,6 +1,7 @@
 package com.omni.panel.service;
 
 import java.util.ArrayList;
+
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -32,6 +33,9 @@ public class UserAuthenticationService {
         SysUser user = userMapper.selectById(userId);
         if (user == null || !Boolean.TRUE.equals(user.getEnabled())) {
             throw new BusinessException(401, "用户不存在或已禁用");
+        }
+        if (user.getActivated() != null && !user.getActivated()) {
+            throw new BusinessException(401, "账号未激活");
         }
         var roles = userMapper.findRoles(userId);
         var permissions = userMapper.findPermissions(userId);

@@ -6,11 +6,11 @@ import jakarta.servlet.http.HttpServletRequest;
  * 从 HTTP 请求提取客户端 IP 与 User-Agent。
  */
 public final class ClientRequestInfo {
-/**
- * 工具类，禁止实例化。
- */
-private ClientRequestInfo() {
-}
+    /**
+     * 工具类，禁止实例化。
+     */
+    private ClientRequestInfo() {
+    }
 
     /**
      * @param request 当前 HTTP 请求，可为 null

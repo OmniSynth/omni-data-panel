@@ -3,6 +3,7 @@ package com.omni.panel.datasource.dialect;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
 import org.springframework.stereotype.Component;
 import com.omni.panel.common.BusinessException;
 

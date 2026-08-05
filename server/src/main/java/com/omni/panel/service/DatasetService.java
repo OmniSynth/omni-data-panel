@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -183,7 +184,7 @@ public class DatasetService {
     private static boolean isNumericJdbcType(int jdbcType, String typeName) {
         return switch (jdbcType) {
             case Types.TINYINT, Types.SMALLINT, Types.INTEGER, Types.BIGINT,
-                 Types.FLOAT, Types.REAL, Types.DOUBLE, Types.NUMERIC, Types.DECIMAL -> true;
+                    Types.FLOAT, Types.REAL, Types.DOUBLE, Types.NUMERIC, Types.DECIMAL -> true;
             default -> {
                 String normalized = typeName == null ? "" : typeName.toUpperCase(Locale.ROOT);
                 yield normalized.contains("INT")
@@ -200,10 +201,10 @@ public class DatasetService {
     /**
      * SQL 推断出的模型字段。
      *
-     * @param name       语义名称（默认等于列名）
-     * @param columnName SQL 结果列名
-     * @param fieldType  DIMENSION 或 METRIC
-     * @param aggregation 指标默认聚合，维度为 null
+     * @param name         语义名称（默认等于列名）
+     * @param columnName   SQL 结果列名
+     * @param fieldType    DIMENSION 或 METRIC
+     * @param aggregation  指标默认聚合，维度为 null
      * @param jdbcTypeName 驱动类型名（展示用）
      */
     public record InferredField(String name, String columnName, String fieldType,

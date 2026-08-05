@@ -3,7 +3,9 @@ package com.omni.panel.query;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
 import java.util.List;
+
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
 import com.omni.panel.datasource.DataSourceRegistry;

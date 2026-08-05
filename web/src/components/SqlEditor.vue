@@ -168,6 +168,26 @@ function formatDocument(): boolean {
   }
 }
 
+/** 在光标处插入文本；两侧按需补空格，并聚焦编辑器。 */
+function insertText(text: string): boolean {
+  if (!editor || !text) return false
+  const { from, to } = editor.state.selection.main
+  const doc = editor.state.doc
+  const before = from > 0 ? doc.sliceString(from - 1, from) : ''
+  const after = to < doc.length ? doc.sliceString(to, to + 1) : ''
+  const needsLeading = !!before && !/\s/.test(before) && !/[.(,=[+]/.test(before)
+  const needsTrailing = !!after && !/\s/.test(after) && !/[.),;]/.test(after)
+  const insert = `${needsLeading ? ' ' : ''}${text}${needsTrailing ? ' ' : ''}`
+  const cursor = from + insert.length
+  editor.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: cursor },
+    userEvent: 'input.type',
+  })
+  editor.focus()
+  return true
+}
+
 onMounted(() => {
   editor = new EditorView({
     parent: host.value,
@@ -227,7 +247,7 @@ watch(() => [props.dialect, props.jdbcUrl, props.schema, props.defaultSchema] as
 
 onBeforeUnmount(() => editor?.destroy())
 
-defineExpose({ format: formatDocument })
+defineExpose({ format: formatDocument, insertText })
 </script>
 
 <template><div ref="host" class="sql-editor" /></template>

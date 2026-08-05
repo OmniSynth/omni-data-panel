@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { confirmBox } from '@/i18n/dialog'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { collectionApi, datasetApi, metricApi } from '@/api'
 import { displayLabel } from '@/display'
+import { requiredRule, validateForm } from '@/form/rules'
 import { useUserStore } from '@/stores/user'
 import type { Collection, Dataset, DatasetField, Id, Metric } from '@/types'
 
@@ -18,11 +20,19 @@ const models = ref<Dataset[]>([])
 const collections = ref<Collection[]>([])
 const visible = ref(false)
 const editingId = ref<Id>()
-const form = reactive<Partial<Metric>>({
-  name: '', description: '', modelId: '', expressionJson: '{"field":""}', aggregation: 'SUM', collectionId: '',
+const formRef = ref<FormInstance>()
+const form = reactive<Partial<Metric> & { field?: string }>({
+  name: '', description: '', modelId: '', expressionJson: '{"field":""}', aggregation: 'SUM', collectionId: '', field: '',
 })
 
 const aggregationOptions = ['SUM', 'AVG', 'COUNT', 'MAX', 'MIN'] as const
+
+const formRules = computed<FormRules>(() => ({
+  name: [requiredRule(t('common.pleaseEnter', { field: t('common.name') }))],
+  modelId: [requiredRule(t('common.pleaseSelect', { field: t('metric.model') }), 'change')],
+  field: [requiredRule(t('common.pleaseSelect', { field: t('metric.refField') }), 'change')],
+  aggregation: [requiredRule(t('common.pleaseSelect', { field: t('metric.aggregation') }), 'change')],
+}))
 
 const modelFields = computed(() => {
   const model = models.value.find((item) => String(item.id) === String(form.modelId))
@@ -30,15 +40,9 @@ const modelFields = computed(() => {
 })
 
 const expressionField = computed({
-  get: () => {
-    try {
-      const parsed = JSON.parse(form.expressionJson || '{}') as { field?: string }
-      return parsed.field || ''
-    } catch {
-      return ''
-    }
-  },
+  get: () => form.field || '',
   set: (field: string) => {
+    form.field = field || ''
     form.expressionJson = JSON.stringify({ field: field || '' })
   },
 })
@@ -70,10 +74,21 @@ async function load() {
 }
 
 function open(row?: Metric) {
-  Object.assign(form, row ? JSON.parse(JSON.stringify(row)) : {
-    name: '', description: '', modelId: '', expressionJson: '{"field":""}', aggregation: 'SUM',
-    collectionId: collections.value[0]?.id || '',
-  })
+  if (row) {
+    const copy = JSON.parse(JSON.stringify(row)) as Metric
+    let field = ''
+    try {
+      field = (JSON.parse(copy.expressionJson || '{}') as { field?: string }).field || ''
+    } catch {
+      field = ''
+    }
+    Object.assign(form, { ...copy, field })
+  } else {
+    Object.assign(form, {
+      name: '', description: '', modelId: '', expressionJson: '{"field":""}', aggregation: 'SUM',
+      collectionId: collections.value[0]?.id || '', field: '',
+    })
+  }
   editingId.value = row?.id
   visible.value = true
 }
@@ -85,11 +100,18 @@ watch(() => form.modelId, () => {
 })
 
 async function save() {
-  if (!form.name || !form.modelId || !form.aggregation) return ElMessage.warning(t('metric.needComplete'))
-  if (!expressionField.value) return ElMessage.warning(t('metric.needField'))
+  if (!(await validateForm(formRef.value))) return
+  const payload = {
+    name: form.name,
+    description: form.description,
+    modelId: form.modelId,
+    expressionJson: JSON.stringify({ field: form.field || '' }),
+    aggregation: form.aggregation,
+    collectionId: form.collectionId,
+  }
   try {
-    if (editingId.value !== undefined) await metricApi.update(editingId.value, form)
-    else await metricApi.create(form)
+    if (editingId.value !== undefined) await metricApi.update(editingId.value, payload)
+    else await metricApi.create(payload)
     visible.value = false
     ElMessage.success(t('metric.saved'))
     await load()
@@ -137,16 +159,16 @@ onMounted(load)
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="visible" :title="editingId === undefined ? t('metric.createTitle') : t('metric.editTitle')" width="560px">
-      <el-form label-width="90px">
-        <el-form-item :label="t('common.name')"><el-input v-model="form.name" /></el-form-item>
+    <el-dialog v-model="visible" :title="editingId === undefined ? t('metric.createTitle') : t('metric.editTitle')" width="560px" destroy-on-close>
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px">
+        <el-form-item :label="t('common.name')" prop="name"><el-input v-model="form.name" /></el-form-item>
         <el-form-item :label="t('common.description')"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item :label="t('metric.model')">
+        <el-form-item :label="t('metric.model')" prop="modelId">
           <el-select v-model="form.modelId" class="full-width" filterable :placeholder="t('metric.selectModel')">
             <el-option v-for="item in models" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('metric.refField')">
+        <el-form-item :label="t('metric.refField')" prop="field">
           <el-select v-model="expressionField" class="full-width" filterable :placeholder="t('metric.selectModelField')">
             <el-option
               v-for="field in modelFields"
@@ -156,7 +178,7 @@ onMounted(load)
             />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('metric.aggregation')">
+        <el-form-item :label="t('metric.aggregation')" prop="aggregation">
           <el-select v-model="form.aggregation" class="full-width" :placeholder="t('metric.selectAgg')">
             <el-option v-for="agg in aggregationOptions" :key="agg" :label="displayLabel(agg)" :value="agg" />
           </el-select>

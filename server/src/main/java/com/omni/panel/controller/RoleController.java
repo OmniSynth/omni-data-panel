@@ -1,6 +1,7 @@
 package com.omni.panel.controller;
 
 import java.util.List;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,11 +19,10 @@ import com.omni.panel.mapper.RoleMapper;
 import com.omni.panel.service.RoleService;
 
 /**
- * 提供仅管理员可调用的角色及功能权限目录接口。
+ * 提供角色及功能权限目录接口；写操作仅管理员，可授权角色目录对已登录用户开放。
  */
 @RestController
 @RequestMapping("/api")
-@PreAuthorize("hasRole('ADMIN')")
 public class RoleController {
     private final RoleService service;
 
@@ -41,8 +41,20 @@ public class RoleController {
      * @return 角色列表
      */
     @GetMapping("/roles")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<RoleService.RoleView>> list() {
         return ApiResponse.ok(service.list());
+    }
+
+    /**
+     * 查询可用于资源授权的非管理员角色。
+     *
+     * @return 可授权角色列表
+     */
+    @GetMapping("/roles/assignable")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<List<RoleService.AssignableRoleView>> assignable() {
+        return ApiResponse.ok(service.listAssignable());
     }
 
     /**
@@ -51,6 +63,7 @@ public class RoleController {
      * @return 权限目录
      */
     @GetMapping("/permissions")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<RoleMapper.PermissionView>> permissions() {
         return ApiResponse.ok(service.permissions());
     }
@@ -62,6 +75,7 @@ public class RoleController {
      * @return 新建角色
      */
     @PostMapping("/roles")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<RoleService.RoleView> create(@Valid @RequestBody CreateRequest request) {
         return ApiResponse.ok(service.create(
                 request.code(), request.name(), request.description(), request.enabled()));
@@ -75,6 +89,7 @@ public class RoleController {
      * @return 更新后的角色
      */
     @PutMapping("/roles/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<RoleService.RoleView> update(@PathVariable long id,
                                                     @Valid @RequestBody UpdateRequest request) {
         return ApiResponse.ok(service.update(id, request.name(), request.description(), request.enabled()));
@@ -87,6 +102,7 @@ public class RoleController {
      * @return 空成功响应
      */
     @DeleteMapping("/roles/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> delete(@PathVariable long id) {
         service.delete(id);
         return ApiResponse.ok();
@@ -100,6 +116,7 @@ public class RoleController {
      * @return 更新后的角色
      */
     @PutMapping("/roles/{id}/permissions")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<RoleService.RoleView> replacePermissions(
             @PathVariable long id, @Valid @RequestBody PermissionRequest request) {
         return ApiResponse.ok(service.replacePermissions(id, request.permissionCodes()));

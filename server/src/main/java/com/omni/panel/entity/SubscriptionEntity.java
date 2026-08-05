@@ -30,7 +30,7 @@ public class SubscriptionEntity {
      */
     private String cronExpression;
     /**
-     * 收件人列表
+     * 收件用户标识列表，逗号分隔；发送时解析为用户邮箱
      */
     private String recipients;
     /**

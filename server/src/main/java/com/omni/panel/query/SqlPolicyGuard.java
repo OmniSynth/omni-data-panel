@@ -3,6 +3,7 @@ package com.omni.panel.query;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.select.Select;

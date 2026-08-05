@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { confirmBox } from '@/i18n/dialog'
 import { useRoute, useRouter } from 'vue-router'
 import { collectionApi, dataSourceApi, datasetApi } from '@/api'
 import { displayLabel } from '@/display'
+import { requiredRule, validateForm } from '@/form/rules'
 import { useUserStore } from '@/stores/user'
 import type { Collection, DataSource, Dataset, DatasetField, Id, MetadataColumn, MetadataTable, ModelType } from '@/types'
 import SqlEditor from '@/components/SqlEditor.vue'
+import MetadataBrowsePanel from '@/components/MetadataBrowsePanel.vue'
 import DatasetDataPolicyPanel from '@/components/DatasetDataPolicyPanel.vue'
+import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
 import {
   countCompletionTables,
   inferDefaultSchema,
@@ -33,11 +37,14 @@ const editorSchema = ref<EditorSqlSchema>({})
 const completionPayload = ref<CompletionSchemaPayload | null>(null)
 const schemaLoading = ref(false)
 const inferringFields = ref(false)
-const sqlEditorRef = ref<{ format: () => boolean }>()
+const sqlEditorRef = ref<{ format: () => boolean; insertText: (text: string) => boolean }>()
 const visible = ref(false)
 const editingId = ref<Id>()
+const formRef = ref<FormInstance>()
 const policyVisible = ref(false)
 const policyDataset = ref<Dataset>()
+const permissionVisible = ref(false)
+const permissionDataset = ref<Dataset>()
 const form = reactive<Dataset>({
   id: '', name: '', dataSourceId: '', schemaName: '', tableName: '', fields: [],
   description: '', collectionId: '', modelType: 'TABLE', definitionSql: '',
@@ -45,12 +52,32 @@ const form = reactive<Dataset>({
 const currentSource = computed(() => sources.value.find((item) => String(item.id) === String(form.dataSourceId)))
 const currentDialect = computed(() => resolveSqlDialect(currentSource.value?.dialect, currentSource.value?.jdbcUrl).id)
 const schemaTableCount = computed(() => countCompletionTables(completionPayload.value))
-const editorDefaultSchema = computed(() =>
-  inferDefaultSchema(completionPayload.value, currentSource.value?.defaultDatabase || form.schemaName))
+const dialogWidth = computed(() => (modelType.value === 'SQL' ? 'min(1400px, 94vw)' : '960px'))
+const dialogClass = computed(() =>
+  modelType.value === 'SQL' ? 'model-dialog is-sql' : 'model-dialog')
 const modelType = computed({
-  get: () => (form.modelType || 'TABLE') as ModelType,
+  get: () => form.modelType || 'TABLE',
   set: (value: ModelType) => { form.modelType = value },
 })
+const formRules = computed<FormRules>(() => {
+  const rules: FormRules = {
+    name: [requiredRule(t('common.pleaseEnter', { field: t('common.name') }))],
+    dataSourceId: [requiredRule(t('common.pleaseSelect', { field: t('dataSource.title') }), 'change')],
+  }
+  if (modelType.value === 'TABLE') {
+    rules.schemaName = [requiredRule(t('common.pleaseSelect', { field: t('dataset.schema') }), 'change')]
+    rules.tableName = [requiredRule(t('common.pleaseSelect', { field: t('dataset.dataTable') }), 'change')]
+  }
+  return rules
+})
+const editorDefaultSchema = computed(() =>
+  inferDefaultSchema(completionPayload.value, currentSource.value?.defaultDatabase || form.schemaName))
+const browseDefaultSchema = computed(() =>
+  currentSource.value?.defaultDatabase || editorDefaultSchema.value || undefined)
+
+function insertSqlText(text: string) {
+  sqlEditorRef.value?.insertText(text)
+}
 
 async function loadCompletionSchema(id?: Id) {
   if (id === undefined || id === null || id === '') {
@@ -128,13 +155,22 @@ async function tableChanged() {
   try {
     columns.value = await dataSourceApi.columns(form.dataSourceId, form.schemaName, form.tableName)
     form.fields = columns.value.map((column): DatasetField => ({
-      name: column.columnName,
+      name: column.comment?.trim() || column.columnName,
       columnName: column.columnName,
       fieldType: 'DIMENSION',
     }))
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('dataset.fieldsFailed'))
   }
+}
+
+function columnComment(columnName: string) {
+  return columns.value.find((item) => item.columnName === columnName)?.comment?.trim() || ''
+}
+
+function tableOptionLabel(table: MetadataTable) {
+  const comment = table.comment?.trim()
+  return comment ? `${table.tableName}（${comment}）` : table.tableName
 }
 
 function onModelTypeChange(value: ModelType) {
@@ -234,8 +270,8 @@ async function open(row?: Dataset) {
 }
 
 async function save() {
-  if (!form.name || !form.dataSourceId) return ElMessage.warning(t('dataset.needNameSource'))
-  if (modelType.value === 'TABLE' && (!form.schemaName || !form.tableName || !form.fields.length)) {
+  if (!(await validateForm(formRef.value))) return
+  if (modelType.value === 'TABLE' && !form.fields.length) {
     return ElMessage.warning(t('dataset.needTableConfig'))
   }
   if (modelType.value === 'SQL') {
@@ -278,9 +314,18 @@ function canManagePolicy(row: Dataset) {
   return userStore.isAdmin || String(row.ownerId) === String(userStore.user?.id)
 }
 
+function canShare(row: Dataset) {
+  return userStore.isAdmin || String(row.ownerId) === String(userStore.user?.id)
+}
+
 function openPolicy(row: Dataset) {
   policyDataset.value = row
   policyVisible.value = true
+}
+
+function authorize(row: Dataset) {
+  permissionDataset.value = row
+  permissionVisible.value = true
 }
 
 watch(() => route.params.id, load)
@@ -307,11 +352,14 @@ onMounted(load)
       <el-table-column :label="t('common.collection')" width="160">
         <template #default="{ row }">{{ collectionName(row.collectionId) }}</template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="240">
+      <el-table-column :label="t('common.actions')" width="300">
         <template #default="{ row }">
           <el-button link @click="open(row)">{{ t('common.edit') }}</el-button>
           <el-button v-if="canManagePolicy(row)" link type="primary" @click="openPolicy(row)">
             {{ t('datasetPolicy.action') }}
+          </el-button>
+          <el-button v-if="canShare(row)" link type="primary" @click="authorize(row)">
+            {{ t('dataset.roleShare') }}
           </el-button>
           <el-button link type="danger" @click="remove(row.id)">{{ t('common.delete') }}</el-button>
         </template>
@@ -319,57 +367,73 @@ onMounted(load)
     </el-table>
 
     <DatasetDataPolicyPanel v-model="policyVisible" :dataset="policyDataset" />
+    <RoleResourcePermissionPanel
+      v-model="permissionVisible"
+      resource-type="DATASET"
+      :resource-id="permissionDataset?.id"
+      :allowed-permissions="['READ', 'WRITE']"
+      :title="`${t('dataset.roleShareTitle')}${permissionDataset?.name || ''}`"
+      :hint="t('roleGrant.resourceHint')"
+    />
 
     <el-dialog
       v-model="visible"
       :title="editingId === undefined ? t('dataset.createTitle') : t('dataset.editTitle')"
-      width="960px"
-      class="model-dialog"
+      :width="dialogWidth"
+      :class="dialogClass"
       destroy-on-close
+      align-center
     >
-      <el-form label-width="90px">
-        <el-form-item :label="t('common.name')"><el-input v-model="form.name" :placeholder="t('dataset.modelName')" /></el-form-item>
-        <el-form-item :label="t('common.description')">
-          <el-input v-model="form.description" type="textarea" :rows="2" :placeholder="t('dataset.optionalDesc')" />
-        </el-form-item>
-        <el-form-item :label="t('common.collection')">
-          <el-select v-model="form.collectionId" class="full-width" clearable>
-            <el-option v-for="item in collections" :key="item.id" :label="item.name" :value="item.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('common.type')">
-          <el-radio-group v-model="modelType" @change="onModelTypeChange">
-            <el-radio-button value="TABLE">{{ t('dataset.tableModel') }}</el-radio-button>
-            <el-radio-button value="SQL">{{ t('dataset.sqlModel') }}</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item :label="t('dataSource.title')">
-          <el-select v-model="form.dataSourceId" class="full-width" filterable :placeholder="t('dataset.selectSource')" @change="sourceChanged">
-            <el-option
-              v-for="item in sources"
-              :key="item.id"
-              :label="item.name"
-              :value="item.id"
-            >
-              <span>{{ item.name }}</span>
-              <span class="option-meta">{{ item.dialect || 'MYSQL' }}</span>
-            </el-option>
-          </el-select>
-        </el-form-item>
+      <div class="dialog-body" :class="{ 'sql-split': modelType === 'SQL' }">
+        <div class="dialog-main">
+          <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px">
+            <el-form-item :label="t('common.name')" prop="name"><el-input v-model="form.name" :placeholder="t('dataset.modelName')" /></el-form-item>
+            <el-form-item :label="t('common.description')">
+              <el-input v-model="form.description" type="textarea" :rows="2" :placeholder="t('dataset.optionalDesc')" />
+            </el-form-item>
+            <el-form-item :label="t('common.collection')">
+              <el-select v-model="form.collectionId" class="full-width" clearable>
+                <el-option v-for="item in collections" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('common.type')">
+              <el-radio-group v-model="modelType" @change="onModelTypeChange">
+                <el-radio-button value="TABLE">{{ t('dataset.tableModel') }}</el-radio-button>
+                <el-radio-button value="SQL">{{ t('dataset.sqlModel') }}</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item :label="t('dataSource.title')" prop="dataSourceId">
+              <el-select v-model="form.dataSourceId" class="full-width" filterable :placeholder="t('dataset.selectSource')" @change="sourceChanged">
+                <el-option
+                  v-for="item in sources"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                >
+                  <span>{{ item.name }}</span>
+                  <span class="option-meta">{{ item.dialect || 'MYSQL' }}</span>
+                </el-option>
+              </el-select>
+            </el-form-item>
 
-        <template v-if="modelType === 'TABLE'">
-          <el-form-item :label="t('dataset.schema')">
-            <el-select v-model="form.schemaName" class="full-width" filterable @change="schemaChanged">
-              <el-option v-for="item in schemas" :key="item" :value="item" />
-            </el-select>
-          </el-form-item>
-          <el-form-item :label="t('dataset.dataTable')">
-            <el-select v-model="form.tableName" class="full-width" filterable @change="tableChanged">
-              <el-option v-for="item in tables" :key="item.tableName" :label="item.tableName" :value="item.tableName" />
-            </el-select>
-          </el-form-item>
-        </template>
-      </el-form>
+            <template v-if="modelType === 'TABLE'">
+              <el-form-item :label="t('dataset.schema')" prop="schemaName">
+                <el-select v-model="form.schemaName" class="full-width" filterable @change="schemaChanged">
+                  <el-option v-for="item in schemas" :key="item" :value="item" />
+                </el-select>
+              </el-form-item>
+              <el-form-item :label="t('dataset.dataTable')" prop="tableName">
+                <el-select v-model="form.tableName" class="full-width" filterable @change="tableChanged">
+                  <el-option
+                    v-for="item in tables"
+                    :key="item.tableName"
+                    :label="tableOptionLabel(item)"
+                    :value="item.tableName"
+                  />
+                </el-select>
+              </el-form-item>
+            </template>
+          </el-form>
 
       <section v-if="modelType === 'SQL'" class="sql-block">
         <div class="sql-tips">
@@ -418,18 +482,18 @@ onMounted(load)
             >{{ t('sql.format') }}</el-button>
           </div>
         </div>
-        <div class="editor-box">
-          <SqlEditor
-            ref="sqlEditorRef"
-            :model-value="form.definitionSql || ''"
-            :dialect="currentDialect"
-            :jdbc-url="currentSource?.jdbcUrl"
-            :schema="editorSchema"
-            :default-schema="editorDefaultSchema"
-            placeholder-text="SELECT id, name FROM your_table"
-            @update:model-value="form.definitionSql = $event"
-          />
-        </div>
+            <div class="editor-box">
+              <SqlEditor
+                ref="sqlEditorRef"
+                :model-value="form.definitionSql || ''"
+                :dialect="currentDialect"
+                :jdbc-url="currentSource?.jdbcUrl"
+                :schema="editorSchema"
+                :default-schema="editorDefaultSchema"
+                placeholder-text="SELECT id, name FROM your_table"
+                @update:model-value="form.definitionSql = $event"
+              />
+            </div>
 
         <div class="fields-head">
           <div>
@@ -481,11 +545,16 @@ onMounted(load)
       </section>
 
       <el-table v-else-if="modelType === 'TABLE'" :data="form.fields" max-height="320" :empty-text="t('dataset.autoLoadFields')">
-        <el-table-column prop="columnName" :label="t('dataset.physicalField')" />
-        <el-table-column :label="t('dataset.semanticName')">
+        <el-table-column prop="columnName" :label="t('dataset.physicalField')" min-width="120" show-overflow-tooltip />
+        <el-table-column :label="t('dataset.fieldComment')" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="field-comment">{{ columnComment(row.columnName) || t('common.emptyDash') }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('dataset.semanticName')" min-width="140">
           <template #default="{ row }"><el-input v-model="row.name" /></template>
         </el-table-column>
-        <el-table-column :label="t('common.type')">
+        <el-table-column :label="t('common.type')" width="130">
           <template #default="{ row }">
             <el-select
               v-model="row.fieldType"
@@ -496,7 +565,7 @@ onMounted(load)
             </el-select>
           </template>
         </el-table-column>
-        <el-table-column :label="t('dataset.aggregation')">
+        <el-table-column :label="t('dataset.aggregation')" width="120">
           <template #default="{ row }">
             <el-select v-model="row.aggregation" clearable :disabled="row.fieldType !== 'METRIC'" :placeholder="t('dataset.aggregation')">
               <el-option :label="displayLabel('SUM')" value="SUM" />
@@ -508,6 +577,17 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+        </div>
+
+        <MetadataBrowsePanel
+          v-if="modelType === 'SQL'"
+          fill
+          class="dialog-side"
+          :source-id="form.dataSourceId || undefined"
+          :default-schema="browseDefaultSchema"
+          @insert="insertSqlText"
+        />
+      </div>
 
       <template #footer>
         <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
@@ -523,6 +603,10 @@ onMounted(load)
   color: var(--omni-muted);
   font-size: 12px;
   margin-left: 16px;
+}
+.field-comment {
+  color: var(--omni-muted);
+  font-size: 13px;
 }
 .sql-block {
   margin-top: 4px;
@@ -565,11 +649,53 @@ onMounted(load)
 }
 .sql-label { font-size: 13px; font-weight: 600; color: #374151; }
 .sql-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.dialog-body.sql-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+  gap: 16px;
+  align-items: stretch;
+  height: min(68vh, 640px);
+  max-height: min(68vh, 640px);
+  min-height: 0;
+  overflow: hidden;
+}
+.dialog-main {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overscroll-behavior: contain;
+}
+.dialog-side {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 .editor-box {
   border: 1px solid var(--omni-border);
   border-radius: 8px;
   overflow: hidden;
   background: #fafbfc;
+  min-height: 240px;
+}
+@media (max-width: 1100px) {
+  .dialog-body.sql-split {
+    grid-template-columns: 1fr;
+    height: auto;
+    max-height: min(78vh, 760px);
+    overflow-y: auto;
+  }
+  .dialog-side {
+    height: 360px;
+    max-height: 360px;
+  }
 }
 .fields-head {
   display: flex;

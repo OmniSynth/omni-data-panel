@@ -1,6 +1,7 @@
 package com.omni.panel.controller;
 
 import java.util.List;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -57,9 +58,9 @@ public class DataSourceObjectAclController {
     /**
      * 替换请求。
      *
-     * @param roleId         角色标识
-     * @param deniedTables   拒绝的表；空表示清除表拒绝
-     * @param deniedColumns  拒绝的列；空表示清除列拒绝
+     * @param roleId        角色标识
+     * @param deniedTables  拒绝的表；空表示清除表拒绝
+     * @param deniedColumns 拒绝的列；空表示清除列拒绝
      */
     public record ReplaceRequest(@NotNull Long roleId,
                                  List<DataSourceObjectAclMapper.TableRef> deniedTables,

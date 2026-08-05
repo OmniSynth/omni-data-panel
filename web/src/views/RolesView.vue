@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { confirmBox } from '@/i18n/dialog'
 import { useI18n } from 'vue-i18n'
 import { roleApi, userApi } from '@/api'
+import { requiredRule, validateForm } from '@/form/rules'
 import type { AdminUser, Id, Permission, Role } from '@/types'
 
 const { t, te } = useI18n()
@@ -19,9 +21,21 @@ const editingId = ref<Id>()
 const activeRole = ref<Role>()
 const selectedPermissions = ref<string[]>([])
 const updatingUserId = ref('')
+const togglingRoleId = ref('')
 const memberKeyword = ref('')
+const formRef = ref<FormInstance>()
 const emptyForm = () => ({ code: '', name: '', description: '', enabled: true })
 const form = reactive(emptyForm())
+
+const formRules = computed<FormRules>(() => {
+  const rules: FormRules = {
+    name: [requiredRule(t('common.pleaseEnter', { field: t('roles.roleName') }))],
+  }
+  if (editingId.value === undefined) {
+    rules.code = [requiredRule(t('common.pleaseEnter', { field: t('roles.roleCode') }))]
+  }
+  return rules
+})
 
 const currentMembers = computed(() => activeRole.value
   ? users.value.filter((user) => user.roleIds.some((id) => String(id) === String(activeRole.value!.id)))
@@ -125,6 +139,27 @@ async function load() {
   }
 }
 
+async function toggleRoleEnabled(role: Role, enabled: boolean) {
+  if (isLockedRole(role) || String(togglingRoleId.value) === String(role.id)) return
+  const previous = role.enabled
+  role.enabled = enabled
+  togglingRoleId.value = String(role.id)
+  try {
+    const updated = await roleApi.update(role.id, {
+      name: role.name,
+      description: role.description || '',
+      enabled,
+    })
+    Object.assign(role, updated)
+    ElMessage.success(enabled ? t('roles.enabledSuccess') : t('roles.disabledSuccess'))
+  } catch (error) {
+    role.enabled = previous
+    ElMessage.error(error instanceof Error ? error.message : t('roles.saveFailed'))
+  } finally {
+    togglingRoleId.value = ''
+  }
+}
+
 function openForm(role?: Role) {
   Object.assign(form, role ? {
     code: role.code,
@@ -137,9 +172,7 @@ function openForm(role?: Role) {
 }
 
 async function saveRole() {
-  if (!form.name.trim() || (editingId.value === undefined && !form.code.trim())) {
-    return ElMessage.warning(t('roles.needCodeName'))
-  }
+  if (!(await validateForm(formRef.value))) return
   saving.value = true
   try {
     if (editingId.value === undefined) {
@@ -163,7 +196,7 @@ async function saveRole() {
 
 function openPermissions(role: Role) {
   activeRole.value = role
-  selectedPermissions.value = [...role.permissions]
+  selectedPermissions.value = [...(role.permissions || [])]
   permissionVisible.value = true
 }
 
@@ -199,6 +232,7 @@ async function setMembership(user: AdminUser, selected: boolean) {
   try {
     const updated = await userApi.update(user.id, {
       displayName: user.displayName,
+      email: user.email || '',
       enabled: user.enabled,
       roleIds,
     })
@@ -225,6 +259,7 @@ async function removeRole(role: Role) {
 function resetForm() {
   editingId.value = undefined
   Object.assign(form, emptyForm())
+  formRef.value?.clearValidate()
 }
 
 onMounted(load)
@@ -240,19 +275,24 @@ onMounted(load)
       <el-table-column prop="name" :label="t('common.name')" min-width="120" />
       <el-table-column prop="code" :label="t('roles.code')" min-width="120" />
       <el-table-column prop="description" :label="t('roles.remark')" min-width="180" show-overflow-tooltip />
-      <el-table-column :label="t('common.status')" width="90">
+      <el-table-column :label="t('common.status')" width="90" align="center">
         <template #default="{ row }">
-          <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? t('common.enabled') : t('common.disabled') }}</el-tag>
+          <el-switch
+            :model-value="row.enabled"
+            :disabled="isLockedRole(row)"
+            :loading="String(togglingRoleId) === String(row.id)"
+            @change="(value: string | number | boolean) => toggleRoleEnabled(row, Boolean(value))"
+          />
         </template>
       </el-table-column>
       <el-table-column :label="t('roles.featurePerms')" width="110">
         <template #default="{ row }">
           <el-tooltip
-            v-if="row.permissions.length"
-            :content="permissionTooltip(row.permissions)"
+            v-if="row.permissions?.length"
+            :content="permissionTooltip(row.permissions || [])"
             placement="top"
           >
-            <el-tag type="info">{{ t('roles.permCount', { n: row.permissions.length }) }}</el-tag>
+            <el-tag type="info">{{ t('roles.permCount', { n: row.permissions?.length || 0 }) }}</el-tag>
           </el-tooltip>
           <span v-else class="muted">{{ t('roles.none') }}</span>
         </template>
@@ -260,25 +300,27 @@ onMounted(load)
       <el-table-column :label="t('roles.members')" width="90">
         <template #default="{ row }">{{ memberCount(row) }}</template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="140" fixed="right">
+      <el-table-column :label="t('common.actions')" width="140" align="left" header-align="left">
         <template #default="{ row }">
-          <el-button link :disabled="isLockedRole(row)" @click="openForm(row)">{{ t('common.edit') }}</el-button>
-          <el-dropdown
-            trigger="click"
-            :disabled="isLockedRole(row)"
-            @command="(command: string) => onRoleAction(command, row)"
-          >
-            <el-button link :disabled="isLockedRole(row)">{{ t('common.more') }}</el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="permissions">{{ t('roles.featurePerms') }}</el-dropdown-item>
-                <el-dropdown-item command="members">{{ t('roles.members') }}</el-dropdown-item>
-                <el-dropdown-item divided command="delete">
-                  <span class="danger">{{ t('common.delete') }}</span>
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <div class="table-actions">
+            <el-button link :disabled="isLockedRole(row)" @click="openForm(row)">{{ t('common.edit') }}</el-button>
+            <el-dropdown
+              trigger="click"
+              :disabled="isLockedRole(row)"
+              @command="(command: string) => onRoleAction(command, row)"
+            >
+              <el-button link :disabled="isLockedRole(row)">{{ t('common.more') }}</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="permissions">{{ t('roles.featurePerms') }}</el-dropdown-item>
+                  <el-dropdown-item command="members">{{ t('roles.members') }}</el-dropdown-item>
+                  <el-dropdown-item divided command="delete">
+                    <span class="danger">{{ t('common.delete') }}</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -290,11 +332,11 @@ onMounted(load)
       destroy-on-close
       @closed="resetForm"
     >
-      <el-form label-width="90px">
-        <el-form-item :label="t('roles.roleCode')">
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px">
+        <el-form-item :label="t('roles.roleCode')" prop="code">
           <el-input v-model="form.code" :disabled="editingId !== undefined" :placeholder="t('roles.codeHint')" />
         </el-form-item>
-        <el-form-item :label="t('roles.roleName')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="t('roles.roleName')" prop="name"><el-input v-model="form.name" /></el-form-item>
         <el-form-item :label="t('roles.remark')">
           <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
@@ -388,6 +430,18 @@ onMounted(load)
 <style scoped>
 .muted { color: var(--el-text-color-secondary); }
 .danger { color: var(--el-color-danger); }
+.table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+.table-actions :deep(.el-button) {
+  margin: 0;
+}
+.table-actions :deep(.el-dropdown) {
+  line-height: 1;
+}
 .perm-toolbar {
   display: flex;
   align-items: center;

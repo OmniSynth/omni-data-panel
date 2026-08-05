@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { authApi, collectionApi, dashboardApi, settingsApi } from '@/api'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import { minLengthRule, requiredRule, validateForm } from '@/form/rules'
 import { resourcePath, resourceTypeLabel } from '@/nav'
 import { useUserStore } from '@/stores/user'
 import type { Collection, CollectionItem, Id, ResourceType, SiteSettings } from '@/types'
+
+const SIDEBAR_COLLAPSED_KEY = 'omni.sidebarCollapsed'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -19,16 +23,54 @@ const siteName = ref(t('shell.defaultSiteName'))
 const collections = ref<Collection[]>([])
 const treeKey = ref(0)
 const defaultExpandedKeys = ref<string[]>([])
+const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1')
 const searchText = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const passwordVisible = ref(false)
 const passwordSaving = ref(false)
+const passwordFormRef = ref<FormInstance>()
 const passwordForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
 
 const createVisible = ref(false)
 const createType = ref<'question' | 'sql' | 'dashboard' | 'model' | 'collection'>('question')
-const createName = ref('')
-const createCollectionId = ref<Id>()
+const createFormRef = ref<FormInstance>()
+const createForm = reactive<{ name: string; collectionId?: Id }>({ name: '', collectionId: undefined })
 const createSaving = ref(false)
+
+const createRules = computed<FormRules>(() => {
+  const rules: FormRules = {}
+  if (createType.value !== 'question') {
+    rules.name = [requiredRule(t('common.pleaseEnter', { field: t('common.name') }))]
+  }
+  if (createType.value !== 'collection') {
+    rules.collectionId = [requiredRule(t('common.pleaseSelect', { field: t('shell.belongCollection') }), 'change')]
+  }
+  return rules
+})
+
+const passwordRules = computed<FormRules>(() => ({
+  currentPassword: [requiredRule(t('common.pleaseEnter', { field: t('shell.currentPassword') }))],
+  newPassword: [
+    requiredRule(t('common.pleaseEnter', { field: t('shell.newPassword') })),
+    minLengthRule(10, t('shell.passwordMin')),
+    {
+      trigger: 'blur',
+      validator: (_rule, value, callback) => {
+        if (value && value === passwordForm.currentPassword) callback(new Error(t('shell.passwordSame')))
+        else callback()
+      },
+    },
+  ],
+  confirmPassword: [
+    requiredRule(t('common.pleaseEnter', { field: t('shell.confirmPassword') })),
+    {
+      trigger: 'blur',
+      validator: (_rule, value, callback) => {
+        if (value !== passwordForm.newPassword) callback(new Error(t('shell.passwordMismatch')))
+        else callback()
+      },
+    },
+  ],
+}))
 
 type NavTreeNode = {
   id: string
@@ -117,18 +159,22 @@ async function loadShell() {
     ])
     collections.value = tree
     treeKey.value += 1
+    const myUserId = userStore.user?.id
     defaultExpandedKeys.value = tree
-      .filter((item) => item.personalOwnerId != null)
+      .filter((item) => item.personalOwnerId != null && String(item.personalOwnerId) === String(myUserId))
       .map((item) => `collection:${item.id}`)
     if (settings['site.name']) siteName.value = String(settings['site.name'])
-    if (!createCollectionId.value) {
-      const personal = flatCollections.value.find((item) => String(item.personalOwnerId) === String(userStore.user?.id))
-        || flatCollections.value[0]
-      if (personal) createCollectionId.value = personal.id
+    if (!createForm.collectionId) {
+      createForm.collectionId = createCollectionIdDefault()
     }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('shell.navLoadFailed'))
   }
+}
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed.value ? '1' : '0')
 }
 
 function logout() {
@@ -142,10 +188,7 @@ function openPasswordDialog() {
 }
 
 async function changePassword() {
-  if (!passwordForm.currentPassword || !passwordForm.newPassword) return ElMessage.warning(t('shell.fillPasswords'))
-  if (passwordForm.newPassword.length < 10) return ElMessage.warning(t('shell.passwordMin'))
-  if (passwordForm.currentPassword === passwordForm.newPassword) return ElMessage.warning(t('shell.passwordSame'))
-  if (passwordForm.newPassword !== passwordForm.confirmPassword) return ElMessage.warning(t('shell.passwordMismatch'))
+  if (!(await validateForm(passwordFormRef.value))) return
   passwordSaving.value = true
   try {
     await authApi.changePassword({
@@ -169,23 +212,29 @@ function goSearch() {
 
 function openCreate(type: typeof createType.value) {
   createType.value = type
-  createName.value = ''
+  createForm.name = ''
+  createForm.collectionId = createCollectionIdDefault()
   createVisible.value = true
 }
 
+function createCollectionIdDefault(): Id | undefined {
+  const myUserId = userStore.user?.id
+  const mine = collections.value.find(
+    (item) => item.personalOwnerId != null && String(item.personalOwnerId) === String(myUserId),
+  )
+  return mine?.id
+    ?? collections.value.find((item) => item.personalOwnerId != null)?.id
+    ?? collections.value[0]?.id
+}
+
 async function submitCreate() {
-  if (createType.value !== 'question' && !createName.value.trim()) {
-    return ElMessage.warning(t('shell.needName'))
-  }
-  if (!createCollectionId.value && createType.value !== 'collection') {
-    return ElMessage.warning(t('shell.needCollection'))
-  }
+  if (!(await validateForm(createFormRef.value))) return
   createSaving.value = true
   try {
-    const collectionId = createCollectionId.value
+    const collectionId = createForm.collectionId
     if (createType.value === 'collection') {
       const created = await collectionApi.create({
-        name: createName.value.trim(),
+        name: createForm.name.trim(),
         parentId: collectionId,
       })
       createVisible.value = false
@@ -204,14 +253,14 @@ async function submitCreate() {
         path: '/sql',
         query: {
           collectionId: String(collectionId),
-          name: createName.value.trim(),
+          name: createForm.name.trim(),
         },
       })
       return
     }
     if (createType.value === 'dashboard') {
       const created = await dashboardApi.create({
-        name: createName.value.trim(),
+        name: createForm.name.trim(),
         configJson: '{}',
         collectionId,
       })
@@ -290,71 +339,101 @@ onMounted(loadShell)
       </div>
     </header>
     <div class="body">
-      <aside class="sidebar">
-        <nav class="nav-block">
-          <router-link class="nav-link" to="/" :class="{ active: route.path === '/' }">{{ t('shell.home') }}</router-link>
-          <router-link
-            class="nav-link"
-            to="/dashboards"
-            :class="{ active: route.path === '/dashboards' || route.path.startsWith('/dashboards/') }"
-          >{{ t('shell.dashboards') }}</router-link>
-        </nav>
-        <div class="nav-block">
-          <div class="nav-group">{{ t('shell.collections') }}</div>
-          <el-tree
-            :key="treeKey"
-            lazy
-            :load="loadTreeNode"
-            node-key="id"
-            :props="{ label: 'label', children: 'children', isLeaf: 'isLeaf' }"
-            :default-expanded-keys="defaultExpandedKeys"
-            highlight-current
-            :expand-on-click-node="false"
-            @node-click="onNavNodeClick"
+      <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <div class="sidebar-toolbar">
+          <el-tooltip
+            :content="sidebarCollapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')"
+            placement="right"
+            :show-after="400"
           >
-            <template #default="{ data }">
-              <span
-                class="tree-node"
-                :class="{ personal: data.personal, resource: data.kind !== 'COLLECTION' }"
-              >
-                <span v-if="data.kind !== 'COLLECTION'" class="node-type">{{ resourceTypeLabel(data.kind) }}</span>
-                {{ data.name }}
-              </span>
-            </template>
-          </el-tree>
+            <button
+              type="button"
+              class="sidebar-toggle"
+              :aria-label="sidebarCollapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')"
+              :aria-expanded="!sidebarCollapsed"
+              @click="toggleSidebar"
+            >
+              <svg class="sidebar-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  v-if="sidebarCollapsed"
+                  fill="currentColor"
+                  d="M9.7 6.3a1 1 0 0 1 1.4 0l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 1 1-1.4-1.4L13.58 12 9.7 8.12a1 1 0 0 1 0-1.42z"
+                />
+                <path
+                  v-else
+                  fill="currentColor"
+                  d="M14.3 6.3a1 1 0 0 1 0 1.4L10.42 12l3.88 3.88a1 1 0 1 1-1.4 1.4l-5-5a1 1 0 0 1 0-1.4l5-5a1 1 0 0 1 1.4 0z"
+                />
+              </svg>
+            </button>
+          </el-tooltip>
         </div>
-        <div class="nav-block">
-          <div class="nav-group">{{ t('shell.data') }}</div>
-          <router-link class="nav-link" to="/databases" :class="{ active: route.path.startsWith('/databases') }">{{ t('shell.dataSources') }}</router-link>
-          <router-link
-            v-if="userStore.hasPermission('query:raw')"
-            class="nav-link"
-            to="/sql"
-            :class="{ active: route.path.startsWith('/sql') }"
-          >{{ t('shell.sqlQuery') }}</router-link>
-          <router-link class="nav-link" to="/models" :class="{ active: route.path.startsWith('/models') }">{{ t('shell.models') }}</router-link>
-          <router-link class="nav-link" to="/metrics" :class="{ active: route.path.startsWith('/metrics') }">{{ t('shell.metrics') }}</router-link>
-        </div>
-        <div class="nav-footer">
-          <div class="user-row">
-            <div class="user-info">
-              <span class="user-avatar">{{ (userStore.user?.displayName || userStore.user?.username || '?').slice(0, 1) }}</span>
-              <span class="user-meta">
-                <strong>{{ userStore.user?.displayName || userStore.user?.username }}</strong>
-                <small>{{ userStore.user?.username }}</small>
-              </span>
-            </div>
-            <el-dropdown trigger="click" placement="top-end" @command="onUserMenu">
-              <button type="button" class="more-btn" :title="t('common.more')" :aria-label="t('shell.moreMenu')">⋯</button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-if="userStore.isAdmin" command="admin">{{ t('shell.admin') }}</el-dropdown-item>
-                  <el-dropdown-item command="trash">{{ t('shell.trash') }}</el-dropdown-item>
-                  <el-dropdown-item divided command="password">{{ t('shell.changePassword') }}</el-dropdown-item>
-                  <el-dropdown-item command="logout">{{ t('shell.logout') }}</el-dropdown-item>
-                </el-dropdown-menu>
+        <div class="sidebar-content">
+          <nav class="nav-block">
+            <router-link class="nav-link" to="/" :class="{ active: route.path === '/' }">{{ t('shell.home') }}</router-link>
+            <router-link
+              class="nav-link"
+              to="/dashboards"
+              :class="{ active: route.path === '/dashboards' || route.path.startsWith('/dashboards/') }"
+            >{{ t('shell.dashboards') }}</router-link>
+          </nav>
+          <div class="nav-block">
+            <div class="nav-group">{{ t('shell.collections') }}</div>
+            <el-tree
+              :key="treeKey"
+              lazy
+              :load="loadTreeNode"
+              node-key="id"
+              :props="{ label: 'label', children: 'children', isLeaf: 'isLeaf' }"
+              :default-expanded-keys="defaultExpandedKeys"
+              highlight-current
+              :expand-on-click-node="false"
+              @node-click="onNavNodeClick"
+            >
+              <template #default="{ data }">
+                <span
+                  class="tree-node"
+                  :class="{ personal: data.personal, resource: data.kind !== 'COLLECTION' }"
+                >
+                  <span v-if="data.kind !== 'COLLECTION'" class="node-type">{{ resourceTypeLabel(data.kind) }}</span>
+                  {{ data.name }}
+                </span>
               </template>
-            </el-dropdown>
+            </el-tree>
+          </div>
+          <div class="nav-block">
+            <div class="nav-group">{{ t('shell.data') }}</div>
+            <router-link class="nav-link" to="/databases" :class="{ active: route.path.startsWith('/databases') }">{{ t('shell.dataSources') }}</router-link>
+            <router-link
+              v-if="userStore.hasPermission('query:raw')"
+              class="nav-link"
+              to="/sql"
+              :class="{ active: route.path.startsWith('/sql') }"
+            >{{ t('shell.sqlQuery') }}</router-link>
+            <router-link class="nav-link" to="/models" :class="{ active: route.path.startsWith('/models') }">{{ t('shell.models') }}</router-link>
+            <router-link class="nav-link" to="/metrics" :class="{ active: route.path.startsWith('/metrics') }">{{ t('shell.metrics') }}</router-link>
+          </div>
+          <div class="nav-footer">
+            <div class="user-row">
+              <div class="user-info">
+                <span class="user-avatar">{{ (userStore.user?.displayName || userStore.user?.username || '?').slice(0, 1) }}</span>
+                <span class="user-meta">
+                  <strong>{{ userStore.user?.displayName || userStore.user?.username }}</strong>
+                  <small>{{ userStore.user?.username }}</small>
+                </span>
+              </div>
+              <el-dropdown trigger="click" placement="top-end" @command="onUserMenu">
+                <button type="button" class="more-btn" :title="t('common.more')" :aria-label="t('shell.moreMenu')">⋯</button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item v-if="userStore.isAdmin" command="admin">{{ t('shell.admin') }}</el-dropdown-item>
+                    <el-dropdown-item command="trash">{{ t('shell.trash') }}</el-dropdown-item>
+                    <el-dropdown-item divided command="password">{{ t('shell.changePassword') }}</el-dropdown-item>
+                    <el-dropdown-item command="logout">{{ t('shell.logout') }}</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </div>
         </div>
       </aside>
@@ -363,13 +442,16 @@ onMounted(loadShell)
       </main>
     </div>
 
-    <el-dialog v-model="createVisible" :title="t('shell.createTitle', { type: createTypeLabel })" width="460px">
-      <el-form label-width="90px">
-        <el-form-item v-if="createType !== 'question'" :label="t('common.name')">
-          <el-input v-model="createName" :placeholder="t('shell.namePlaceholder')" />
+    <el-dialog v-model="createVisible" :title="t('shell.createTitle', { type: createTypeLabel })" width="460px" destroy-on-close>
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="90px">
+        <el-form-item v-if="createType !== 'question'" :label="t('common.name')" prop="name">
+          <el-input v-model="createForm.name" :placeholder="t('shell.namePlaceholder')" />
         </el-form-item>
-        <el-form-item :label="createType === 'collection' ? t('shell.parentCollection') : t('shell.belongCollection')">
-          <el-select v-model="createCollectionId" class="full-width" :clearable="createType === 'collection'" :placeholder="t('shell.selectCollection')">
+        <el-form-item
+          :label="createType === 'collection' ? t('shell.parentCollection') : t('shell.belongCollection')"
+          prop="collectionId"
+        >
+          <el-select v-model="createForm.collectionId" class="full-width" :clearable="createType === 'collection'" :placeholder="t('shell.selectCollection')">
             <el-option v-for="item in flatCollections" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
@@ -383,15 +465,15 @@ onMounted(loadShell)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="passwordVisible" :title="t('shell.changePassword')" width="420px">
-      <el-form label-width="90px">
-        <el-form-item :label="t('shell.currentPassword')">
+    <el-dialog v-model="passwordVisible" :title="t('shell.changePassword')" width="420px" destroy-on-close>
+      <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="90px">
+        <el-form-item :label="t('shell.currentPassword')" prop="currentPassword">
           <el-input v-model="passwordForm.currentPassword" type="password" show-password autocomplete="current-password" />
         </el-form-item>
-        <el-form-item :label="t('shell.newPassword')">
+        <el-form-item :label="t('shell.newPassword')" prop="newPassword">
           <el-input v-model="passwordForm.newPassword" type="password" show-password autocomplete="new-password" />
         </el-form-item>
-        <el-form-item :label="t('shell.confirmPassword')">
+        <el-form-item :label="t('shell.confirmPassword')" prop="confirmPassword">
           <el-input v-model="passwordForm.confirmPassword" type="password" show-password autocomplete="new-password" />
         </el-form-item>
       </el-form>
@@ -457,10 +539,64 @@ onMounted(loadShell)
   flex-shrink: 0;
   background: var(--omni-surface);
   border-right: 1px solid var(--omni-border);
-  padding: 12px 10px;
+  padding: 8px 10px 12px;
   display: flex;
   flex-direction: column;
   gap: var(--omni-space-2);
+  overflow: hidden;
+  transition: width 0.2s ease, padding 0.2s ease;
+}
+.sidebar.collapsed {
+  width: 44px;
+  padding: 8px 6px;
+}
+.sidebar-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+.sidebar.collapsed .sidebar-toolbar {
+  justify-content: center;
+}
+.sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--omni-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.sidebar-toggle:hover {
+  background: var(--omni-accent-soft);
+  color: var(--omni-text);
+}
+.sidebar-toggle-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+.sidebar-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--omni-space-2);
+  flex: 1;
+  min-height: 0;
+  min-width: 220px;
+  opacity: 1;
+  transition: opacity 0.15s ease;
+}
+.sidebar.collapsed .sidebar-content {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .nav-block { display: flex; flex-direction: column; gap: 2px; }
 .nav-group {

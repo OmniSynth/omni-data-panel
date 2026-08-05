@@ -9,6 +9,7 @@ import { displayLabel } from '@/display'
 import { useUserStore } from '@/stores/user'
 import type { Chart, Collection, DataSource, Id, QueryResult, QuerySnapshot } from '@/types'
 import SqlEditor from '@/components/SqlEditor.vue'
+import MetadataBrowsePanel from '@/components/MetadataBrowsePanel.vue'
 import ChartPreview from '@/components/ChartPreview.vue'
 import QueryResultTable from '@/components/QueryResultTable.vue'
 import {
@@ -38,7 +39,7 @@ const sourceId = ref<Id | undefined>(
 )
 const sql = ref('')
 const sqlParameters = ref<string[]>([])
-const sqlEditorRef = ref<{ format: () => boolean }>()
+const sqlEditorRef = ref<{ format: () => boolean; insertText: (text: string) => boolean }>()
 const editorSchema = ref<EditorSqlSchema>({})
 const completionPayload = ref<CompletionSchemaPayload | null>(null)
 const schemaLoading = ref(false)
@@ -265,6 +266,10 @@ function formatSqlInEditor() {
   }
 }
 
+function insertSqlText(text: string) {
+  sqlEditorRef.value?.insertText(text)
+}
+
 watch(sql, () => {
   sqlParameters.value = alignSqlParameters(sql.value, sqlParameters.value).map((item) => String(item ?? ''))
 })
@@ -409,15 +414,22 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="editor-box" @keydown="onEditorKeydown">
-          <SqlEditor
-            ref="sqlEditorRef"
-            v-model="sql"
-            :dialect="currentDialect"
-            :jdbc-url="currentSource?.jdbcUrl"
-            :schema="editorSchema"
+        <div class="editor-row">
+          <div class="editor-box" @keydown="onEditorKeydown">
+            <SqlEditor
+              ref="sqlEditorRef"
+              v-model="sql"
+              :dialect="currentDialect"
+              :jdbc-url="currentSource?.jdbcUrl"
+              :schema="editorSchema"
+              :default-schema="editorDefaultSchema"
+              :placeholder-text="editorPlaceholder"
+            />
+          </div>
+          <MetadataBrowsePanel
+            :source-id="sourceId"
             :default-schema="editorDefaultSchema"
-            :placeholder-text="editorPlaceholder"
+            @insert="insertSqlText"
           />
         </div>
         <div v-if="sqlParameters.length" class="sql-params">
@@ -622,10 +634,36 @@ code {
   margin-left: 16px;
 }
 .editor-box {
+  flex: 1;
+  min-width: 0;
   border: 1px solid var(--omni-border);
   border-radius: 8px;
   overflow: hidden;
   background: #fafbfc;
+}
+.editor-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 360px;
+  max-height: min(62vh, 560px);
+}
+.editor-row :deep(.meta-browse) {
+  max-height: 100%;
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .editor-row {
+    flex-direction: column;
+    max-height: none;
+  }
+  .editor-row :deep(.meta-browse) {
+    width: 100%;
+    max-width: none;
+    flex-basis: auto;
+    max-height: 360px;
+  }
 }
 
 .result-head {

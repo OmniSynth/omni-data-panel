@@ -7,15 +7,43 @@ COPY server/mvnw server/pom.xml ./
 RUN chmod +x mvnw && ./mvnw -B dependency:go-offline
 
 COPY server/src src
-RUN ./mvnw -B -DskipTests package
+RUN ./mvnw -B -DskipTests package \
+    && ./mvnw -B exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
 
 FROM eclipse-temurin:21-jre-jammy
 
-RUN groupadd --system omni \
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libglib2.0-0 \
+        libnss3 \
+        libnspr4 \
+        libatk1.0-0 \
+        libatk-bridge2.0-0 \
+        libcups2 \
+        libdrm2 \
+        libdbus-1-3 \
+        libxcb1 \
+        libxkbcommon0 \
+        libx11-6 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxext6 \
+        libxfixes3 \
+        libxrandr2 \
+        libgbm1 \
+        libpango-1.0-0 \
+        libcairo2 \
+        libasound2 \
+        libatspi2.0-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system omni \
     && useradd --system --gid omni --home-dir /app --shell /usr/sbin/nologin omni
 
 WORKDIR /app
 COPY --from=build --chown=omni:omni /workspace/server/target/*.jar app.jar
+COPY --from=build --chown=omni:omni /root/.cache/ms-playwright /ms-playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 USER omni
 EXPOSE 8080

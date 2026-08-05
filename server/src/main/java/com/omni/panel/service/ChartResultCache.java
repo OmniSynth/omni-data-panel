@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -61,9 +62,9 @@ public class ChartResultCache {
     /**
      * 读取含参数指纹的缓存。
      *
-     * @param chart            图表实体
-     * @param bindingsJson     卡片绑定
-     * @param parameterValues  运行时参数
+     * @param chart           图表实体
+     * @param bindingsJson    卡片绑定
+     * @param parameterValues 运行时参数
      * @return 命中时的结果
      */
     public Optional<JdbcQueryExecutor.QueryResult> get(ChartEntity chart, String bindingsJson,

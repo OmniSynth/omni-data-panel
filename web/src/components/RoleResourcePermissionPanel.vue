@@ -7,10 +7,11 @@ import { displayLabel } from '@/display'
 import type { Id, Role, RoleResourceGrant } from '@/types'
 
 const props = defineProps<{
-  resourceType: 'DATA_SOURCE' | 'DASHBOARD'
+  resourceType: 'DATA_SOURCE' | 'DASHBOARD' | 'COLLECTION' | 'CHART' | 'DATASET' | 'METRIC'
   resourceId?: Id
   allowedPermissions: Array<'READ' | 'WRITE'>
   title?: string
+  hint?: string
 }>()
 const visible = defineModel<boolean>({ required: true })
 const { t } = useI18n()
@@ -37,7 +38,7 @@ async function load() {
   loading.value = true
   try {
     [roles.value, grants.value] = await Promise.all([
-      roleApi.list(),
+      roleApi.assignable(),
       resourcePermissionApi.list(props.resourceType, props.resourceId),
     ])
     selections.value = Object.fromEntries(assignableRoles.value.map((role) => [
@@ -103,6 +104,7 @@ watch(visible, (opened) => {
 
 <template>
   <el-dialog v-model="visible" :title="title || t('roleGrant.title')" width="720px" destroy-on-close>
+    <p v-if="hint" class="hint">{{ hint }}</p>
     <div class="toolbar">
       <el-input
         v-model="keyword"
@@ -147,6 +149,12 @@ watch(visible, (opened) => {
 </template>
 
 <style scoped>
+.hint {
+  margin: 0 0 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .toolbar {
   display: flex;
   gap: 12px;

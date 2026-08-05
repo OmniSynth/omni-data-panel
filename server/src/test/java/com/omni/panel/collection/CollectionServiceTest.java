@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
 import java.util.List;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -18,6 +20,7 @@ import com.omni.panel.mapper.CollectionMapper;
 import com.omni.panel.mapper.DashboardMapper;
 import com.omni.panel.mapper.DatasetMapper;
 import com.omni.panel.mapper.MetricMapper;
+import com.omni.panel.mapper.UserMapper;
 import com.omni.panel.service.CollectionService;
 import com.omni.panel.service.PermissionService;
 
@@ -29,7 +32,8 @@ class CollectionServiceTest {
     private final MetricMapper metricMapper = mock(MetricMapper.class);
     private final PermissionService permissionService = mock(PermissionService.class);
     private final CollectionService service = new CollectionService(
-            collectionMapper, chartMapper, dashboardMapper, datasetMapper, metricMapper, permissionService);
+            collectionMapper, chartMapper, dashboardMapper, datasetMapper, metricMapper,
+            mock(UserMapper.class), permissionService);
 
     @AfterEach
     void 清理() {

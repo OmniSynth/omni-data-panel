@@ -5,6 +5,7 @@ import java.io.StringWriter;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.IThrowableProxy;

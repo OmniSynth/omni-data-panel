@@ -1,6 +1,7 @@
 package com.omni.panel.config;
 
 import java.time.Duration;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
