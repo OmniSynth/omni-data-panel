@@ -31,6 +31,11 @@ import com.omni.panel.service.DataPolicyService;
 public class DataPolicyController {
     private final DataPolicyService service;
 
+    /**
+     * 注入数据策略业务服务。
+     *
+     * @param service 数据策略服务
+     */
     public DataPolicyController(DataPolicyService service) {
         this.service = service;
     }

@@ -46,6 +46,16 @@ public class QueryCompiler {
         return compile(request, dataset, deniedFields, rowRules, new MysqlDialectPlugin());
     }
 
+    /**
+     * 根据数据集元数据、字段权限和行级规则，按指定方言编译语义查询。
+     *
+     * @param request      用户提交的维度、指标、过滤、排序和行数限制
+     * @param dataset      数据集物理位置及字段元数据白名单
+     * @param deniedFields 当前用户不可访问的字段名称
+     * @param rowRules     应强制应用的行级权限过滤规则
+     * @param dialect      目标数据库方言，为 null 时使用 MySQL
+     * @return SQL 文本及按占位符顺序排列的参数
+     */
     public CompiledQuery compile(QueryRequest request, DatasetDefinition dataset,
                                  Set<String> deniedFields, List<QueryRequest.FilterNode> rowRules,
                                  DialectPlugin dialect) {

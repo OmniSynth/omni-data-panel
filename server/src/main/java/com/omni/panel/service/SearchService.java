@@ -31,6 +31,16 @@ public class SearchService {
     private final MetricMapper metricMapper;
     private final PermissionService permissionService;
 
+    /**
+     * 注入各资源 Mapper 与权限服务。
+     *
+     * @param collectionMapper  集合数据访问
+     * @param chartMapper       图表数据访问
+     * @param dashboardMapper   仪表盘数据访问
+     * @param datasetMapper     数据集数据访问
+     * @param metricMapper      指标数据访问
+     * @param permissionService 权限服务
+     */
     public SearchService(CollectionMapper collectionMapper, ChartMapper chartMapper,
                          DashboardMapper dashboardMapper, DatasetMapper datasetMapper,
                          MetricMapper metricMapper, PermissionService permissionService) {
@@ -92,6 +102,11 @@ public class SearchService {
 
     /**
      * 统一搜索命中。
+     *
+     * @param id          资源标识
+     * @param type        资源类型
+     * @param name        资源名称
+     * @param description 资源描述
      */
     public record SearchHit(@JsonSerialize(using = ToStringSerializer.class) long id,
                             String type, String name, String description) {

@@ -25,6 +25,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserAuthenticationService authenticationService;
     private final UserSessionRegistry sessionRegistry;
 
+    /**
+     * 注入 JWT 解析、用户认证与会话注册服务。
+     *
+     * @param jwtService            JWT 签发与解析服务
+     * @param authenticationService 用户认证加载服务
+     * @param sessionRegistry       并发会话注册表
+     */
     public JwtAuthenticationFilter(JwtService jwtService, UserAuthenticationService authenticationService,
                                    UserSessionRegistry sessionRegistry) {
         this.jwtService = jwtService;
@@ -32,6 +39,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.sessionRegistry = sessionRegistry;
     }
 
+    /**
+     * 从 Authorization 头解析 Bearer JWT，校验会话有效性后写入安全上下文。
+     *
+     * @param request  HTTP 请求
+     * @param response HTTP 响应
+     * @param chain    后续过滤器链
+     * @throws ServletException 过滤器链执行失败
+     * @throws IOException      I/O 异常
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {

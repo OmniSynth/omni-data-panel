@@ -282,12 +282,21 @@ function render() {
     if (props.type === 'pie' || props.type === 'funnel') {
       dataOption = {
         tooltip: { trigger: 'item' },
-        legend: {},
+        legend: {
+          type: 'scroll',
+          bottom: 0,
+          left: 'center',
+          itemGap: 16,
+        },
         series: numericSeries.slice(0, 1).map((item) => ({
           name: item.name,
           type: props.type === 'funnel' ? 'funnel' : 'pie',
           data: labels.map((name, index) => ({ name, value: item.values[index] })),
-          ...(props.type === 'funnel' ? { sort: 'descending', gap: 2 } : {}),
+          avoidLabelOverlap: true,
+          ...(props.type === 'funnel' ? { sort: 'descending', gap: 2 } : {
+            center: ['50%', '46%'],
+            label: { formatter: '{b}' },
+          }),
         })),
       }
     } else if (props.type === 'scatter') {
@@ -427,7 +436,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.chart-preview { width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.chart-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
 .drill-bar {
   display: flex;
   flex-wrap: wrap;
@@ -459,15 +475,20 @@ onBeforeUnmount(() => {
 .kpi-box {
   width: 100%;
   flex: 1;
-  min-height: 120px;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 4px 8px;
+  box-sizing: border-box;
 }
 .kpi-value {
-  font-size: 42px;
+  font-size: clamp(22px, 6vw, 42px);
   font-weight: 700;
   color: var(--el-text-color-primary);
   line-height: 1.1;
+  text-align: center;
+  word-break: break-all;
 }
 </style>

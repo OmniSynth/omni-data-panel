@@ -24,6 +24,14 @@ public class MetricService {
     private final PermissionService permissionService;
     private final CollectionService collectionService;
 
+    /**
+     * 注入指标持久化、模型与权限相关依赖。
+     *
+     * @param mapper            指标持久化
+     * @param datasetService    模型访问
+     * @param permissionService 资源权限校验
+     * @param collectionService 集合归属解析
+     */
     public MetricService(MetricMapper mapper, DatasetService datasetService,
                          PermissionService permissionService, @Lazy CollectionService collectionService) {
         this.mapper = mapper;
@@ -36,6 +44,7 @@ public class MetricService {
      * 查询可读且未删除的指标。
      *
      * @param collectionId 可选集合过滤
+     * @param modelId      可选模型过滤
      * @return 指标列表
      */
     public List<MetricEntity> list(Long collectionId, Long modelId) {

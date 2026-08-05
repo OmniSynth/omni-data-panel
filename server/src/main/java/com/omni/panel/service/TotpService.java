@@ -47,6 +47,12 @@ public class TotpService {
     private final CodeVerifier codeVerifier;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    /**
+     * @param userMapper       用户持久化
+     * @param backupCodeMapper 备用码持久化
+     * @param crypto           密钥加解密
+     * @param settingService   站点名等设置（otpauth issuer）
+     */
     public TotpService(UserMapper userMapper, TotpBackupCodeMapper backupCodeMapper,
                        CredentialCrypto crypto, SettingService settingService) {
         this.userMapper = userMapper;
@@ -169,6 +175,11 @@ public class TotpService {
         clearMfa(userId);
     }
 
+    /**
+     * 关闭用户 TOTP 并删除全部备用码。
+     *
+     * @param userId 用户标识
+     */
     private void clearMfa(long userId) {
         SysUser user = requireUser(userId);
         user.setTotpEnabled(false);
@@ -179,6 +190,12 @@ public class TotpService {
                 .eq(TotpBackupCodeEntity::getUserId, userId));
     }
 
+    /**
+     * 删除旧备用码并生成一批新的；库中存哈希，返回明文供用户保存一次。
+     *
+     * @param userId 用户标识
+     * @return 明文备用码列表
+     */
     private List<String> replaceBackupCodes(long userId) {
         backupCodeMapper.delete(Wrappers.<TotpBackupCodeEntity>lambdaQuery()
                 .eq(TotpBackupCodeEntity::getUserId, userId));
@@ -196,6 +213,13 @@ public class TotpService {
         return plain;
     }
 
+    /**
+     * 校验并消费一条未使用的备用码。
+     *
+     * @param userId 用户标识
+     * @param code   明文备用码
+     * @return 消费成功时返回 {@code true}
+     */
     private boolean consumeBackupCode(long userId, String code) {
         String hash = hashBackupCode(code);
         TotpBackupCodeEntity row = backupCodeMapper.selectOne(Wrappers.<TotpBackupCodeEntity>lambdaQuery()
@@ -211,6 +235,13 @@ public class TotpService {
         return true;
     }
 
+    /**
+     * 校验 6 位 TOTP 动态码（允许相邻时间窗口）。
+     *
+     * @param secret Base32 明文密钥
+     * @param code   用户输入
+     * @return 校验通过时返回 {@code true}
+     */
     private boolean verifyTotp(String secret, String code) {
         String digits = code.replaceAll("\\s+", "");
         if (!digits.matches("\\d{6}")) {
@@ -223,6 +254,13 @@ public class TotpService {
         }
     }
 
+    /**
+     * 组装 Authenticator 可扫描的 otpauth URI。
+     *
+     * @param username 登录名（写入 label）
+     * @param secret   Base32 明文密钥
+     * @return otpauth://totp/... URI
+     */
     private String buildOtpAuthUri(String username, String secret) {
         String issuer = settingService.getOrDefault("site.name");
         if (issuer == null || issuer.isBlank()) {
@@ -237,6 +275,11 @@ public class TotpService {
                 + "&algorithm=SHA1&digits=6&period=30";
     }
 
+    /**
+     * 生成单条随机备用码明文。
+     *
+     * @return 固定长度易读字符码
+     */
     private String randomBackupCode() {
         StringBuilder builder = new StringBuilder(BACKUP_CODE_LENGTH);
         for (int i = 0; i < BACKUP_CODE_LENGTH; i++) {
@@ -245,6 +288,12 @@ public class TotpService {
         return builder.toString();
     }
 
+    /**
+     * 规范化备用码：去空白并转大写。
+     *
+     * @param code 原始输入
+     * @return 规范化结果；{@code null} 时返回空串
+     */
     private static String normalizeCode(String code) {
         if (code == null) {
             return "";
@@ -252,6 +301,12 @@ public class TotpService {
         return code.trim().replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
     }
 
+    /**
+     * 计算备用码的 SHA-256 十六进制哈希（入库用）。
+     *
+     * @param code 明文备用码
+     * @return 小写十六进制摘要
+     */
     public static String hashBackupCode(String code) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -262,6 +317,12 @@ public class TotpService {
         }
     }
 
+    /**
+     * 按 ID 加载用户；不存在时抛出 404。
+     *
+     * @param userId 用户标识
+     * @return 用户实体
+     */
     private SysUser requireUser(long userId) {
         SysUser user = userMapper.selectById(userId);
         if (user == null) {

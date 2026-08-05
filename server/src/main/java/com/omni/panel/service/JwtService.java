@@ -27,6 +27,11 @@ public class JwtService {
     private final SecurityProperties properties;
     private final SecretKey key;
 
+    /**
+     * 从安全配置加载 JWT 签名密钥。
+     *
+     * @param properties 安全相关配置
+     */
     public JwtService(SecurityProperties properties) {
         this.properties = properties;
         this.key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(properties.jwtSecret()));

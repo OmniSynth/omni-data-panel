@@ -12,11 +12,13 @@ import com.omni.panel.common.BusinessException;
 public class SparkDialectPlugin extends HiveDialectPlugin {
     public static final String CODE = "SPARK";
 
+    /** {@inheritDoc} */
     @Override
     public String code() {
         return CODE;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String label() {
         return "Spark";
@@ -30,6 +32,7 @@ public class SparkDialectPlugin extends HiveDialectPlugin {
         return false;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         if (parseJdbcUrl(jdbcUrl) == null

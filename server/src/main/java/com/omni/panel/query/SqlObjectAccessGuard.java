@@ -39,6 +39,12 @@ public class SqlObjectAccessGuard {
             "db_denydatareader", "db_denydatawriter",
             "outln", "dbsnmp", "ctxsys", "mdsys", "xdb", "wmsys", "ordsys");
 
+    /**
+     * 判断 schema 是否为系统元数据库命名空间。
+     *
+     * @param schema 模式名
+     * @return 属于系统 schema 时返回 true
+     */
     private static boolean isSystemSchema(String schema) {
         String normalized = DataSourceObjectAclService.normalize(schema);
         return SYSTEM_SCHEMAS.contains(normalized)
@@ -49,6 +55,11 @@ public class SqlObjectAccessGuard {
 
     private final DataSourceObjectAclService aclService;
 
+    /**
+     * 注入数据源对象 ACL 服务。
+     *
+     * @param aclService 数据源对象 ACL 服务
+     */
     public SqlObjectAccessGuard(DataSourceObjectAclService aclService) {
         this.aclService = aclService;
     }
@@ -113,12 +124,27 @@ public class SqlObjectAccessGuard {
         validateSelectColumns(select.getPlainSelect(), defaultSchema, aliasToTableKey, referencedTableKeys, denies);
     }
 
+    /**
+     * 存在 ACL 限制且 SQL 无法解析时，以拒绝访问方式失败。
+     *
+     * @param denies  有效拒绝集
+     * @param message 403 错误信息
+     */
     private void failClosedIfRestricted(EffectiveDenies denies, String message) {
         if (!denies.isEmpty() || denies.configured()) {
             throw new BusinessException(403, message);
         }
     }
 
+    /**
+     * 校验 SELECT 列表中的列引用是否命中列级 deny。
+     *
+     * @param plain                解析后的 SELECT 主体
+     * @param defaultSchema        默认模式
+     * @param aliasToTableKey      表别名到表键映射
+     * @param referencedTableKeys  SQL 引用的表键集合
+     * @param denies               有效拒绝集
+     */
     private void validateSelectColumns(PlainSelect plain, String defaultSchema,
                                        Map<String, String> aliasToTableKey,
                                        Set<String> referencedTableKeys,
@@ -162,6 +188,13 @@ public class SqlObjectAccessGuard {
         }
     }
 
+    /**
+     * 判断指定表是否存在列级 deny 规则。
+     *
+     * @param denies   有效拒绝集
+     * @param tableKey 表键（schema\u0001table）
+     * @return 存在列级限制时返回 true
+     */
     private boolean hasColumnDenyForTable(EffectiveDenies denies, String tableKey) {
         String prefix = tableKey + "\u0001";
         for (String columnKey : denies.columns()) {
@@ -172,6 +205,13 @@ public class SqlObjectAccessGuard {
         return false;
     }
 
+    /**
+     * 收集 FROM 与 JOIN 中的表别名映射。
+     *
+     * @param plain           SELECT 主体
+     * @param defaultSchema   默认模式
+     * @param aliasToTableKey 待填充的别名到表键映射
+     */
     private void collectAliases(PlainSelect plain, String defaultSchema, Map<String, String> aliasToTableKey) {
         if (plain == null) {
             return;
@@ -185,6 +225,13 @@ public class SqlObjectAccessGuard {
         }
     }
 
+    /**
+     * 将单个 FROM/JOIN 项的表名与别名注册到映射表。
+     *
+     * @param fromItem          FROM 项
+     * @param defaultSchema     默认模式
+     * @param aliasToTableKey   别名到表键映射
+     */
     private void registerFromItem(FromItem fromItem, String defaultSchema, Map<String, String> aliasToTableKey) {
         if (!(fromItem instanceof Table table)) {
             return;
@@ -198,6 +245,14 @@ public class SqlObjectAccessGuard {
         aliasToTableKey.put(DataSourceObjectAclService.normalize(qn.name()), key);
     }
 
+    /**
+     * 解析表引用对应的表键，优先通过别名映射查找。
+     *
+     * @param table             表引用
+     * @param defaultSchema     默认模式
+     * @param aliasToTableKey   别名到表键映射
+     * @return 表键，无法解析时返回 null
+     */
     private String resolveTableKey(Table table, String defaultSchema, Map<String, String> aliasToTableKey) {
         if (table == null) {
             return null;
@@ -212,6 +267,15 @@ public class SqlObjectAccessGuard {
         return DataSourceObjectAclService.tableKey(qn.schema(), qn.name());
     }
 
+    /**
+     * 解析列表达式所属表的表键。
+     *
+     * @param column              列表达式
+     * @param defaultSchema       默认模式
+     * @param aliasToTableKey     别名到表键映射
+     * @param referencedTableKeys SQL 引用的表键集合
+     * @return 表键；多表且无表前缀时返回 null
+     */
     private String resolveColumnTableKey(Column column, String defaultSchema,
                                          Map<String, String> aliasToTableKey,
                                          Set<String> referencedTableKeys) {
@@ -230,6 +294,13 @@ public class SqlObjectAccessGuard {
         return null;
     }
 
+    /**
+     * 从 JSQLParser 表节点提取限定名（schema + 表名）。
+     *
+     * @param table         表节点
+     * @param defaultSchema 默认模式
+     * @return 限定名
+     */
     private QualifiedName fromTable(Table table, String defaultSchema) {
         String name = stripQuotes(table.getName());
         String schema = table.getSchemaName() != null ? stripQuotes(table.getSchemaName()) : null;
@@ -242,6 +313,13 @@ public class SqlObjectAccessGuard {
         return new QualifiedName(schema, name == null ? "" : name);
     }
 
+    /**
+     * 解析 schema.table 或单表名形式的原始表引用。
+     *
+     * @param raw           原始表名字符串
+     * @param defaultSchema 缺省 schema
+     * @return 限定名
+     */
     private QualifiedName parseQualifiedName(String raw, String defaultSchema) {
         String cleaned = stripQuotes(raw == null ? "" : raw.trim());
         if (cleaned.isEmpty()) {
@@ -254,6 +332,12 @@ public class SqlObjectAccessGuard {
         return new QualifiedName(cleaned.substring(0, dot), cleaned.substring(dot + 1));
     }
 
+    /**
+     * 去除标识符外层的引号或方括号。
+     *
+     * @param value 原始标识符
+     * @return 去引号后的值
+     */
     private static String stripQuotes(String value) {
         if (value == null) {
             return null;
@@ -269,6 +353,12 @@ public class SqlObjectAccessGuard {
         return trimmed;
     }
 
+    /**
+     * 格式化限定名用于错误提示。
+     *
+     * @param qn 限定名
+     * @return schema.table 或单表名
+     */
     private static String display(QualifiedName qn) {
         if (qn.schema() == null || qn.schema().isBlank()) {
             return qn.name();
@@ -276,6 +366,7 @@ public class SqlObjectAccessGuard {
         return qn.schema() + "." + qn.name();
     }
 
+    /** schema 与表名的限定名对。 */
     private record QualifiedName(String schema, String name) {
     }
 }

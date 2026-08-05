@@ -24,6 +24,13 @@ public class DataPolicyService {
     private final DataPolicyMapper mapper;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 注入数据策略维护所需依赖。
+     *
+     * @param datasetService 模型服务
+     * @param mapper           策略持久化
+     * @param objectMapper     JSON 解析
+     */
     public DataPolicyService(DatasetService datasetService, DataPolicyMapper mapper, ObjectMapper objectMapper) {
         this.datasetService = datasetService;
         this.mapper = mapper;
@@ -154,10 +161,22 @@ public class DataPolicyService {
         }
     }
 
+    /**
+     * 要求当前用户对模型具备 WRITE 权限。
+     *
+     * @param datasetId 模型标识
+     * @return 模型实体
+     */
     private DatasetEntity requireWritable(long datasetId) {
         return datasetService.require(datasetId, "WRITE");
     }
 
+    /**
+     * 校验行级规则 JSON 可解析为过滤节点。
+     *
+     * @param ruleJson 规则 JSON
+     * @throws BusinessException JSON 不合法时
+     */
     private void validateRuleJson(String ruleJson) {
         try {
             objectMapper.readValue(ruleJson, QueryRequest.FilterNode.class);

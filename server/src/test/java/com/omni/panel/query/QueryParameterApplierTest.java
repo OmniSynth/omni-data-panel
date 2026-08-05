@@ -3,6 +3,8 @@ package com.omni.panel.query;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -101,5 +103,23 @@ class QueryParameterApplierTest {
                 Map.of("a", List.of("1", "2")),
                 Map.of("a", new QueryParameterApplier.ParameterMeta("a", "multi-select", false))))
                 .hasMessageContaining("标量");
+    }
+
+    @Test
+    void 相对默认当天与近一周() {
+        String config = """
+                {"parameters":[
+                  {"id":"d","label":"日","type":"date","defaultValue":"$today"},
+                  {"id":"r","label":"区间","type":"date-range","defaultValue":"$last7days"}
+                ]}
+                """;
+        Map<String, Object> defaults = applier.defaultParameterValues(config);
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+        assertThat(defaults.get("d")).isEqualTo(today.toString());
+        assertThat(defaults.get("r")).isInstanceOf(Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> range = (Map<String, Object>) defaults.get("r");
+        assertThat(range.get("start")).isEqualTo(today.minusDays(6).toString());
+        assertThat(range.get("end")).isEqualTo(today.toString());
     }
 }

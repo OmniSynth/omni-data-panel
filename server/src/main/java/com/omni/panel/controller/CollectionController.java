@@ -25,6 +25,11 @@ import com.omni.panel.service.CollectionService;
 public class CollectionController {
     private final CollectionService service;
 
+    /**
+     * 注入集合业务服务。
+     *
+     * @param service 集合服务
+     */
     public CollectionController(CollectionService service) {
         this.service = service;
     }
@@ -100,18 +105,29 @@ public class CollectionController {
 
     /**
      * 集合创建请求。
+     *
+     * @param name        名称
+     * @param description 描述
+     * @param parentId    父集合标识
      */
     public record CreateRequest(@NotBlank String name, String description, Long parentId) {
     }
 
     /**
      * 集合更新请求。
+     *
+     * @param name        名称
+     * @param description 描述
      */
     public record UpdateRequest(@NotBlank String name, String description) {
     }
 
     /**
      * 资源迁移请求。
+     *
+     * @param resourceType 资源类型
+     * @param resourceId   资源标识
+     * @param collectionId 目标集合标识
      */
     public record MoveRequest(@NotBlank String resourceType, @NotNull Long resourceId,
                               @NotNull Long collectionId) {

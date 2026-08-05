@@ -28,6 +28,13 @@ public class UserSessionRegistry {
     private final StringRedisTemplate redis;
     private final Map<Long, ConcurrentSkipListMap<Long, String>> localSessions = new ConcurrentHashMap<>();
 
+    /**
+     * 注入会话登记所需依赖。
+     *
+     * @param settingService     系统设置（并发上限）
+     * @param securityProperties JWT 过期配置
+     * @param redisProvider      Redis 模板；不可用时回退本机存储
+     */
     public UserSessionRegistry(SettingService settingService, SecurityProperties securityProperties,
                                ObjectProvider<StringRedisTemplate> redisProvider) {
         this.settingService = settingService;
@@ -89,6 +96,15 @@ public class UserSessionRegistry {
         return isActiveLocal(userId, jti);
     }
 
+    /**
+     * 在 Redis 有序集合中登记会话并淘汰超限条目。
+     *
+     * @param userId     用户标识
+     * @param jti        令牌 jti
+     * @param score      登记时间戳（毫秒，用作分数）
+     * @param max        并发上限
+     * @param ttlSeconds 键过期秒数
+     */
     private void registerRedis(long userId, String jti, long score, int max, long ttlSeconds) {
         String redisKey = key(userId);
         redis.opsForZSet().add(redisKey, jti, score);
@@ -101,6 +117,15 @@ public class UserSessionRegistry {
         redis.expire(redisKey, Duration.ofSeconds(ttlSeconds));
     }
 
+    /**
+     * 在本机内存中登记会话并淘汰超限条目。
+     *
+     * @param userId           用户标识
+     * @param jti              令牌 jti
+     * @param score            登记时间戳（毫秒，用作键）
+     * @param max              并发上限
+     * @param expiresAtMillis  会话过期时间（毫秒，当前未用于淘汰）
+     */
     private void registerLocal(long userId, String jti, long score, int max, long expiresAtMillis) {
         ConcurrentSkipListMap<Long, String> sessions = localSessions.computeIfAbsent(
                 userId, ignored -> new ConcurrentSkipListMap<>());
@@ -119,6 +144,13 @@ public class UserSessionRegistry {
         }
     }
 
+    /**
+     * 判断 jti 是否仍在本机会话表中。
+     *
+     * @param userId 用户标识
+     * @param jti    令牌 jti
+     * @return 仍有效时返回 {@code true}
+     */
     private boolean isActiveLocal(long userId, String jti) {
         ConcurrentSkipListMap<Long, String> sessions = localSessions.get(userId);
         if (sessions == null) {
@@ -131,6 +163,12 @@ public class UserSessionRegistry {
         }
     }
 
+    /**
+     * 构建 Redis 会话键。
+     *
+     * @param userId 用户标识
+     * @return Redis 键名
+     */
     private static String key(long userId) {
         return KEY_PREFIX + userId;
     }

@@ -20,6 +20,11 @@ import com.omni.panel.service.MetadataService;
 public class MetadataController {
     private final MetadataService service;
 
+    /**
+     * 注入元数据业务服务。
+     *
+     * @param service 元数据服务
+     */
     public MetadataController(MetadataService service) {
         this.service = service;
     }

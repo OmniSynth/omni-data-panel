@@ -29,6 +29,12 @@ public class DataSourceRegistry {
     private final DialectRegistry dialectRegistry;
     private final ConcurrentHashMap<Long, HikariDataSource> pools = new ConcurrentHashMap<>();
 
+    /**
+     * 注入凭据加解密与方言注册表。
+     *
+     * @param crypto          数据源密码加解密
+     * @param dialectRegistry 方言插件注册表
+     */
     public DataSourceRegistry(CredentialCrypto crypto, DialectRegistry dialectRegistry) {
         this.crypto = crypto;
         this.dialectRegistry = dialectRegistry;
@@ -116,6 +122,9 @@ public class DataSourceRegistry {
 
     /**
      * 获取已注册且未关闭的连接池。
+     *
+     * @param sourceId 数据源标识
+     * @return 可用连接池；未注册或已关闭时为空
      */
     public Optional<HikariDataSource> findPool(long sourceId) {
         HikariDataSource pool = pools.get(sourceId);
@@ -212,6 +221,12 @@ public class DataSourceRegistry {
             Integer totalConnections,
             Integer threadsAwaitingConnection
     ) {
+        /**
+         * 构造空指标快照；有连接池时保留池大小配置字段。
+         *
+         * @param pool Hikari 连接池，可为 null
+         * @return 指标快照
+         */
         static PoolMetrics empty(HikariDataSource pool) {
             if (pool == null) {
                 return new PoolMetrics(null, null, null, null, null, null);
@@ -236,10 +251,28 @@ public class DataSourceRegistry {
             String message,
             PoolMetrics metrics
     ) {
+        /**
+         * 构造可用状态的健康探测结果。
+         *
+         * @param poolReady 是否已有常驻连接池
+         * @param latencyMs 探测延迟毫秒
+         * @param message   附加信息，可为 null
+         * @param metrics   连接池指标
+         * @return 健康探测结果
+         */
         static HealthProbe up(boolean poolReady, long latencyMs, String message, PoolMetrics metrics) {
             return new HealthProbe(true, poolReady, latencyMs, message, metrics);
         }
 
+        /**
+         * 构造不可用状态的健康探测结果。
+         *
+         * @param poolReady 是否已有常驻连接池
+         * @param latencyMs 探测延迟毫秒
+         * @param message   失败原因
+         * @param metrics   连接池指标
+         * @return 健康探测结果
+         */
         static HealthProbe down(boolean poolReady, long latencyMs, String message, PoolMetrics metrics) {
             return new HealthProbe(false, poolReady, latencyMs, message, metrics);
         }
@@ -247,6 +280,9 @@ public class DataSourceRegistry {
 
     /**
      * 创建强制只读会话的连接池，并保留最少一条空闲连接供后续查询复用。
+     *
+     * @param source 数据源配置
+     * @return 已配置的 Hikari 连接池
      */
     private HikariDataSource create(DataSourceEntity source) {
         DialectPlugin dialect = dialectRegistry.resolve(source);
@@ -256,11 +292,12 @@ public class DataSourceRegistry {
         config.setJdbcUrl(source.getJdbcUrl());
         config.setUsername(source.getUsername());
         config.setPassword(crypto.decrypt(source.getEncryptedPassword()));
-        config.setMaximumPoolSize(5);
+        config.setMaximumPoolSize(8);
         config.setMinimumIdle(1);
         config.setIdleTimeout(600_000);
         config.setMaxLifetime(1_800_000);
-        config.setConnectionTimeout(5000);
+        // 仪表盘多卡排队等待许可后再取连接，适当放宽获取超时
+        config.setConnectionTimeout(15_000);
         config.setValidationTimeout(3000);
         config.setReadOnly(true);
         config.setAutoCommit(true);

@@ -33,6 +33,15 @@ public class UserService {
     private final SubscriptionProperties subscriptionProperties;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    /**
+     * 注入用户持久化、密码哈希、邮件与凭据令牌依赖。
+     *
+     * @param userMapper               用户持久化
+     * @param passwordEncoder          密码哈希
+     * @param mailService              系统邮件
+     * @param tokenService             凭据令牌
+     * @param subscriptionProperties   订阅配置（前端链接基址）
+     */
     public UserService(UserMapper userMapper, PasswordEncoder passwordEncoder, SystemMailService mailService,
                        UserCredentialTokenService tokenService, SubscriptionProperties subscriptionProperties) {
         this.userMapper = userMapper;
@@ -214,6 +223,12 @@ public class UserService {
         userMapper.updateById(user);
     }
 
+    /**
+     * 签发凭据令牌并向用户发送激活或重置密码邮件。
+     *
+     * @param user    目标用户
+     * @param purpose 令牌用途（激活或重置）
+     */
     private void sendCredentialMail(SysUser user, String purpose) {
         String raw = tokenService.issue(user.getId(), purpose);
         String baseUrl = subscriptionProperties.getFrontendUrl() == null
@@ -232,6 +247,11 @@ public class UserService {
         mailService.send(message);
     }
 
+    /**
+     * 校验密码非空且满足最小长度要求。
+     *
+     * @param password 待校验密码
+     */
     private static void requirePassword(String password) {
         if (password == null || password.isBlank()) {
             throw new BusinessException("密码不能为空");
@@ -241,12 +261,23 @@ public class UserService {
         }
     }
 
+    /**
+     * 生成用于占位密码的随机 URL 安全字符串。
+     *
+     * @return Base64 URL 编码的随机密钥
+     */
     private String randomSecret() {
         byte[] bytes = new byte[32];
         secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
+    /**
+     * 判断用户是否已完成账号激活。
+     *
+     * @param user 用户实体
+     * @return 已激活或未设置激活状态时返回 {@code true}
+     */
     private static boolean isActivated(SysUser user) {
         return user.getActivated() == null || Boolean.TRUE.equals(user.getActivated());
     }

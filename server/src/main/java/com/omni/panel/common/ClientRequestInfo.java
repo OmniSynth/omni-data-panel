@@ -13,6 +13,8 @@ public final class ClientRequestInfo {
     }
 
     /**
+     * 从 HTTP 请求提取客户端 IP 与 User-Agent。
+     *
      * @param request 当前 HTTP 请求，可为 null
      * @return 客户端信息；request 为空时字段均为 null
      */

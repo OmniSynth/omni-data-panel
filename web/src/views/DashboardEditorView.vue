@@ -26,11 +26,14 @@ import DashboardParameterBar from '@/components/DashboardParameterBar.vue'
 import {
   createDashboardTab,
   defaultParameterValues,
+  DATE_PRESET_LAST7DAYS,
+  DATE_PRESET_TODAY,
   filterCardsByTab,
   parseBindings,
   parseClickAction,
   parseDashboardConfig,
   parseLayoutJson,
+  readDateDefaultPreset,
   resolveCardTabId,
   serializeBindings,
   serializeClickAction,
@@ -302,9 +305,55 @@ function onParameterTypeChange(parameter: DashboardParameter) {
     delete parameter.optionsFrom
     delete parameter.options
   }
+  if (parameter.type === 'date' && readDateDefaultPreset(parameter.defaultValue) === DATE_PRESET_LAST7DAYS) {
+    parameter.defaultValue = DATE_PRESET_TODAY
+  }
+  if (parameter.type === 'date-range' && readDateDefaultPreset(parameter.defaultValue) === DATE_PRESET_TODAY) {
+    parameter.defaultValue = DATE_PRESET_LAST7DAYS
+  }
+  if (parameter.type !== 'date' && parameter.type !== 'date-range'
+      && readDateDefaultPreset(parameter.defaultValue)) {
+    parameter.defaultValue = undefined
+  }
+}
+
+type DateDefaultMode = 'none' | 'today' | 'last7days' | 'fixed'
+
+function dateDefaultMode(parameter: DashboardParameter): DateDefaultMode {
+  const preset = readDateDefaultPreset(parameter.defaultValue)
+  if (preset === DATE_PRESET_TODAY) return 'today'
+  if (preset === DATE_PRESET_LAST7DAYS) return 'last7days'
+  if (parameter.defaultValue == null || parameter.defaultValue === '') return 'none'
+  return 'fixed'
+}
+
+function setDateDefaultMode(parameter: DashboardParameter, mode: string) {
+  if (mode === 'none') {
+    parameter.defaultValue = undefined
+    return
+  }
+  if (mode === 'today') {
+    parameter.defaultValue = DATE_PRESET_TODAY
+    return
+  }
+  if (mode === 'last7days') {
+    parameter.defaultValue = DATE_PRESET_LAST7DAYS
+    return
+  }
+  if (mode !== 'fixed') return
+  if (parameter.type === 'date-range') {
+    if (readDateDefaultPreset(parameter.defaultValue) || parameter.defaultValue == null) {
+      parameter.defaultValue = undefined
+    }
+    return
+  }
+  if (readDateDefaultPreset(parameter.defaultValue) || typeof parameter.defaultValue !== 'string') {
+    parameter.defaultValue = ''
+  }
 }
 
 function rangeDefaultValue(parameter: DashboardParameter): [string, string] | undefined {
+  if (readDateDefaultPreset(parameter.defaultValue)) return undefined
   const raw = parameter.defaultValue
   if (Array.isArray(raw) && raw.length >= 2) return [String(raw[0] ?? ''), String(raw[1] ?? '')]
   if (raw && typeof raw === 'object') {
@@ -322,6 +371,11 @@ function setRangeDefaultValue(parameter: DashboardParameter, value: [string, str
     return
   }
   parameter.defaultValue = { start: value[0], end: value[1] }
+}
+
+function fixedDateDefault(parameter: DashboardParameter): string {
+  if (readDateDefaultPreset(parameter.defaultValue)) return ''
+  return typeof parameter.defaultValue === 'string' ? parameter.defaultValue : ''
 }
 
 function addBinding() {
@@ -544,21 +598,52 @@ onBeforeUnmount(() => {
               :value="option.value"
             />
           </el-select>
+          <template v-if="parameter.type === 'date'">
+            <el-select
+              :model-value="dateDefaultMode(parameter)"
+              style="width:120px"
+              @update:model-value="setDateDefaultMode(parameter, String($event))"
+            >
+              <el-option :label="t('dashboard.defaultNone')" value="none" />
+              <el-option :label="t('dashboard.defaultToday')" value="today" />
+              <el-option :label="t('dashboard.defaultFixed')" value="fixed" />
+            </el-select>
+            <el-date-picker
+              v-if="dateDefaultMode(parameter) === 'fixed'"
+              :model-value="fixedDateDefault(parameter)"
+              type="date"
+              value-format="YYYY-MM-DD"
+              :placeholder="t('dashboard.defaultValue')"
+              style="width:160px"
+              @update:model-value="parameter.defaultValue = $event || undefined"
+            />
+          </template>
+          <template v-else-if="parameter.type === 'date-range'">
+            <el-select
+              :model-value="dateDefaultMode(parameter)"
+              style="width:120px"
+              @update:model-value="setDateDefaultMode(parameter, String($event))"
+            >
+              <el-option :label="t('dashboard.defaultNone')" value="none" />
+              <el-option :label="t('dashboard.defaultLast7Days')" value="last7days" />
+              <el-option :label="t('dashboard.defaultFixed')" value="fixed" />
+            </el-select>
+            <el-date-picker
+              v-if="dateDefaultMode(parameter) === 'fixed'"
+              :model-value="rangeDefaultValue(parameter)"
+              type="daterange"
+              value-format="YYYY-MM-DD"
+              :start-placeholder="t('common.start')"
+              :end-placeholder="t('common.end')"
+              style="width:260px"
+              @update:model-value="setRangeDefaultValue(parameter, $event as [string, string] | null)"
+            />
+          </template>
           <el-input
-            v-if="parameter.type !== 'date-range'"
+            v-else
             v-model="parameter.defaultValue as string"
             :placeholder="t('dashboard.defaultValue')"
             style="width:160px"
-          />
-          <el-date-picker
-            v-else
-            :model-value="rangeDefaultValue(parameter)"
-            type="daterange"
-            value-format="YYYY-MM-DD"
-            :start-placeholder="t('common.start')"
-            :end-placeholder="t('common.end')"
-            style="width:260px"
-            @update:model-value="setRangeDefaultValue(parameter, $event as [string, string] | null)"
           />
           <el-switch v-model="parameter.required" inline-prompt :active-text="t('common.required')" :inactive-text="t('common.optional')" />
           <el-button link type="danger" @click="removeParameter(index)">{{ t('common.delete') }}</el-button>

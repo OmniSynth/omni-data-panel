@@ -23,6 +23,11 @@ import com.omni.panel.service.QueryService;
 public class QueryController {
     private final QueryService service;
 
+    /**
+     * 注入查询业务服务。
+     *
+     * @param service 查询服务
+     */
     public QueryController(QueryService service) {
         this.service = service;
     }

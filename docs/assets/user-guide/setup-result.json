@@ -1,0 +1,19 @@
+{
+  "sourceId": "2084177715329564673",
+  "datasetId": "9",
+  "dashId": "5",
+  "chartIds": {
+    "kpi-count": "6",
+    "kpi-avg": "7",
+    "bar-caller": "8",
+    "bar-method": "9",
+    "line-daily": "10",
+    "table-recent": "11"
+  },
+  "metricIds": {
+    "count": "1",
+    "avgCost": "2"
+  },
+  "viewUrl": "http://localhost:5173/dashboards/5/view",
+  "editUrl": "http://localhost:5173/dashboards/5/edit"
+}

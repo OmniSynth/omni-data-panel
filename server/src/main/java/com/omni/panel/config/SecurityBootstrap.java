@@ -25,6 +25,14 @@ public class SecurityBootstrap implements ApplicationRunner {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
 
+    /**
+     * 注入运行环境、安全配置、用户持久化与密码编码器。
+     *
+     * @param environment     Spring 运行环境
+     * @param properties      安全相关配置属性
+     * @param userMapper      用户数据访问
+     * @param passwordEncoder 密码哈希编码器
+     */
     public SecurityBootstrap(Environment environment, SecurityProperties properties,
                              UserMapper userMapper, PasswordEncoder passwordEncoder) {
         this.environment = environment;

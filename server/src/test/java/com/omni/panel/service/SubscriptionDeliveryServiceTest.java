@@ -77,16 +77,16 @@ class SubscriptionDeliveryServiceTest {
         stubSubscription(1L, true);
         when(mailService.ready()).thenReturn(true);
         when(userMapper.selectById(3L)).thenReturn(user(3L, "alice", "爱丽丝", "alice@example.com", true));
-        when(pdfService.renderDashboardPdf(eq(8L), anyString())).thenReturn(new byte[] {1, 2, 3});
+        when(pdfService.renderDashboardPdf(eq(8L), anyString())).thenReturn(new byte[]{1, 2, 3});
 
         service.send(1L);
 
         verify(mailService).sendWithPdfAttachment(
-                eq(new String[] {"alice@example.com"}),
+                eq(new String[]{"alice@example.com"}),
                 eq("仪表盘订阅：销售看板"),
                 anyString(),
                 anyString(),
-                eq(new byte[] {1, 2, 3}));
+                eq(new byte[]{1, 2, 3}));
         verify(mailService, never()).send(any(SimpleMailMessage.class));
     }
 
@@ -111,7 +111,7 @@ class SubscriptionDeliveryServiceTest {
         stubSubscription(2L, false);
         when(mailService.ready()).thenReturn(true);
         when(userMapper.selectById(3L)).thenReturn(user(3L, "alice", "爱丽丝", "alice@example.com", true));
-        when(pdfService.renderDashboardPdf(eq(8L), anyString())).thenReturn(new byte[] {9});
+        when(pdfService.renderDashboardPdf(eq(8L), anyString())).thenReturn(new byte[]{9});
 
         service.send(2L, false);
 

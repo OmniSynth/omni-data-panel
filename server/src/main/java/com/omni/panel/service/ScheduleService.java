@@ -37,6 +37,16 @@ public class ScheduleService {
     private final ResourceOwnerMapper ownerMapper;
     private final SubscriptionMapper subscriptionMapper;
 
+    /**
+     * 注入调度持久化、Quartz 调度器与目标资源校验依赖。
+     *
+     * @param mapper              调度任务数据访问
+     * @param scheduler           Quartz 调度器
+     * @param dataSourceService   数据源服务
+     * @param permissionService   权限服务
+     * @param ownerMapper         资源所有者查询
+     * @param subscriptionMapper  订阅数据访问
+     */
     public ScheduleService(ScheduleMapper mapper, Scheduler scheduler, DataSourceService dataSourceService,
                            PermissionService permissionService, ResourceOwnerMapper ownerMapper,
                            SubscriptionMapper subscriptionMapper) {

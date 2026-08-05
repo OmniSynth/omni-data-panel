@@ -26,6 +26,13 @@ public class DataSourceObjectAclService {
     private final DataSourceMapper dataSourceMapper;
     private final ResourcePermissionMapper resourcePermissionMapper;
 
+    /**
+     * 注入数据源对象 ACL 维护所需依赖。
+     *
+     * @param mapper                   对象 ACL 持久化
+     * @param dataSourceMapper         数据源持久化
+     * @param resourcePermissionMapper 角色权限查询
+     */
     public DataSourceObjectAclService(DataSourceObjectAclMapper mapper, DataSourceMapper dataSourceMapper,
                                       ResourcePermissionMapper resourcePermissionMapper) {
         this.mapper = mapper;
@@ -130,18 +137,45 @@ public class DataSourceObjectAclService {
         }
     }
 
+    /**
+     * 生成表级拒绝键（模式与表名规范化后以分隔符连接）。
+     *
+     * @param schema 模式名
+     * @param table  表名
+     * @return 表键
+     */
     public static String tableKey(String schema, String table) {
         return normalize(schema) + "\u0001" + normalize(table);
     }
 
+    /**
+     * 生成列级拒绝键（在表键基础上追加列名）。
+     *
+     * @param schema 模式名
+     * @param table  表名
+     * @param column 列名
+     * @return 列键
+     */
     public static String columnKey(String schema, String table, String column) {
         return tableKey(schema, table) + "\u0001" + normalize(column);
     }
 
+    /**
+     * 规范化标识符（去空白并转小写）。
+     *
+     * @param value 原始值
+     * @return 规范化字符串；{@code null} 时返回空串
+     */
     public static String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
+    /**
+     * 要求当前用户为管理员且数据源存在。
+     *
+     * @param sourceId 数据源标识
+     * @throws BusinessException 非管理员或数据源不存在时
+     */
     private void requireAdminAndSource(long sourceId) {
         if (!AuthenticatedUser.current().admin()) {
             throw new BusinessException(403, "仅管理员可配置表列权限");
@@ -151,12 +185,24 @@ public class DataSourceObjectAclService {
         }
     }
 
+    /**
+     * 要求角色可配置（启用且非管理员角色）。
+     *
+     * @param roleId 角色标识
+     * @throws BusinessException 角色不可配置时
+     */
     private void requireAssignableRole(long roleId) {
         if (resourcePermissionMapper.assignableRole(roleId) == 0) {
             throw new BusinessException("只能配置启用的非管理员角色");
         }
     }
 
+    /**
+     * 去重并过滤无效的表拒绝项。
+     *
+     * @param tables 原始表列表
+     * @return 规范化后的表列表
+     */
     private List<DataSourceObjectAclMapper.TableRef> sanitizeTables(List<DataSourceObjectAclMapper.TableRef> tables) {
         Set<String> seen = new HashSet<>();
         List<DataSourceObjectAclMapper.TableRef> result = new ArrayList<>();
@@ -177,6 +223,12 @@ public class DataSourceObjectAclService {
         return result;
     }
 
+    /**
+     * 去重并过滤无效的列拒绝项。
+     *
+     * @param columns 原始列列表
+     * @return 规范化后的列列表
+     */
     private List<DataSourceObjectAclMapper.ColumnRef> sanitizeColumns(List<DataSourceObjectAclMapper.ColumnRef> columns) {
         Set<String> seen = new HashSet<>();
         List<DataSourceObjectAclMapper.ColumnRef> result = new ArrayList<>();
@@ -198,6 +250,12 @@ public class DataSourceObjectAclService {
         return result;
     }
 
+    /**
+     * 判断字符串为空或仅空白。
+     *
+     * @param value 原始值
+     * @return 空白时返回 {@code true}
+     */
     private static boolean blank(String value) {
         return value == null || value.isBlank();
     }
@@ -210,18 +268,35 @@ public class DataSourceObjectAclService {
      * @param configured 用户角色在该源上是否存在任意 deny 配置（含空集查询后仍可能 true 若 count&gt;0，通常与集合一致）
      */
     public record EffectiveDenies(Set<String> tables, Set<String> columns, boolean configured) {
+        /** 返回无任何拒绝规则的空实例。 */
         public static EffectiveDenies none() {
             return new EffectiveDenies(Set.of(), Set.of(), false);
         }
 
+        /**
+         * 判断表是否在拒绝集中。
+         *
+         * @param schema 模式名
+         * @param table  表名
+         * @return 被拒绝时返回 {@code true}
+         */
         public boolean isTableDenied(String schema, String table) {
             return tables.contains(tableKey(schema, table));
         }
 
+        /**
+         * 判断列是否在拒绝集中（含整表拒绝）。
+         *
+         * @param schema 模式名
+         * @param table  表名
+         * @param column 列名
+         * @return 被拒绝时返回 {@code true}
+         */
         public boolean isColumnDenied(String schema, String table, String column) {
             return isTableDenied(schema, table) || columns.contains(columnKey(schema, table, column));
         }
 
+        /** 拒绝集是否为空（无表且无列）。 */
         public boolean isEmpty() {
             return tables.isEmpty() && columns.isEmpty();
         }

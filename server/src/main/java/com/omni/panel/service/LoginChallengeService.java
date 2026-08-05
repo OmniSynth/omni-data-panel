@@ -108,15 +108,33 @@ public class LoginChallengeService {
         }
     }
 
+    /**
+     * 移除已过期的挑战条目。
+     */
     private void purgeExpired() {
         long now = Instant.now().getEpochSecond();
         challenges.entrySet().removeIf(entry -> entry.getValue().expiresAt() < now);
     }
 
+    /**
+     * 规范化十六进制字符串（去空白并转小写）。
+     *
+     * @param value 原始十六进制
+     * @return 规范化后的字符串；{@code null} 时返回空串
+     */
     private static String normalizeHex(String value) {
         return value == null ? "" : value.trim().toLowerCase();
     }
 
+    /**
+     * 内存中的登录挑战状态。
+     *
+     * @param nonce     随机数
+     * @param signKey   前端 HMAC 密钥（十六进制）
+     * @param issuedAt  签发时间（秒）
+     * @param expiresAt 过期时间（秒）
+     * @param used      是否已消耗
+     */
     private record Challenge(String nonce, String signKey, long issuedAt, long expiresAt, boolean used) {
     }
 

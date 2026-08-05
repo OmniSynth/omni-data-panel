@@ -32,6 +32,7 @@ import com.omni.panel.service.LoginChallengeService;
 import com.omni.panel.service.TotpService;
 import com.omni.panel.service.UserService;
 import com.omni.panel.service.UserSessionRegistry;
+
 import java.time.Instant;
 
 class AuthMfaLoginTest {

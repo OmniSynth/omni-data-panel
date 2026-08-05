@@ -24,6 +24,11 @@ import com.omni.panel.service.PermissionService;
 public class PermissionController {
     private final PermissionService service;
 
+    /**
+     * 注入资源权限业务服务。
+     *
+     * @param service 权限服务
+     */
     public PermissionController(PermissionService service) {
         this.service = service;
     }

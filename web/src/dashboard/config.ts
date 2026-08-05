@@ -113,9 +113,66 @@ export function filterCardsByTab<T extends { layoutJson: string }>(
 export function defaultParameterValues(parameters: DashboardParameter[]): Record<string, unknown> {
   const values: Record<string, unknown> = {}
   for (const parameter of parameters) {
-    if (parameter.defaultValue !== undefined) values[parameter.id] = parameter.defaultValue
+    if (parameter.defaultValue === undefined) continue
+    values[parameter.id] = resolveParameterDefault(parameter.type, parameter.defaultValue)
   }
   return values
+}
+
+/** 相对日期默认：当天 */
+export const DATE_PRESET_TODAY = '$today'
+/** 相对日期默认：近一周（含今天共 7 天） */
+export const DATE_PRESET_LAST7DAYS = '$last7days'
+
+export type DateDefaultPreset = typeof DATE_PRESET_TODAY | typeof DATE_PRESET_LAST7DAYS
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+/** 本地日历日 YYYY-MM-DD */
+export function formatLocalDate(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+/** 从 defaultValue 读取相对预设标记；固定值返回 null */
+export function readDateDefaultPreset(defaultValue: unknown): DateDefaultPreset | null {
+  if (defaultValue === DATE_PRESET_TODAY || defaultValue === DATE_PRESET_LAST7DAYS) {
+    return defaultValue
+  }
+  if (defaultValue && typeof defaultValue === 'object' && !Array.isArray(defaultValue)) {
+    const preset = (defaultValue as { preset?: unknown }).preset
+    if (preset === DATE_PRESET_TODAY || preset === 'today') return DATE_PRESET_TODAY
+    if (preset === DATE_PRESET_LAST7DAYS || preset === 'last7days') return DATE_PRESET_LAST7DAYS
+  }
+  return null
+}
+
+/**
+ * 将参数默认值解析为运行时值；相对预设按本地日历展开。
+ */
+export function resolveParameterDefault(
+  _type: DashboardParameter['type'] | string | undefined,
+  defaultValue: unknown,
+  now: Date = new Date(),
+): unknown {
+  const preset = readDateDefaultPreset(defaultValue)
+  if (preset === DATE_PRESET_TODAY) {
+    return formatLocalDate(now)
+  }
+  if (preset === DATE_PRESET_LAST7DAYS) {
+    return {
+      start: formatLocalDate(addDays(now, -6)),
+      end: formatLocalDate(now),
+    }
+  }
+  return defaultValue
 }
 
 export function parseBindings(bindingsJson?: string): CardParameterBinding[] {

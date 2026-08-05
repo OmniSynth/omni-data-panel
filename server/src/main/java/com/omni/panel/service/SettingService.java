@@ -80,6 +80,12 @@ public class SettingService {
     private final SettingMapper mapper;
     private final CredentialCrypto crypto;
 
+    /**
+     * 注入设置持久化与凭据加解密服务。
+     *
+     * @param mapper 设置数据访问
+     * @param crypto 凭据加解密（邮件密码）
+     */
     public SettingService(SettingMapper mapper, CredentialCrypto crypto) {
         this.mapper = mapper;
         this.crypto = crypto;
@@ -225,6 +231,12 @@ public class SettingService {
         return list();
     }
 
+    /**
+     * 按主键插入或更新设置行。
+     *
+     * @param key        设置键
+     * @param normalized 已规范化的存储值
+     */
     private void upsert(String key, String normalized) {
         SettingEntity entity = mapper.selectById(key);
         boolean insert = entity == null;
@@ -241,6 +253,12 @@ public class SettingService {
         }
     }
 
+    /**
+     * 从库中读取原始设置值，不做默认回落。
+     *
+     * @param key 设置键
+     * @return 库中值；不存在时返回 {@code null}
+     */
     private String rawValue(String key) {
         SettingEntity entity = mapper.selectById(key);
         return entity == null ? null : entity.getSettingValue();
@@ -311,6 +329,12 @@ public class SettingService {
         return raw;
     }
 
+    /**
+     * 用正则与 {@link InternetAddress} 校验邮箱；非法时抛出业务异常。
+     *
+     * @param value   待校验地址
+     * @param message 失败时的业务提示
+     */
     private static void validateEmail(String value, String message) {
         if (!EMAIL_PATTERN.matcher(value).matches()) {
             throw new BusinessException(message);

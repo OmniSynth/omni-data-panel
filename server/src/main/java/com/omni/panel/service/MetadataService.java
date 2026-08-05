@@ -45,6 +45,16 @@ public class MetadataService {
     private final Cache<String, Object> cache = Caffeine.newBuilder()
             .maximumSize(2000).expireAfterWrite(Duration.ofMinutes(5)).build();
 
+    /**
+     * 注入元数据持久化、数据源访问、连接池与对象 ACL 依赖。
+     *
+     * @param mapper             元数据快照持久化
+     * @param dataSourceService  数据源业务服务
+     * @param dataSourceMapper   数据源持久化
+     * @param registry           运行时连接池注册表
+     * @param dialectRegistry    方言注册表
+     * @param objectAclService   数据源对象 ACL
+     */
     public MetadataService(MetadataMapper mapper, DataSourceService dataSourceService,
                            DataSourceMapper dataSourceMapper, DataSourceRegistry registry,
                            DialectRegistry dialectRegistry, DataSourceObjectAclService objectAclService) {
@@ -141,6 +151,13 @@ public class MetadataService {
 
     /**
      * 有默认库且方言将默认库视为命名空间时，仅同步该库；否则同步账号可见的全部业务命名空间。
+     *
+     * @param source   数据源实体
+     * @param connection 只读 JDBC 连接
+     * @param metadata 数据库元数据
+     * @param dialect  方言插件
+     * @return 待同步的库名列表
+     * @throws SQLException JDBC 元数据读取失败时
      */
     private List<String> resolveCatalogs(DataSourceEntity source, Connection connection,
                                          DatabaseMetaData metadata, DialectPlugin dialect)
@@ -405,6 +422,9 @@ public class MetadataService {
 
     /**
      * 同步过程中的表名与注释引用。
+     *
+     * @param name    表名
+     * @param comment 表注释
      */
     private record TableRef(String name, String comment) {
     }

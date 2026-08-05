@@ -270,8 +270,15 @@ onBeforeUnmount(clearPrintReady)
   line-height: 24px;
 }
 .dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 90px; gap: 16px; }
-.dashboard-card { display: flex; flex-direction: column; overflow: hidden; }
-.dashboard-card :deep(.el-card__body) { flex: 1; min-height: 0; }
+.dashboard-card { display: flex; flex-direction: column; overflow: hidden; height: 100%; }
+.dashboard-card :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.dashboard-card :deep(.el-card__body > *) { flex: 1; min-height: 0; }
 @media (max-width: 900px) {
   .dashboard-card { grid-column: 1 / -1 !important; }
 }

@@ -37,6 +37,13 @@ public class ExportService {
     private final MinioProperties properties;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
+    /**
+     * 注入查询、导出任务持久化与 MinIO 配置。
+     *
+     * @param queryService 查询服务
+     * @param mapper       导出任务数据访问
+     * @param properties   MinIO 连接配置
+     */
     public ExportService(QueryService queryService, ExportTaskMapper mapper, MinioProperties properties) {
         this.queryService = queryService;
         this.mapper = mapper;

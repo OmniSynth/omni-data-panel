@@ -31,26 +31,31 @@ public class HiveDialectPlugin extends DialectPlugin {
     private static final Pattern URL_PATTERN = Pattern.compile(
             "(?i)^jdbc:hive2://([^/:?]+)(?::(\\d+))?(?:/([^?;\\s]*))?.*$");
 
+    /** {@inheritDoc} */
     @Override
     public String code() {
         return CODE;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String label() {
         return "Hive";
     }
 
+    /** {@inheritDoc} */
     @Override
     public int defaultPort() {
         return 10000;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         return jdbcUrl != null && jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:hive2:");
     }
 
+    /** {@inheritDoc} */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -69,6 +74,7 @@ public class HiveDialectPlugin extends DialectPlugin {
         return url.toString();
     }
 
+    /** {@inheritDoc} */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -84,6 +90,7 @@ public class HiveDialectPlugin extends DialectPlugin {
         return new ParsedJdbcUrl(host, port, database);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         if (parseJdbcUrl(jdbcUrl) == null
@@ -93,6 +100,7 @@ public class HiveDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void configurePool(HikariConfig config, DataSourceEntity source) {
         // Hive JDBC 对 isValid 支持不稳定，强制探测 SQL
@@ -101,6 +109,7 @@ public class HiveDialectPlugin extends DialectPlugin {
         config.setMinimumIdle(0);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void prepareConnection(Connection connection, DataSourceEntity source) throws SQLException {
         String database = source.getDefaultDatabase();
@@ -109,6 +118,7 @@ public class HiveDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
             throws SQLException {
@@ -120,6 +130,7 @@ public class HiveDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void useNamespace(Connection connection, String namespace) throws SQLException {
         String safe = namespace.replace("`", "").replace(";", "");
@@ -128,6 +139,7 @@ public class HiveDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<String> listNamespaces(Connection connection, DatabaseMetaData metadata) throws SQLException {
         Set<String> catalogs = new LinkedHashSet<>();
@@ -156,21 +168,25 @@ public class HiveDialectPlugin extends DialectPlugin {
         return List.copyOf(catalogs);
     }
 
+    /** {@inheritDoc} */
     @Override
     public Set<String> systemNamespaces() {
         return SYSTEM_NAMESPACES;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String metaCatalog(String namespace) {
         return null;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String metaSchema(String namespace) {
         return namespace;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
             throws SQLException {
@@ -188,6 +204,7 @@ public class HiveDialectPlugin extends DialectPlugin {
         return tables;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
             throws SQLException {
@@ -216,11 +233,18 @@ public class HiveDialectPlugin extends DialectPlugin {
         return columns;
     }
 
+    /** {@inheritDoc} */
     @Override
     public char identifierQuote() {
         return '`';
     }
 
+    /**
+     * 通过 SHOW DATABASES 收集业务库名。
+     *
+     * @param connection JDBC 连接
+     * @param catalogs   待填充的库名集合
+     */
     private void collectFromShowDatabases(Connection connection, Set<String> catalogs) throws SQLException {
         try (Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery("SHOW DATABASES")) {
@@ -230,6 +254,12 @@ public class HiveDialectPlugin extends DialectPlugin {
         }
     }
 
+    /**
+     * 将非系统库名加入集合，忽略空值与 Hive 系统库。
+     *
+     * @param catalogs 业务库名集合
+     * @param catalog  待判定的库名
+     */
     private void addBusinessNamespace(Set<String> catalogs, String catalog) {
         if (catalog == null || catalog.isBlank()) {
             return;

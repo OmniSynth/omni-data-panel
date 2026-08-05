@@ -38,6 +38,14 @@ public class DashboardController {
     private final DashboardRenderService renderService;
     private final RecentService recentService;
 
+    /**
+     * 注入仪表盘相关业务依赖。
+     *
+     * @param service           仪表盘服务
+     * @param permissionService 权限服务
+     * @param renderService     仪表盘渲染服务
+     * @param recentService     最近访问记录服务
+     */
     public DashboardController(DashboardService service, PermissionService permissionService,
                                DashboardRenderService renderService, RecentService recentService) {
         this.service = service;
@@ -206,6 +214,11 @@ public class DashboardController {
 
     /**
      * 仪表盘创建与更新请求。
+     *
+     * @param name         名称
+     * @param description  描述
+     * @param configJson   布局与参数配置 JSON
+     * @param collectionId 所属集合标识
      */
     public record DashboardRequest(@NotBlank String name, String description,
                                    @NotBlank String configJson, Long collectionId) {
@@ -213,6 +226,12 @@ public class DashboardController {
 
     /**
      * 仪表盘卡片创建与更新请求。
+     *
+     * @param chartId         关联图表标识
+     * @param title           卡片标题
+     * @param layoutJson      布局 JSON
+     * @param bindingsJson    参数绑定 JSON
+     * @param clickActionJson 点击联动配置 JSON
      */
     public record CardRequest(@NotNull Long chartId, @NotBlank String title, @NotBlank String layoutJson,
                               String bindingsJson, String clickActionJson) {
@@ -220,12 +239,25 @@ public class DashboardController {
 
     /**
      * 带参数的仪表盘渲染请求。
+     *
+     * @param forceRefresh     是否强制刷新查询缓存
+     * @param parameterValues  仪表盘参数取值映射
      */
     public record RenderRequest(Boolean forceRefresh, java.util.Map<String, Object> parameterValues) {
     }
 
     /**
      * 仪表盘视图。
+     *
+     * @param id              仪表盘标识
+     * @param name            名称
+     * @param description     描述
+     * @param configJson      配置 JSON
+     * @param ownerId         所有者用户标识
+     * @param collectionId    所属集合标识
+     * @param lastRefreshedAt 上次刷新时间
+     * @param updatedAt       更新时间
+     * @param accessLevel     当前用户访问级别
      */
     public record DashboardView(@JsonSerialize(using = ToStringSerializer.class) long id,
                                 String name, String description, String configJson,

@@ -46,6 +46,18 @@ public class AuthController {
     private final LoginChallengeService loginChallengeService;
     private final UserSessionRegistry sessionRegistry;
 
+    /**
+     * 构造认证控制器并注入依赖。
+     *
+     * @param userMapper             用户数据访问
+     * @param passwordEncoder        密码哈希校验
+     * @param jwtService             JWT 签发与校验
+     * @param loginAuditService      登录审计
+     * @param userService            用户业务服务
+     * @param totpService            双因子认证
+     * @param loginChallengeService  登录挑战与签名校验
+     * @param sessionRegistry        会话注册表
+     */
     public AuthController(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtService jwtService,
                           LoginAuditService loginAuditService, UserService userService, TotpService totpService,
                           LoginChallengeService loginChallengeService, UserSessionRegistry sessionRegistry) {
@@ -137,6 +149,12 @@ public class AuthController {
         return ApiResponse.ok(LoginResult.bearer(issueAccessToken(user)));
     }
 
+    /**
+     * 签发访问令牌并注册会话。
+     *
+     * @param user 已认证用户
+     * @return JWT 访问令牌字符串
+     */
     private String issueAccessToken(SysUser user) {
         JwtService.AccessToken access = jwtService.createAccess(user.getId(), user.getUsername());
         sessionRegistry.register(user.getId(), access.jti(), access.expiresAt());
@@ -328,6 +346,9 @@ public class AuthController {
     public record LoginResult(String accessToken, String tokenType, Boolean mfaRequired, String mfaToken) {
         /**
          * 签发正式访问令牌的结果。
+         *
+         * @param accessToken JWT 访问令牌
+         * @return 登录成功结果
          */
         public static LoginResult bearer(String accessToken) {
             return new LoginResult(accessToken, "Bearer", false, null);
@@ -335,6 +356,9 @@ public class AuthController {
 
         /**
          * 需要 MFA 校验的结果。
+         *
+         * @param mfaToken MFA 中间令牌
+         * @return 待 MFA 校验的登录结果
          */
         public static LoginResult needMfa(String mfaToken) {
             return new LoginResult(null, null, true, mfaToken);

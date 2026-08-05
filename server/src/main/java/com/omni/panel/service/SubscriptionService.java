@@ -32,6 +32,15 @@ public class SubscriptionService {
     private final SubscriptionDeliveryService deliveryService;
     private final Scheduler scheduler;
 
+    /**
+     * 注入订阅持久化、权限、投递与 Quartz 调度依赖。
+     *
+     * @param mapper           订阅持久化
+     * @param permissionService 资源权限校验
+     * @param ownerMapper      资源所有者查询
+     * @param deliveryService  邮件投递
+     * @param scheduler        Quartz 调度器
+     */
     public SubscriptionService(SubscriptionMapper mapper, PermissionService permissionService,
                                ResourceOwnerMapper ownerMapper, SubscriptionDeliveryService deliveryService,
                                Scheduler scheduler) {
@@ -59,12 +68,12 @@ public class SubscriptionService {
      * 创建或更新订阅，并用最新配置替换对应 Quartz 作业。
      * 保存前要求当前用户可读目标仪表盘，并校验 Cron 与收件用户；禁用订阅会保留数据库记录但移除 Quartz 作业。
      *
-     * @param id                订阅标识，为 {@code null} 时创建订阅
-     * @param name              订阅名称
-     * @param dashboardId       仪表盘标识
-     * @param cron              Quartz Cron 表达式
-     * @param recipientUserIds  收件用户标识
-     * @param enabled           是否启用
+     * @param id               订阅标识，为 {@code null} 时创建订阅
+     * @param name             订阅名称
+     * @param dashboardId      仪表盘标识
+     * @param cron             Quartz Cron 表达式
+     * @param recipientUserIds 收件用户标识
+     * @param enabled          是否启用
      * @return 已持久化的订阅视图
      */
     public SubscriptionView save(Long id, String name, long dashboardId, String cron,
@@ -100,6 +109,12 @@ public class SubscriptionService {
         deliveryService.send(id, false);
     }
 
+    /**
+     * 将订阅实体转换为对外视图，并解析收件用户标识与展示文案。
+     *
+     * @param entity 订阅实体
+     * @return 订阅视图
+     */
     private SubscriptionView toView(SubscriptionEntity entity) {
         List<Long> recipientUserIds;
         String recipientsLabel;

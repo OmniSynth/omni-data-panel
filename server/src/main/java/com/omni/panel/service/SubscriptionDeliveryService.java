@@ -31,6 +31,16 @@ public class SubscriptionDeliveryService {
     private final DashboardPdfService pdfService;
     private final SubscriptionProperties properties;
 
+    /**
+     * 注入订阅投递所需依赖。
+     *
+     * @param subscriptionMapper 订阅持久化
+     * @param dashboardMapper    仪表盘持久化
+     * @param userMapper         用户持久化
+     * @param mailService        系统发信
+     * @param pdfService         仪表盘 PDF 渲染
+     * @param properties         订阅配置
+     */
     public SubscriptionDeliveryService(SubscriptionMapper subscriptionMapper, DashboardMapper dashboardMapper,
                                        UserMapper userMapper, SystemMailService mailService,
                                        DashboardPdfService pdfService, SubscriptionProperties properties) {
@@ -180,6 +190,13 @@ public class SubscriptionDeliveryService {
         return String.join("、", labels);
     }
 
+    /**
+     * 规范化并去重收件用户标识列表。
+     *
+     * @param recipientUserIds 原始用户标识
+     * @return 去重后的用户标识
+     * @throws BusinessException 列表为空或含非法标识时
+     */
     private List<Long> normalizeRecipientUserIds(List<Long> recipientUserIds) {
         if (recipientUserIds == null || recipientUserIds.isEmpty()) {
             throw new BusinessException("订阅收件人不能为空");
@@ -197,6 +214,13 @@ public class SubscriptionDeliveryService {
         return List.copyOf(unique);
     }
 
+    /**
+     * 校验用户存在、已启用且配置了邮箱。
+     *
+     * @param recipientUserIds 收件用户标识
+     * @return 可投递的用户实体列表
+     * @throws BusinessException 用户不可用或未配置邮箱时
+     */
     private List<SysUser> requireMailableUsers(List<Long> recipientUserIds) {
         List<SysUser> users = new ArrayList<>();
         for (Long userId : recipientUserIds) {
@@ -213,6 +237,12 @@ public class SubscriptionDeliveryService {
         return users;
     }
 
+    /**
+     * 判断持久化 token 是否为纯数字用户标识。
+     *
+     * @param token 收件人 token
+     * @return 全部为数字时返回 {@code true}
+     */
     private boolean isUserIdToken(String token) {
         if (token == null || token.isEmpty()) {
             return false;

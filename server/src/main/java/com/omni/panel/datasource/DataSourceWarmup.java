@@ -29,6 +29,13 @@ public class DataSourceWarmup implements ApplicationRunner {
     private final DataSourceRegistry registry;
     private final DataSourceService dataSourceService;
 
+    /**
+     * 注入数据源持久化、连接池注册表与数据源服务。
+     *
+     * @param mapper            数据源数据访问
+     * @param registry          连接池注册表
+     * @param dataSourceService 数据源业务服务
+     */
     public DataSourceWarmup(DataSourceMapper mapper, DataSourceRegistry registry,
                             DataSourceService dataSourceService) {
         this.mapper = mapper;

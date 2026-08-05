@@ -29,6 +29,11 @@ public class UserCredentialTokenService {
     private final UserCredentialTokenMapper mapper;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    /**
+     * 注入凭证令牌持久化依赖。
+     *
+     * @param mapper 凭证令牌持久化
+     */
     public UserCredentialTokenService(UserCredentialTokenMapper mapper) {
         this.mapper = mapper;
     }
@@ -77,8 +82,8 @@ public class UserCredentialTokenService {
     /**
      * 校验并消费令牌。
      *
-     * @param rawToken         原始令牌
-     * @param expectedPurpose  期望用途
+     * @param rawToken        原始令牌
+     * @param expectedPurpose 期望用途
      * @return 已消费的令牌实体
      */
     @Transactional
@@ -92,6 +97,12 @@ public class UserCredentialTokenService {
         return entity;
     }
 
+    /**
+     * 使同用户同用途的未使用令牌全部失效。
+     *
+     * @param userId  用户标识
+     * @param purpose 用途
+     */
     private void invalidateOpen(long userId, String purpose) {
         mapper.update(null, new UpdateWrapper<UserCredentialTokenEntity>()
                 .eq("user_id", userId)
@@ -100,6 +111,12 @@ public class UserCredentialTokenService {
                 .set("used_at", LocalDateTime.now()));
     }
 
+    /**
+     * 按用途返回令牌有效期。
+     *
+     * @param purpose 用途
+     * @return 有效期
+     */
     private static Duration ttl(String purpose) {
         if (UserCredentialTokenEntity.PURPOSE_ACTIVATE.equals(purpose)) {
             return ACTIVATE_TTL;
@@ -107,12 +124,23 @@ public class UserCredentialTokenService {
         return RESET_TTL;
     }
 
+    /**
+     * 生成 URL 安全的随机原始令牌。
+     *
+     * @return 原始令牌字符串
+     */
     private String generateRawToken() {
         byte[] bytes = new byte[32];
         secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
+    /**
+     * 对原始令牌做 SHA-256 哈希（十六进制）。
+     *
+     * @param raw 原始令牌
+     * @return 哈希值
+     */
     static String hash(String raw) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

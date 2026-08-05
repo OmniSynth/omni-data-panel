@@ -160,25 +160,34 @@ public class DashboardRenderService {
     public List<RenderedCard> executeCards(long dashboardId, boolean forceRefresh,
                                            Map<String, Object> parameterValues, String configJson) {
         requireDashboard(dashboardId);
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(queryProperties.timeoutSeconds() + 5L));
         Map<String, QueryParameterApplier.ParameterMeta> metas = parameterApplier.parseParameterMetas(configJson);
         List<DashboardCardEntity> cards = cardMapper.selectList(Wrappers.<DashboardCardEntity>lambdaQuery()
                 .eq(DashboardCardEntity::getDashboardId, dashboardId).orderByAsc(DashboardCardEntity::getId));
         if (cards.isEmpty()) {
             return List.of();
         }
+        // 按数据源/用户并发上限分波执行，避免多卡同时抢许可导致整页失败
+        int concurrency = Math.max(1, Math.min(queryProperties.perUserConcurrency(),
+                queryProperties.perSourceConcurrency()));
+        long waves = Math.max(1L, (cards.size() + concurrency - 1L) / concurrency);
+        Instant deadline = Instant.now().plus(Duration.ofSeconds(
+                queryProperties.timeoutSeconds() * waves + 15L));
+        List<RenderedCard> results = new ArrayList<>(cards.size());
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<CompletableFuture<RenderedCard>> futures = cards.stream()
-                    .map(card -> CompletableFuture.supplyAsync(
-                            () -> executeCard(card, deadline, forceRefresh, parameterValues, metas),
-                            executor))
-                    .toList();
-            List<RenderedCard> results = new ArrayList<>(futures.size());
-            for (CompletableFuture<RenderedCard> future : futures) {
-                results.add(future.join());
+            for (int offset = 0; offset < cards.size(); offset += concurrency) {
+                List<DashboardCardEntity> batch = cards.subList(offset,
+                        Math.min(offset + concurrency, cards.size()));
+                List<CompletableFuture<RenderedCard>> futures = batch.stream()
+                        .map(card -> CompletableFuture.supplyAsync(
+                                () -> executeCard(card, deadline, forceRefresh, parameterValues, metas),
+                                executor))
+                        .toList();
+                for (CompletableFuture<RenderedCard> future : futures) {
+                    results.add(future.join());
+                }
             }
-            return List.copyOf(results);
         }
+        return List.copyOf(results);
     }
 
     /**
@@ -304,7 +313,11 @@ public class DashboardRenderService {
                     return snapshot;
                 }
                 if ("FAILED".equals(snapshot.status()) || "CANCELLED".equals(snapshot.status())) {
-                    throw new BusinessException("图表查询失败");
+                    String detail = snapshot.error();
+                    if (detail == null || detail.isBlank()) {
+                        detail = "CANCELLED".equals(snapshot.status()) ? "查询已取消" : "图表查询失败";
+                    }
+                    throw new BusinessException(detail);
                 }
                 Thread.sleep(200);
             }

@@ -22,10 +22,24 @@ import com.omni.panel.service.SystemLogService;
 public class SystemLogController {
     private final SystemLogService service;
 
+    /**
+     * 注入系统日志业务服务。
+     *
+     * @param service 系统日志服务
+     */
     public SystemLogController(SystemLogService service) {
         this.service = service;
     }
 
+    /**
+     * 分页查询内存缓冲中的系统日志。
+     *
+     * @param keyword 可选关键字过滤
+     * @param level   可选日志级别过滤
+     * @param page    页码，从 1 开始
+     * @param size    每页条数
+     * @return 分页日志条目
+     */
     @GetMapping
     public ApiResponse<PageResult<SystemLogBuffer.Entry>> page(
             @RequestParam(required = false) String keyword,
@@ -36,11 +50,21 @@ public class SystemLogController {
         return ApiResponse.ok(service.page(keyword, level, page, size));
     }
 
+    /**
+     * 查询系统日志缓冲元信息。
+     *
+     * @return 缓冲容量与当前条数等元数据
+     */
     @GetMapping("/meta")
     public ApiResponse<SystemLogService.SystemLogMeta> meta() {
         return ApiResponse.ok(service.meta());
     }
 
+    /**
+     * 清空内存中的系统日志缓冲。
+     *
+     * @return 清空结果标记
+     */
     @PostMapping("/clear")
     public ApiResponse<Map<String, Boolean>> clear() {
         service.clear();

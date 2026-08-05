@@ -25,6 +25,12 @@ public class EmbedTokenService {
     private final SecretKey key;
     private final SettingService settingService;
 
+    /**
+     * 注入 JWT 签名密钥与系统设置服务。
+     *
+     * @param properties     安全配置（含 JWT 密钥）
+     * @param settingService 系统设置服务
+     */
     public EmbedTokenService(SecurityProperties properties, SettingService settingService) {
         this.key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(properties.jwtSecret()));
         this.settingService = settingService;

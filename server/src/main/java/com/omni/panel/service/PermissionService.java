@@ -27,6 +27,12 @@ public class PermissionService {
     private final ResourcePermissionMapper mapper;
     private final ResourceOwnerMapper ownerMapper;
 
+    /**
+     * 注入资源权限维护所需依赖。
+     *
+     * @param mapper      ACL 持久化
+     * @param ownerMapper 资源所有者查询
+     */
     public PermissionService(ResourcePermissionMapper mapper, ResourceOwnerMapper ownerMapper) {
         this.mapper = mapper;
         this.ownerMapper = ownerMapper;
@@ -169,6 +175,13 @@ public class PermissionService {
         return best;
     }
 
+    /**
+     * 自资源向上遍历集合祖先链（用于 ACL 继承）。
+     *
+     * @param type       资源类型
+     * @param resourceId 资源标识
+     * @return 祖先集合标识列表（由近及远）
+     */
     private List<Long> collectionAncestors(String type, long resourceId) {
         List<Long> chain = new ArrayList<>();
         Long cursor;
@@ -196,6 +209,14 @@ public class PermissionService {
         return chain;
     }
 
+    /**
+     * 要求当前用户可维护资源 ACL，并校验集合非个人空间。
+     *
+     * @param type       资源类型
+     * @param resourceId 资源标识
+     * @param ownerId    资源所有者标识
+     * @throws BusinessException 无权或个人集合时
+     */
     private void requireGrantAuthority(String type, long resourceId, long ownerId) {
         AuthenticatedUser user = AuthenticatedUser.current();
         if (!user.admin() && user.id() != ownerId) {
@@ -209,12 +230,27 @@ public class PermissionService {
         }
     }
 
+    /**
+     * 校验资源类型与权限字面量合法。
+     *
+     * @param type       资源类型
+     * @param permission 权限
+     * @throws BusinessException 不合法时
+     */
     private void validatePermission(String type, String permission) {
         if (!RESOURCE_TYPES.contains(type) || !Set.of("READ", "WRITE").contains(permission)) {
             throw new BusinessException("资源类型或权限不合法");
         }
     }
 
+    /**
+     * 查询资源所有者标识。
+     *
+     * @param type       资源类型
+     * @param resourceId 资源标识
+     * @return 所有者用户标识
+     * @throws BusinessException 类型不支持或资源不存在时
+     */
     private long owner(String type, long resourceId) {
         Long owner = switch (type) {
             case "DATA_SOURCE" -> ownerMapper.dataSourceOwner(resourceId);
@@ -231,6 +267,13 @@ public class PermissionService {
         return owner;
     }
 
+    /**
+     * 判断实际权限是否满足要求（WRITE 蕴含 READ）。
+     *
+     * @param actual   实际权限
+     * @param required 要求权限
+     * @return 满足时返回 {@code true}
+     */
     private static boolean satisfies(String actual, String required) {
         if (actual == null) {
             return false;
@@ -241,6 +284,13 @@ public class PermissionService {
         return "WRITE".equals(actual);
     }
 
+    /**
+     * 取两个权限中的较高者。
+     *
+     * @param left  权限 A
+     * @param right 权限 B
+     * @return {@code WRITE}、{@code READ} 或 {@code null}
+     */
     private static String maxPermission(String left, String right) {
         int l = rank(left);
         int r = rank(right);
@@ -248,6 +298,12 @@ public class PermissionService {
         return best == 2 ? "WRITE" : best == 1 ? "READ" : null;
     }
 
+    /**
+     * 权限排序权重（用于比较高低）。
+     *
+     * @param permission 权限
+     * @return WRITE=2，READ=1，否则 0
+     */
     private static int rank(String permission) {
         if ("WRITE".equals(permission)) {
             return 2;

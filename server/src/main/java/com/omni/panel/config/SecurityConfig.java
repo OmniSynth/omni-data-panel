@@ -17,6 +17,14 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
+    /**
+     * 配置无状态 JWT 安全过滤链与公开端点白名单。
+     *
+     * @param http       Spring Security 配置器
+     * @param jwtFilter  JWT 认证过滤器
+     * @return 已构建的安全过滤链
+     * @throws Exception 安全配置失败时抛出
+     */
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter) throws Exception {
         return http
@@ -36,6 +44,11 @@ public class SecurityConfig {
                 .build();
     }
 
+    /**
+     * 提供 BCrypt 密码编码器，用于用户凭据哈希。
+     *
+     * @return BCrypt 密码编码器
+     */
     @Bean
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

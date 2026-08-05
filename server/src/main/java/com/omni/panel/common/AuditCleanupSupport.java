@@ -13,7 +13,11 @@ public final class AuditCleanupSupport {
     }
 
     /**
+     * 按清理模式解析截止时间。
+     *
+     * @param request 清理请求
      * @return null 表示清空全部；非 null 表示删除该时间之前的记录
+     * @throws BusinessException 模式或参数非法时抛出
      */
     public static LocalDateTime resolveBefore(AuditCleanupRequest request) {
         if (request == null || request.mode() == null || request.mode().isBlank()) {

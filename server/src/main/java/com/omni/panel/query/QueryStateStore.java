@@ -29,6 +29,13 @@ public class QueryStateStore {
     private final ObjectMapper objectMapper;
     private final QueryProperties properties;
 
+    /**
+     * 注入 Redis 模板、JSON 序列化器与查询配置。
+     *
+     * @param redisProvider Redis 模板提供者，未配置时为 null
+     * @param objectMapper  快照 JSON 序列化器
+     * @param properties    查询与 Redis 大小限制配置
+     */
     public QueryStateStore(ObjectProvider<StringRedisTemplate> redisProvider, ObjectMapper objectMapper,
                            QueryProperties properties) {
         this.redis = redisProvider.getIfAvailable();

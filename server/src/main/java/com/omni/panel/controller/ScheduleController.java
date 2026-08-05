@@ -27,6 +27,11 @@ import com.omni.panel.service.ScheduleService;
 public class ScheduleController {
     private final ScheduleService service;
 
+    /**
+     * 注入调度业务服务。
+     *
+     * @param service 调度服务
+     */
     public ScheduleController(ScheduleService service) {
         this.service = service;
     }

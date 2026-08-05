@@ -20,6 +20,11 @@ public class SystemLogBufferAppender extends AppenderBase<ILoggingEvent> {
     private static final int STACK_LIMIT = 8000;
     private static final String APP_LOGGER_PREFIX = "com.omni.panel";
 
+    /**
+     * 将符合条件的 Logback 事件写入内存缓冲。
+     *
+     * @param event Logback 日志事件
+     */
     @Override
     protected void append(ILoggingEvent event) {
         if (event == null) {
@@ -49,6 +54,12 @@ public class SystemLogBufferAppender extends AppenderBase<ILoggingEvent> {
         }
     }
 
+    /**
+     * 提取异常堆栈文本。
+     *
+     * @param proxy Logback 异常代理
+     * @return 堆栈字符串；无异常时返回 null
+     */
     private static String stackTrace(IThrowableProxy proxy) {
         if (!(proxy instanceof ThrowableProxy throwableProxy)) {
             return null;
@@ -62,6 +73,13 @@ public class SystemLogBufferAppender extends AppenderBase<ILoggingEvent> {
         return writer.toString();
     }
 
+    /**
+     * 截断超长字符串以限制缓冲占用。
+     *
+     * @param value 原始字符串
+     * @param limit 最大长度
+     * @return 截断后的字符串
+     */
     private static String truncate(String value, int limit) {
         if (value == null) {
             return null;

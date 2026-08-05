@@ -28,6 +28,14 @@ public class PublicLinkService {
     private final ChartMapper chartMapper;
     private final PermissionService permissionService;
 
+    /**
+     * 注入公开链接持久化、资源查询与权限服务。
+     *
+     * @param mapper            公开链接数据访问
+     * @param dashboardMapper   仪表盘数据访问
+     * @param chartMapper       图表数据访问
+     * @param permissionService 权限服务
+     */
     public PublicLinkService(PublicLinkMapper mapper, DashboardMapper dashboardMapper,
                              ChartMapper chartMapper, PermissionService permissionService) {
         this.mapper = mapper;

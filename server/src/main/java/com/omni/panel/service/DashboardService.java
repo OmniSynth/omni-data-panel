@@ -33,6 +33,17 @@ public class DashboardService {
     private final SubscriptionMapper subscriptionMapper;
     private final ScheduleMapper scheduleMapper;
 
+    /**
+     * 注入仪表盘持久化、权限与集合相关依赖。
+     *
+     * @param dashboardMapper    仪表盘持久化
+     * @param cardMapper         卡片持久化
+     * @param chartMapper        图表持久化
+     * @param permissionService  资源权限校验
+     * @param collectionService  集合归属解析
+     * @param subscriptionMapper 订阅持久化
+     * @param scheduleMapper     调度持久化
+     */
     public DashboardService(DashboardMapper dashboardMapper, DashboardCardMapper cardMapper,
                             ChartMapper chartMapper, PermissionService permissionService,
                             @Lazy CollectionService collectionService,

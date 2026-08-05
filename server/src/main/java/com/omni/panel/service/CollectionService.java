@@ -39,6 +39,17 @@ public class CollectionService {
     private final UserMapper userMapper;
     private final PermissionService permissionService;
 
+    /**
+     * 注入集合与各资源持久化及权限校验依赖。
+     *
+     * @param collectionMapper  集合持久化
+     * @param chartMapper       图表持久化
+     * @param dashboardMapper   仪表盘持久化
+     * @param datasetMapper     数据集持久化
+     * @param metricMapper      指标持久化
+     * @param userMapper        用户查询
+     * @param permissionService 资源权限校验
+     */
     public CollectionService(CollectionMapper collectionMapper, ChartMapper chartMapper,
                              DashboardMapper dashboardMapper, DatasetMapper datasetMapper,
                              MetricMapper metricMapper, UserMapper userMapper,
@@ -171,7 +182,12 @@ public class CollectionService {
         collectionMapper.deleteById(id);
     }
 
-    /** 统计集合下未删除资源（不按权限过滤，避免漏检导致外键失败）。 */
+    /**
+     * 统计集合下未删除资源（不按权限过滤，避免漏检导致外键失败）。
+     *
+     * @param collectionId 集合标识
+     * @return 图表、仪表盘、数据集与指标总数
+     */
     private long countActiveResources(long collectionId) {
         long charts = chartMapper.selectCount(Wrappers.<ChartEntity>lambdaQuery()
                 .eq(ChartEntity::getCollectionId, collectionId)
@@ -188,7 +204,11 @@ public class CollectionService {
         return charts + dashboards + datasets + metrics;
     }
 
-    /** 解除仍引用该集合的资源（含废纸篓），以便物理删除集合。 */
+    /**
+     * 解除仍引用该集合的资源（含废纸篓），以便物理删除集合。
+     *
+     * @param collectionId 集合标识
+     */
     private void detachResources(long collectionId) {
         chartMapper.update(null, Wrappers.<ChartEntity>lambdaUpdate()
                 .eq(ChartEntity::getCollectionId, collectionId)
@@ -337,6 +357,10 @@ public class CollectionService {
 
     /**
      * 个人集合对外展示名：本人为「你的个人集合」，他人为「{显示名} 的个人集合」。
+     *
+     * @param entity        集合实体
+     * @param currentUserId 当前用户标识
+     * @return 对外展示名称
      */
     private String displayName(CollectionEntity entity, long currentUserId) {
         Long personalOwnerId = entity.getPersonalOwnerId();

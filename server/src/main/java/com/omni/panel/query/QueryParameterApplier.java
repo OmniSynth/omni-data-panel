@@ -1,5 +1,8 @@
 package com.omni.panel.query;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -17,6 +20,10 @@ import com.omni.panel.service.QueryService;
  */
 @Component
 public class QueryParameterApplier {
+    private static final String PRESET_TODAY = "$today";
+    private static final String PRESET_LAST7DAYS = "$last7days";
+    private static final DateTimeFormatter ISO_DATE = DateTimeFormatter.ISO_LOCAL_DATE;
+
     private final ObjectMapper objectMapper;
 
     /**
@@ -152,13 +159,64 @@ public class QueryParameterApplier {
                     continue;
                 }
                 if (map.containsKey("defaultValue")) {
-                    result.put(String.valueOf(map.get("id")), map.get("defaultValue"));
+                    String type = map.get("type") == null ? "text" : String.valueOf(map.get("type"));
+                    result.put(String.valueOf(map.get("id")),
+                            resolveDefaultValue(type, map.get("defaultValue")));
                 }
             }
             return result;
         } catch (Exception exception) {
             return result;
         }
+    }
+
+    /**
+     * 解析相对日期默认值；固定值原样返回。
+     *
+     * @param type  参数类型
+     * @param value 配置中的默认值
+     * @return 运行时默认值
+     */
+    Object resolveDefaultValue(String type, Object value) {
+        String preset = readPreset(value);
+        if (PRESET_TODAY.equals(preset)) {
+            return LocalDate.now(ZoneId.systemDefault()).format(ISO_DATE);
+        }
+        if (PRESET_LAST7DAYS.equals(preset)) {
+            LocalDate end = LocalDate.now(ZoneId.systemDefault());
+            LocalDate start = end.minusDays(6);
+            Map<String, Object> range = new LinkedHashMap<>();
+            range.put("start", start.format(ISO_DATE));
+            range.put("end", end.format(ISO_DATE));
+            return range;
+        }
+        return value;
+    }
+
+    /**
+     * 识别相对默认预设标记。
+     *
+     * @param value 配置默认值
+     * @return {@code $today}/{@code $last7days}，否则 {@code null}
+     */
+    private static String readPreset(Object value) {
+        if (value instanceof String text) {
+            String trimmed = text.trim();
+            if (PRESET_TODAY.equals(trimmed) || PRESET_LAST7DAYS.equals(trimmed)) {
+                return trimmed;
+            }
+            return null;
+        }
+        if (value instanceof Map<?, ?> map && map.get("preset") != null) {
+            String preset = String.valueOf(map.get("preset")).trim();
+            if (PRESET_TODAY.equals(preset) || "today".equalsIgnoreCase(preset)) {
+                return PRESET_TODAY;
+            }
+            if (PRESET_LAST7DAYS.equals(preset) || "last7days".equalsIgnoreCase(preset)) {
+                return PRESET_LAST7DAYS;
+            }
+        }
+        return null;
     }
 
     /**

@@ -17,6 +17,14 @@ public class TrashService {
     private final DatasetService datasetService;
     private final MetricService metricService;
 
+    /**
+     * 注入各资源业务服务。
+     *
+     * @param chartService     图表服务
+     * @param dashboardService 仪表盘服务
+     * @param datasetService   数据集服务
+     * @param metricService    指标服务
+     */
     public TrashService(ChartService chartService, DashboardService dashboardService,
                         DatasetService datasetService, MetricService metricService) {
         this.chartService = chartService;

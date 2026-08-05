@@ -20,12 +20,21 @@ import com.omni.panel.mapper.LoginAuditMapper;
 public class LoginAuditService {
     private final LoginAuditMapper mapper;
 
+    /**
+     * @param mapper 登录审计持久化
+     */
     public LoginAuditService(LoginAuditMapper mapper) {
         this.mapper = mapper;
     }
 
     /**
      * 记录一次登录尝试。
+     *
+     * @param username 尝试登录的用户名
+     * @param userId   成功时对应用户 ID；失败可为 {@code null}
+     * @param success  是否登录成功
+     * @param message  结果说明
+     * @param client   客户端 IP / UA；可为 {@code null}
      */
     public void record(String username, Long userId, boolean success, String message, ClientRequestInfo.Info client) {
         String safeUsername = username == null || username.isBlank() ? "-" : username.trim();
@@ -37,6 +46,17 @@ public class LoginAuditService {
         mapper.insert(safeUsername, userId, success, safeMessage, info.clientIp(), info.userAgent());
     }
 
+    /**
+     * 分页检索登录审计（仅管理员）。
+     *
+     * @param keyword  用户名关键字；可空
+     * @param success  按成功/失败过滤；可空
+     * @param fromTime 起始时间；可空
+     * @param toTime   结束时间；可空
+     * @param page     页码（从 1 起）
+     * @param size     页大小
+     * @return 分页结果
+     */
     public PageResult<LoginAuditMapper.LoginRow> page(String keyword, Boolean success,
                                                       LocalDateTime fromTime, LocalDateTime toTime,
                                                       int page, int size) {
@@ -52,6 +72,12 @@ public class LoginAuditService {
         return new PageResult<>(items, total, safePage, safeSize);
     }
 
+    /**
+     * 按请求清理登录审计；未指定时间则清空全部（仅管理员）。
+     *
+     * @param request 清理条件
+     * @return 删除行数
+     */
     @Transactional
     public int cleanup(AuditCleanupRequest request) {
         requireAdmin();

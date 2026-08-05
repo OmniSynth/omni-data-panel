@@ -27,6 +27,11 @@ import com.omni.panel.service.SubscriptionService;
 public class SubscriptionController {
     private final SubscriptionService service;
 
+    /**
+     * 注入订阅业务服务。
+     *
+     * @param service 订阅业务服务
+     */
     public SubscriptionController(SubscriptionService service) {
         this.service = service;
     }
@@ -98,11 +103,11 @@ public class SubscriptionController {
     /**
      * 订阅创建与更新请求。
      *
-     * @param name              订阅名称
-     * @param dashboardId       仪表盘标识
-     * @param cronExpression    Quartz Cron 表达式
-     * @param recipientUserIds  收件用户标识列表
-     * @param enabled           是否启用
+     * @param name             订阅名称
+     * @param dashboardId      仪表盘标识
+     * @param cronExpression   Quartz Cron 表达式
+     * @param recipientUserIds 收件用户标识列表
+     * @param enabled          是否启用
      */
     public record SaveRequest(@NotBlank String name, @NotNull Long dashboardId,
                               @NotBlank String cronExpression,

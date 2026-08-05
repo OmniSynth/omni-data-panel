@@ -32,6 +32,19 @@ public class SystemMailService {
     private final boolean envAuth;
     private final boolean envStartTls;
 
+    /**
+     * 注入系统发信所需依赖与环境变量回退配置。
+     *
+     * @param settingService           系统设置（SMTP）
+     * @param crypto                   凭证加解密
+     * @param subscriptionProperties   订阅相关配置（环境发件人）
+     * @param envHost                  环境 SMTP 主机
+     * @param envPort                  环境 SMTP 端口
+     * @param envUsername              环境 SMTP 用户名
+     * @param envPassword              环境 SMTP 密码
+     * @param envAuth                  环境 SMTP 是否认证
+     * @param envStartTls              环境 SMTP 是否 STARTTLS
+     */
     public SystemMailService(SettingService settingService, CredentialCrypto crypto,
                              SubscriptionProperties subscriptionProperties,
                              @Value("${spring.mail.host:}") String envHost,
@@ -92,11 +105,11 @@ public class SystemMailService {
     /**
      * 发送带 PDF 附件的文本邮件。
      *
-     * @param to          收件人
-     * @param subject     主题
-     * @param text        正文
-     * @param filename    附件文件名
-     * @param pdfContent  PDF 字节
+     * @param to         收件人
+     * @param subject    主题
+     * @param text       正文
+     * @param filename   附件文件名
+     * @param pdfContent PDF 字节
      */
     public void sendWithPdfAttachment(String[] to, String subject, String text,
                                       String filename, byte[] pdfContent) {
@@ -120,6 +133,7 @@ public class SystemMailService {
             helper.addAttachment(
                     filename == null || filename.isBlank() ? "dashboard.pdf" : filename,
                     new ByteArrayResource(pdfContent) {
+                        /** @return 附件下载文件名 */
                         @Override
                         public String getFilename() {
                             return filename == null || filename.isBlank() ? "dashboard.pdf" : filename;
@@ -158,6 +172,11 @@ public class SystemMailService {
         send(message);
     }
 
+    /**
+     * 解析当前生效的邮件运行时（后台配置优先，否则环境变量）。
+     *
+     * @return 可发信时返回运行时；未配置时返回 {@code null}
+     */
     private MailRuntime resolve() {
         String dbHost = settingService.getOrDefault(SettingService.MAIL_HOST).trim();
         String dbFrom = settingService.getOrDefault(SettingService.MAIL_FROM).trim();
@@ -178,6 +197,12 @@ public class SystemMailService {
                 envFrom.trim());
     }
 
+    /**
+     * 解密数据库中存储的 SMTP 密码。
+     *
+     * @param encrypted 密文；空则返回空串
+     * @return 明文密码
+     */
     private String decryptPassword(String encrypted) {
         if (encrypted == null || encrypted.isBlank()) {
             return "";
@@ -185,6 +210,13 @@ public class SystemMailService {
         return crypto.decrypt(encrypted);
     }
 
+    /**
+     * 解析 SMTP 端口号。
+     *
+     * @param raw      原始字符串
+     * @param fallback 解析失败或越界时的默认值
+     * @return 合法端口号
+     */
     private static int parsePort(String raw, int fallback) {
         try {
             int port = Integer.parseInt(raw.trim());
@@ -194,6 +226,17 @@ public class SystemMailService {
         }
     }
 
+    /**
+     * 构建 JavaMail 发送器实例。
+     *
+     * @param host     SMTP 主机
+     * @param port     SMTP 端口
+     * @param username 用户名
+     * @param password 密码
+     * @param auth     是否启用认证
+     * @param startTls 是否启用 STARTTLS
+     * @return 配置完成的发送器
+     */
     private static JavaMailSenderImpl buildSender(String host, int port, String username, String password,
                                                   boolean auth, boolean startTls) {
         JavaMailSenderImpl sender = new JavaMailSenderImpl();
@@ -215,6 +258,12 @@ public class SystemMailService {
         return sender;
     }
 
+    /**
+     * 提取异常链最内层可读消息。
+     *
+     * @param exception 原始异常
+     * @return 根因消息或异常类名
+     */
     private static String rootMessage(Throwable exception) {
         Throwable current = exception;
         while (current.getCause() != null && current.getCause() != current) {
@@ -224,6 +273,12 @@ public class SystemMailService {
         return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
     }
 
+    /**
+     * 已解析的 SMTP 运行时配置。
+     *
+     * @param sender JavaMail 发送器
+     * @param from   发件人地址
+     */
     private record MailRuntime(JavaMailSenderImpl sender, String from) {
     }
 }

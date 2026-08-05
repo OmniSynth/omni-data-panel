@@ -26,10 +26,24 @@ import com.omni.panel.service.DatasetAuditService;
 public class DatasetAuditController {
     private final DatasetAuditService service;
 
+    /**
+     * @param service 模型变更审计服务
+     */
     public DatasetAuditController(DatasetAuditService service) {
         this.service = service;
     }
 
+    /**
+     * 分页查询模型变更审计。
+     *
+     * @param keyword  关键字
+     * @param action   动作类型
+     * @param fromTime 起始时间
+     * @param toTime   结束时间
+     * @param page     页码
+     * @param size     页大小
+     * @return 分页数据
+     */
     @GetMapping
     public ApiResponse<PageResult<DatasetAuditMapper.AuditRow>> page(
             @RequestParam(required = false) String keyword,
@@ -42,6 +56,12 @@ public class DatasetAuditController {
         return ApiResponse.ok(service.page(keyword, action, fromTime, toTime, page, size));
     }
 
+    /**
+     * 清理模型变更审计。
+     *
+     * @param request 清理条件
+     * @return 含 {@code deleted} 删除行数的映射
+     */
     @PostMapping("/cleanup")
     public ApiResponse<Map<String, Integer>> cleanup(@RequestBody AuditCleanupRequest request) {
         return ApiResponse.ok(Map.of("deleted", service.cleanup(request)));

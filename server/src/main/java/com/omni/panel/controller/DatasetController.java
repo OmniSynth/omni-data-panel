@@ -35,6 +35,12 @@ public class DatasetController {
     private final DatasetService service;
     private final RecentService recentService;
 
+    /**
+     * 注入模型与最近访问服务。
+     *
+     * @param service       模型服务
+     * @param recentService 最近访问记录服务
+     */
     public DatasetController(DatasetService service, RecentService recentService) {
         this.service = service;
         this.recentService = recentService;
@@ -152,6 +158,16 @@ public class DatasetController {
 
     /**
      * 模型保存请求。
+     *
+     * @param name           名称
+     * @param description    描述
+     * @param modelType      模型类型 TABLE 或 SQL
+     * @param dataSourceId   数据源标识
+     * @param schemaName     表模型模式名
+     * @param tableName      表模型表名
+     * @param definitionSql  SQL 模型定义语句
+     * @param collectionId   所属集合标识
+     * @param fields         字段定义列表
      */
     public record SaveRequest(@NotBlank String name, String description, String modelType,
                               @NotNull Long dataSourceId, String schemaName, String tableName,
@@ -161,12 +177,28 @@ public class DatasetController {
 
     /**
      * SQL 字段推断请求。
+     *
+     * @param dataSourceId 数据源标识
+     * @param sql          模型定义 SQL
      */
     public record InferSqlFieldsRequest(@NotNull Long dataSourceId, @NotBlank String sql) {
     }
 
     /**
      * 模型详情视图。
+     *
+     * @param id             模型标识
+     * @param name           名称
+     * @param description    描述
+     * @param modelType      模型类型
+     * @param dataSourceId   数据源标识
+     * @param schemaName     模式名
+     * @param tableName      表名
+     * @param definitionSql  SQL 定义
+     * @param collectionId   所属集合标识
+     * @param ownerId        所有者用户标识
+     * @param updatedAt      更新时间
+     * @param fields         字段定义列表
      */
     public record View(@JsonSerialize(using = ToStringSerializer.class) long id,
                        String name, String description, String modelType,

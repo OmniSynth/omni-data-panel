@@ -42,26 +42,31 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
             Pattern.compile("(?s).*\\blo_export\\s*\\(.*")
     );
 
+    /** {@inheritDoc} */
     @Override
     public String code() {
         return CODE;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String label() {
         return "PostgreSQL";
     }
 
+    /** {@inheritDoc} */
     @Override
     public int defaultPort() {
         return 5432;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         return jdbcUrl != null && jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql:");
     }
 
+    /** {@inheritDoc} */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -76,6 +81,7 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return "jdbc:postgresql://" + normalizedHost + ':' + port + '/' + database;
     }
 
+    /** {@inheritDoc} */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -91,6 +97,7 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return new ParsedJdbcUrl(host, port, database);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         ParsedJdbcUrl parsed = parseJdbcUrl(jdbcUrl);
@@ -102,11 +109,13 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void configurePool(HikariConfig config, DataSourceEntity source) {
         config.setConnectionInitSql("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
     }
 
+    /** {@inheritDoc} */
     @Override
     public void prepareConnection(Connection connection, DataSourceEntity source) throws SQLException {
         // 库名已在 URL 中；默认搜索路径保留 public，跨 schema 用 schema.table
@@ -115,6 +124,7 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
             throws SQLException {
@@ -129,26 +139,31 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         connection.setSchema("public");
     }
 
+    /** {@inheritDoc} */
     @Override
     public void useNamespace(Connection connection, String namespace) throws SQLException {
         connection.setSchema(namespace);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean defaultDatabaseIsNamespace() {
         return false;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String metaCatalog(String namespace) {
         return null;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String metaSchema(String namespace) {
         return namespace;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<String> listNamespaces(Connection connection, DatabaseMetaData metadata) throws SQLException {
         Set<String> schemas = new LinkedHashSet<>();
@@ -163,11 +178,13 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return List.copyOf(schemas);
     }
 
+    /** {@inheritDoc} */
     @Override
     public Set<String> systemNamespaces() {
         return SYSTEM_NAMESPACES;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
             throws SQLException {
@@ -192,6 +209,7 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return tables;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
             throws SQLException {
@@ -232,21 +250,36 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return columns;
     }
 
+    /** {@inheritDoc} */
     @Override
     public char identifierQuote() {
         return '"';
     }
 
+    /** {@inheritDoc} */
     @Override
     public String quoteIdentifier(String value) {
         return '"' + value.replace("\"", "\"\"") + '"';
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<Pattern> forbiddenSqlPatterns() {
         return FORBIDDEN;
     }
 
+    /**
+     * 将 JDBC 数值对象转为 Integer；非数值时返回 null。
+     *
+     * @param value 结果集字段值
+     * @return 整数值或 null
+     */
+    /**
+     * 将 JDBC 数值对象转为 Integer；非数值时返回 null。
+     *
+     * @param value 结果集字段值
+     * @return 整数值或 null
+     */
     private static Integer intOrNull(Object value) {
         if (value == null) {
             return null;
@@ -257,6 +290,18 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return null;
     }
 
+    /**
+     * 通过 {@link DatabaseMetaData#getSchemas()} 收集业务 schema。
+     *
+     * @param metadata JDBC 元数据
+     * @param schemas  待填充的 schema 集合
+     */
+    /**
+     * 通过 {@link DatabaseMetaData#getSchemas()} 收集业务 schema。
+     *
+     * @param metadata JDBC 元数据
+     * @param schemas  待填充的 schema 集合
+     */
     private void collectFromMetaData(DatabaseMetaData metadata, Set<String> schemas) throws SQLException {
         try (ResultSet resultSet = metadata.getSchemas()) {
             while (resultSet.next()) {
@@ -265,6 +310,18 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         }
     }
 
+    /**
+     * 通过 information_schema.schemata 收集业务 schema。
+     *
+     * @param connection JDBC 连接
+     * @param schemas    待填充的 schema 集合
+     */
+    /**
+     * 通过 information_schema.schemata 收集业务 schema。
+     *
+     * @param connection JDBC 连接
+     * @param schemas    待填充的 schema 集合
+     */
     private void collectFromInformationSchema(Connection connection, Set<String> schemas) throws SQLException {
         String sql = """
                 SELECT schema_name FROM information_schema.schemata
@@ -282,6 +339,18 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         }
     }
 
+    /**
+     * 将非系统 schema 加入集合，忽略空值与 PostgreSQL 系统命名空间。
+     *
+     * @param schemas 业务 schema 集合
+     * @param schema  待判定的 schema 名
+     */
+    /**
+     * 将非系统 schema 加入集合，忽略空值与 PostgreSQL 系统命名空间。
+     *
+     * @param schemas 业务 schema 集合
+     * @param schema  待判定的 schema 名
+     */
     private void addBusinessNamespace(Set<String> schemas, String schema) {
         if (schema == null || schema.isBlank()) {
             return;

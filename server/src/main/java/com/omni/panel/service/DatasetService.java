@@ -53,6 +53,24 @@ public class DatasetService {
     private final SqlObjectAccessGuard sqlObjectAccessGuard;
     private final DatasetAuditService datasetAuditService;
 
+    /**
+     * 注入模型持久化、查询编译与权限相关依赖。
+     *
+     * @param datasetMapper        模型持久化
+     * @param fieldMapper          模型字段持久化
+     * @param metadataMapper       元数据持久化
+     * @param dataSourceService    数据源访问
+     * @param permissionService    资源权限校验
+     * @param sqlPolicyGuard       SQL 安全策略
+     * @param collectionService    集合归属解析
+     * @param queryCompiler        语义查询编译
+     * @param dialectRegistry      SQL 方言注册表
+     * @param jdbcQueryExecutor    JDBC 查询执行
+     * @param dataPolicyMapper     数据策略持久化
+     * @param objectAclService     数据源对象 ACL
+     * @param sqlObjectAccessGuard SQL 对象访问守卫
+     * @param datasetAuditService  模型审计
+     */
     public DatasetService(DatasetMapper datasetMapper, DatasetFieldMapper fieldMapper, MetadataMapper metadataMapper,
                           DataSourceService dataSourceService, PermissionService permissionService,
                           SqlPolicyGuard sqlPolicyGuard, @Lazy CollectionService collectionService,
@@ -383,6 +401,12 @@ public class DatasetService {
         datasetAuditService.record(dataset, "PURGE", detail);
     }
 
+    /**
+     * 生成审计日志用的模型摘要字符串。
+     *
+     * @param dataset 模型实体
+     * @return 摘要文本
+     */
     private static String summary(DatasetEntity dataset) {
         return "modelType=" + dataset.getModelType()
                 + ", dataSourceId=" + dataset.getDataSourceId()
@@ -504,6 +528,16 @@ public class DatasetService {
 
     /**
      * 模型保存输入。
+     *
+     * @param name           名称
+     * @param description    描述
+     * @param modelType      模型类型 TABLE 或 SQL
+     * @param dataSourceId   数据源标识
+     * @param schemaName     表模型模式名
+     * @param tableName      表模型表名
+     * @param definitionSql  SQL 模型定义语句
+     * @param collectionId   所属集合标识
+     * @param fields         字段定义列表
      */
     public record SaveInput(String name, String description, String modelType, Long dataSourceId,
                             String schemaName, String tableName, String definitionSql,
@@ -512,6 +546,11 @@ public class DatasetService {
 
     /**
      * 模型字段输入。
+     *
+     * @param name        语义字段名
+     * @param columnName  物理列名
+     * @param fieldType   字段类型 DIMENSION 或 METRIC
+     * @param aggregation 指标聚合方式，维度为 null
      */
     public record FieldInput(String name, String columnName, String fieldType, String aggregation) {
     }

@@ -34,6 +34,8 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 | `web/` | Vue 3 前端 |
 | `deploy/` | Docker Compose 与环境变量示例 |
 | `docs/embed-integration.md` | 业务系统签名嵌入对接说明 |
+| `docs/user-guide.md` | 使用手册：模型 / 指标 / 图表 / 仪表盘参数绑定 |
+| `docs/api-log-dashboard-guide.md` | 实战图文：`sys_api_log` 接口请求日志看板（含截图） |
 
 ## 完整功能
 

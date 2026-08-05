@@ -25,6 +25,12 @@ public class CredentialCrypto {
     private final SecretKeySpec key;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    /**
+     * 从 Base64 主密钥初始化解密用的 AES-256 密钥。
+     *
+     * @param masterKey Base64 编码的 32 字节主密钥
+     * @throws IllegalArgumentException 密钥长度不为 32 字节时抛出
+     */
     public CredentialCrypto(@Value("${omni.crypto.master-key}") String masterKey) {
         byte[] decoded = Base64.getDecoder().decode(masterKey);
         if (decoded.length != 32) {

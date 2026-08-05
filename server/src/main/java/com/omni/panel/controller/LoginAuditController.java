@@ -26,10 +26,24 @@ import com.omni.panel.service.LoginAuditService;
 public class LoginAuditController {
     private final LoginAuditService service;
 
+    /**
+     * @param service 登录审计服务
+     */
     public LoginAuditController(LoginAuditService service) {
         this.service = service;
     }
 
+    /**
+     * 分页查询登录审计。
+     *
+     * @param keyword  用户名关键字
+     * @param success  成功/失败过滤
+     * @param fromTime 起始时间
+     * @param toTime   结束时间
+     * @param page     页码
+     * @param size     页大小
+     * @return 分页数据
+     */
     @GetMapping
     public ApiResponse<PageResult<LoginAuditMapper.LoginRow>> page(
             @RequestParam(required = false) String keyword,
@@ -42,6 +56,12 @@ public class LoginAuditController {
         return ApiResponse.ok(service.page(keyword, success, fromTime, toTime, page, size));
     }
 
+    /**
+     * 清理登录审计。
+     *
+     * @param request 清理条件
+     * @return 含 {@code deleted} 删除行数的映射
+     */
     @PostMapping("/cleanup")
     public ApiResponse<Map<String, Integer>> cleanup(@RequestBody AuditCleanupRequest request) {
         return ApiResponse.ok(Map.of("deleted", service.cleanup(request)));

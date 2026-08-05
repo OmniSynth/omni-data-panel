@@ -34,6 +34,12 @@ public class DataSourceController {
     private final DataSourceService service;
     private final DialectRegistry dialectRegistry;
 
+    /**
+     * 注入数据源与方言相关服务。
+     *
+     * @param service         数据源服务
+     * @param dialectRegistry SQL 方言注册表
+     */
     public DataSourceController(DataSourceService service, DialectRegistry dialectRegistry) {
         this.service = service;
         this.dialectRegistry = dialectRegistry;
@@ -51,6 +57,8 @@ public class DataSourceController {
 
     /**
      * 返回当前已注册、可创建连接的分析数据源方言。
+     *
+     * @return 方言信息列表
      */
     @GetMapping("/dialects")
     public ApiResponse<List<DialectInfo>> dialects() {

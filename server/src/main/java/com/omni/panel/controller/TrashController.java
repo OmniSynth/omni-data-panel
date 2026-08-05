@@ -23,6 +23,11 @@ import com.omni.panel.service.TrashService;
 public class TrashController {
     private final TrashService service;
 
+    /**
+     * 注入废纸篓业务服务。
+     *
+     * @param service 废纸篓服务
+     */
     public TrashController(TrashService service) {
         this.service = service;
     }
@@ -63,6 +68,9 @@ public class TrashController {
 
     /**
      * 废纸篓资源定位请求。
+     *
+     * @param resourceType 资源类型
+     * @param resourceId   资源标识
      */
     public record ResourceRequest(@NotBlank String resourceType, @NotNull Long resourceId) {
     }

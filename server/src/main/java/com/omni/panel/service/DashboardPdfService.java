@@ -25,6 +25,12 @@ public class DashboardPdfService {
     private final AtomicReference<Playwright> playwrightRef = new AtomicReference<>();
     private final AtomicReference<Browser> browserRef = new AtomicReference<>();
 
+    /**
+     * 注入 PDF 渲染所需依赖。
+     *
+     * @param printTokenService 订阅打印令牌服务
+     * @param properties        订阅配置
+     */
     public DashboardPdfService(SubscriptionPrintTokenService printTokenService,
                                SubscriptionProperties properties) {
         this.printTokenService = printTokenService;
@@ -83,6 +89,12 @@ public class DashboardPdfService {
         }
     }
 
+    /**
+     * 获取或懒启动无头 Chromium 浏览器实例。
+     *
+     * @return 已连接的浏览器
+     * @throws BusinessException Chromium 无法启动时
+     */
     private Browser browser() {
         Browser existing = browserRef.get();
         if (existing != null && existing.isConnected()) {
@@ -110,11 +122,13 @@ public class DashboardPdfService {
         }
     }
 
+    /** 容器销毁时关闭 Playwright 与浏览器资源。 */
     @PreDestroy
     public void destroy() {
         closeQuietly();
     }
 
+    /** 静默关闭浏览器与 Playwright，忽略关闭异常。 */
     private void closeQuietly() {
         Browser browser = browserRef.getAndSet(null);
         if (browser != null) {
@@ -134,6 +148,12 @@ public class DashboardPdfService {
         }
     }
 
+    /**
+     * 提取异常链最内层可读消息。
+     *
+     * @param exception 原始异常
+     * @return 根因消息或异常类名
+     */
     private static String rootMessage(Throwable exception) {
         Throwable current = exception;
         while (current.getCause() != null && current.getCause() != current) {
@@ -144,7 +164,10 @@ public class DashboardPdfService {
     }
 
     /**
-     * 清洗附件文件名。
+     * 清洗附件文件名，去除非法字符并确保以 .pdf 结尾。
+     *
+     * @param name 原始名称
+     * @return 安全的 PDF 文件名
      */
     public static String sanitizeFilename(String name) {
         String cleaned = (name == null ? "" : name).trim()

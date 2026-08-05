@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.annotation.PreDestroy;
@@ -38,6 +39,13 @@ public class JdbcQueryExecutor {
     private final ConcurrentHashMap<String, Statement> runningStatements = new ConcurrentHashMap<>();
     private final AtomicBoolean accepting = new AtomicBoolean(true);
 
+    /**
+     * 注入数据源注册表、方言注册表与查询执行限制配置。
+     *
+     * @param registry        受管数据源连接池注册表
+     * @param dialectRegistry 方言插件注册表
+     * @param properties      超时、行数与并发配额配置
+     */
     public JdbcQueryExecutor(DataSourceRegistry registry, DialectRegistry dialectRegistry,
                              QueryProperties properties) {
         this.registry = registry;
@@ -60,23 +68,14 @@ public class JdbcQueryExecutor {
         if (!accepting.get()) {
             throw new BusinessException(503, "查询服务正在关闭");
         }
-        Semaphore userLimit = userLimits.computeIfAbsent(userId,
-                ignored -> new Semaphore(properties.perUserConcurrency()));
-        Semaphore sourceLimit = sourceLimits.computeIfAbsent(source.getId(),
-                ignored -> new Semaphore(properties.perSourceConcurrency()));
-        if (!userLimit.tryAcquire()) {
-            throw new BusinessException(429, "用户并发查询数已达上限");
-        }
-        if (!sourceLimit.tryAcquire()) {
-            userLimit.release();
-            throw new BusinessException(429, "数据源并发查询数已达上限");
-        }
+        AcquiredLimits limits = acquireLimits(userId, source.getId());
         try (var connection = registry.get(source).getConnection()) {
             connection.setReadOnly(true);
             dialectRegistry.resolve(source).prepareConnection(connection, source);
+            int maxRows = effectiveMaxRows();
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setQueryTimeout(properties.timeoutSeconds());
-                statement.setMaxRows(properties.maxRows());
+                statement.setQueryTimeout(effectiveTimeoutSeconds());
+                statement.setMaxRows(maxRows);
                 statement.setFetchSize(500);
                 for (int index = 0; index < parameters.size(); index++) {
                     statement.setObject(index + 1, parameters.get(index));
@@ -96,7 +95,7 @@ public class JdbcQueryExecutor {
                         columns.add(column);
                     }
                     List<Map<String, Object>> rows = new ArrayList<>();
-                    while (resultSet.next() && rows.size() < properties.maxRows()) {
+                    while (resultSet.next() && rows.size() < maxRows) {
                         Map<String, Object> row = new LinkedHashMap<>(columns.size());
                         for (int index = 1; index <= columns.size(); index++) {
                             row.put(columns.get(index - 1), resultSet.getObject(index));
@@ -111,8 +110,7 @@ public class JdbcQueryExecutor {
         } catch (SQLException exception) {
             throw new BusinessException("查询执行失败：" + exception.getMessage());
         } finally {
-            sourceLimit.release();
-            userLimit.release();
+            limits.release();
         }
     }
 
@@ -131,22 +129,12 @@ public class JdbcQueryExecutor {
         if (!accepting.get()) {
             throw new BusinessException(503, "查询服务正在关闭");
         }
-        Semaphore userLimit = userLimits.computeIfAbsent(userId,
-                ignored -> new Semaphore(properties.perUserConcurrency()));
-        Semaphore sourceLimit = sourceLimits.computeIfAbsent(source.getId(),
-                ignored -> new Semaphore(properties.perSourceConcurrency()));
-        if (!userLimit.tryAcquire()) {
-            throw new BusinessException(429, "用户并发查询数已达上限");
-        }
-        if (!sourceLimit.tryAcquire()) {
-            userLimit.release();
-            throw new BusinessException(429, "数据源并发查询数已达上限");
-        }
+        AcquiredLimits limits = acquireLimits(userId, source.getId());
         try (var connection = registry.get(source).getConnection()) {
             connection.setReadOnly(true);
             dialectRegistry.resolve(source).prepareConnection(connection, source);
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setQueryTimeout(properties.timeoutSeconds());
+                statement.setQueryTimeout(effectiveTimeoutSeconds());
                 statement.setMaxRows(1);
                 statement.setFetchSize(1);
                 for (int index = 0; index < parameters.size(); index++) {
@@ -162,6 +150,70 @@ public class JdbcQueryExecutor {
         } catch (SQLException exception) {
             throw new BusinessException("查询执行失败：" + exception.getMessage());
         } finally {
+            limits.release();
+        }
+    }
+
+    /** 配置未绑定或非法时回退，避免 maxRows=0 导致结果恒为空。 */
+    private int effectiveMaxRows() {
+        return properties.maxRows() > 0 ? properties.maxRows() : 1000;
+    }
+
+    private int effectiveTimeoutSeconds() {
+        return properties.timeoutSeconds() > 0 ? properties.timeoutSeconds() : 30;
+    }
+
+    /**
+     * 获取用户与数据源并发配额；配额占满时排队等待，超时则拒绝。
+     *
+     * @param userId   发起用户
+     * @param sourceId 数据源标识
+     * @return 已占用的配额，调用方必须 {@link AcquiredLimits#release()}
+     */
+    private AcquiredLimits acquireLimits(long userId, long sourceId) {
+        Semaphore userLimit = userLimits.computeIfAbsent(userId,
+                ignored -> new Semaphore(Math.max(1, properties.perUserConcurrency()), false));
+        Semaphore sourceLimit = sourceLimits.computeIfAbsent(sourceId,
+                ignored -> new Semaphore(Math.max(1, properties.perSourceConcurrency()), false));
+        long waitSeconds = Math.max(1L, Math.min(10L, effectiveTimeoutSeconds()));
+        boolean userAcquired = false;
+        boolean sourceAcquired = false;
+        try {
+            // 非公平：避免失败请求长时间占着排队位拖死后续看板渲染
+            userAcquired = userLimit.tryAcquire(waitSeconds, TimeUnit.SECONDS);
+            if (!userAcquired) {
+                throw new BusinessException(429, "用户并发查询繁忙，请稍后重试");
+            }
+            sourceAcquired = sourceLimit.tryAcquire(waitSeconds, TimeUnit.SECONDS);
+            if (!sourceAcquired) {
+                throw new BusinessException(429, "数据源并发查询繁忙，请稍后重试");
+            }
+            return new AcquiredLimits(userLimit, sourceLimit);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            if (sourceAcquired) {
+                sourceLimit.release();
+            }
+            if (userAcquired) {
+                userLimit.release();
+            }
+            throw new BusinessException(503, "查询等待被中断");
+        } catch (BusinessException exception) {
+            if (sourceAcquired) {
+                sourceLimit.release();
+            }
+            if (userAcquired) {
+                userLimit.release();
+            }
+            throw exception;
+        }
+    }
+
+    /**
+     * 已占用的用户/数据源并发许可。
+     */
+    private record AcquiredLimits(Semaphore userLimit, Semaphore sourceLimit) {
+        void release() {
             sourceLimit.release();
             userLimit.release();
         }

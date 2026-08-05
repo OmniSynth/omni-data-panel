@@ -27,6 +27,15 @@ public class DataSourceService {
     private final DialectRegistry dialectRegistry;
     private final PermissionService permissionService;
 
+    /**
+     * 注入数据源持久化、凭据加密、连接池与方言依赖。
+     *
+     * @param mapper            数据源持久化
+     * @param crypto            凭据加解密
+     * @param registry          运行时连接池注册表
+     * @param dialectRegistry   方言注册表
+     * @param permissionService 资源权限校验
+     */
     public DataSourceService(DataSourceMapper mapper, CredentialCrypto crypto, DataSourceRegistry registry,
                              DialectRegistry dialectRegistry, PermissionService permissionService) {
         this.mapper = mapper;

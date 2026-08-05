@@ -27,12 +27,21 @@ public class DatasetAuditService {
 
     private final DatasetAuditMapper mapper;
 
+    /**
+     * 注入模型审计持久化依赖。
+     *
+     * @param mapper 模型审计持久化
+     */
     public DatasetAuditService(DatasetAuditMapper mapper) {
         this.mapper = mapper;
     }
 
     /**
      * 记录一次模型变更；失败不影响主业务。
+     *
+     * @param dataset 模型实体
+     * @param action  操作类型
+     * @param detail  附加说明
      */
     public void record(DatasetEntity dataset, String action, String detail) {
         if (dataset == null || action == null || action.isBlank()) {
@@ -63,6 +72,17 @@ public class DatasetAuditService {
         }
     }
 
+    /**
+     * 分页检索模型变更审计（仅管理员）。
+     *
+     * @param keyword  关键词（模型名等）
+     * @param action   操作类型过滤
+     * @param fromTime 起始时间
+     * @param toTime   结束时间
+     * @param page     页码（从 1 起）
+     * @param size     每页条数
+     * @return 分页结果
+     */
     public PageResult<DatasetAuditMapper.AuditRow> page(String keyword, String action,
                                                         LocalDateTime fromTime, LocalDateTime toTime,
                                                         int page, int size) {
@@ -82,6 +102,12 @@ public class DatasetAuditService {
         return new PageResult<>(items, total, safePage, safeSize);
     }
 
+    /**
+     * 按条件清理模型审计记录（仅管理员）。
+     *
+     * @param request 清理条件
+     * @return 删除条数
+     */
     @Transactional
     public int cleanup(AuditCleanupRequest request) {
         requireAdmin();
@@ -89,12 +115,19 @@ public class DatasetAuditService {
         return before == null ? mapper.deleteAll() : mapper.deleteBefore(before);
     }
 
+    /** 要求当前用户为管理员。 */
     private void requireAdmin() {
         if (!AuthenticatedUser.current().admin()) {
             throw new BusinessException(403, "仅管理员可管理模型日志");
         }
     }
 
+    /**
+     * 空白字符串转为 {@code null}。
+     *
+     * @param value 原始值
+     * @return 去空白后非空则返回 trimmed，否则 {@code null}
+     */
     private static String blankToNull(String value) {
         if (value == null || value.isBlank()) {
             return null;

@@ -32,21 +32,25 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
     private static final Pattern URL_PATTERN = Pattern.compile(
             "(?i)^jdbc:(?:clickhouse|ch)://([^/:?]+)(?::(\\d+))?(?:/([^?;\\s]*))?.*$");
 
+    /** {@inheritDoc} */
     @Override
     public String code() {
         return CODE;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String label() {
         return "ClickHouse";
     }
 
+    /** {@inheritDoc} */
     @Override
     public int defaultPort() {
         return 8123;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null) {
@@ -56,6 +60,7 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return lower.startsWith("jdbc:clickhouse:") || lower.startsWith("jdbc:ch:");
     }
 
+    /** {@inheritDoc} */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -74,6 +79,7 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return url.toString();
     }
 
+    /** {@inheritDoc} */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -89,6 +95,7 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return new ParsedJdbcUrl(host, port, database);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         if (parseJdbcUrl(jdbcUrl) == null
@@ -98,12 +105,14 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void configurePool(HikariConfig config, DataSourceEntity source) {
         config.setConnectionInitSql("SET readonly=1");
         config.setConnectionTestQuery("SELECT 1");
     }
 
+    /** {@inheritDoc} */
     @Override
     public void prepareConnection(Connection connection, DataSourceEntity source) throws SQLException {
         String database = source.getDefaultDatabase();
@@ -112,6 +121,7 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
             throws SQLException {
@@ -124,11 +134,13 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void useNamespace(Connection connection, String namespace) throws SQLException {
         connection.setCatalog(namespace);
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<String> listNamespaces(Connection connection, DatabaseMetaData metadata) throws SQLException {
         Set<String> catalogs = new LinkedHashSet<>();
@@ -146,11 +158,13 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return List.copyOf(catalogs);
     }
 
+    /** {@inheritDoc} */
     @Override
     public Set<String> systemNamespaces() {
         return SYSTEM_NAMESPACES;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
             throws SQLException {
@@ -172,6 +186,7 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return tables;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
             throws SQLException {
@@ -202,11 +217,18 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return columns;
     }
 
+    /** {@inheritDoc} */
     @Override
     public char identifierQuote() {
         return '`';
     }
 
+    /**
+     * 通过 system.databases 收集业务库名。
+     *
+     * @param connection JDBC 连接
+     * @param catalogs   待填充的库名集合
+     */
     private void collectFromSystemDatabases(Connection connection, Set<String> catalogs) throws SQLException {
         try (Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery(
@@ -217,6 +239,12 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         }
     }
 
+    /**
+     * 将非系统库名加入集合，忽略空值与 ClickHouse 系统库。
+     *
+     * @param catalogs 业务库名集合
+     * @param catalog  待判定的库名
+     */
     private void addBusinessNamespace(Set<String> catalogs, String catalog) {
         if (catalog == null || catalog.isBlank()) {
             return;

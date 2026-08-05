@@ -19,6 +19,12 @@ import com.omni.panel.entity.DataSourceEntity;
 public class DialectRegistry {
     private final Map<String, DialectPlugin> plugins;
 
+    /**
+     * 从 Spring 容器注入的全部方言插件构建注册表。
+     *
+     * @param plugins 候选方言插件列表
+     * @throws IllegalStateException 无有效插件或编码重复时抛出
+     */
     public DialectRegistry(List<DialectPlugin> plugins) {
         Map<String, DialectPlugin> map = new LinkedHashMap<>();
         for (DialectPlugin plugin : plugins) {
@@ -53,7 +59,9 @@ public class DialectRegistry {
     }
 
     /**
-     * 可运行方言列表（稳定排序）。
+     * 返回已注册方言的稳定排序列表。
+     *
+     * @return 方言摘要列表
      */
     public List<DialectInfo> list() {
         return plugins.values().stream()
@@ -63,7 +71,11 @@ public class DialectRegistry {
     }
 
     /**
-     * 按编码解析插件；空编码默认 MYSQL。
+     * 按编码解析方言插件；空编码默认 MYSQL。
+     *
+     * @param code 方言编码
+     * @return 对应方言插件
+     * @throws BusinessException 编码不受支持时抛出
      */
     public DialectPlugin require(String code) {
         String normalized = normalize(code);
@@ -76,6 +88,10 @@ public class DialectRegistry {
 
     /**
      * 规范化方言编码；空值默认 {@link MysqlDialectPlugin#CODE}。
+     *
+     * @param code 原始方言编码
+     * @return 大写且已注册的编码
+     * @throws BusinessException 编码不受支持时抛出
      */
     public String normalize(String code) {
         if (code == null || code.isBlank()) {
@@ -90,6 +106,9 @@ public class DialectRegistry {
 
     /**
      * 根据数据源配置解析方言插件。
+     *
+     * @param source 数据源实体，可为 null
+     * @return 匹配的方言插件
      */
     public DialectPlugin resolve(DataSourceEntity source) {
         if (source == null) {
@@ -103,6 +122,10 @@ public class DialectRegistry {
 
     /**
      * 根据 JDBC URL 推断方言；无法识别时抛错。
+     *
+     * @param jdbcUrl JDBC 连接 URL
+     * @return 匹配的方言插件
+     * @throws BusinessException 无法识别 URL 时抛出
      */
     public DialectPlugin detect(String jdbcUrl) {
         if (jdbcUrl != null) {
@@ -116,7 +139,10 @@ public class DialectRegistry {
     }
 
     /**
-     * 尝试用任一插件解析 URL。
+     * 尝试用任一已注册插件解析 JDBC URL。
+     *
+     * @param jdbcUrl JDBC 连接 URL
+     * @return 解析结果；URL 为空或均无法解析时返回 null
      */
     public ParsedJdbcUrl parseAny(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -133,6 +159,9 @@ public class DialectRegistry {
 
     /**
      * 推断方言编码；无法识别时返回 MYSQL（兼容旧数据回填展示）。
+     *
+     * @param jdbcUrl JDBC 连接 URL
+     * @return 方言编码
      */
     public String detectCodeOrMysql(String jdbcUrl) {
         if (jdbcUrl != null) {

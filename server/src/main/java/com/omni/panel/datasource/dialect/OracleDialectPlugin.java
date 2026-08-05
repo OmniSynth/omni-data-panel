@@ -39,26 +39,31 @@ public class OracleDialectPlugin extends DialectPlugin {
     private static final Pattern SID_URL = Pattern.compile(
             "(?i)^jdbc:oracle:thin:@([^/:]+):(\\d+):([^?;\\s]+).*$");
 
+    /** {@inheritDoc} */
     @Override
     public String code() {
         return CODE;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String label() {
         return "Oracle";
     }
 
+    /** {@inheritDoc} */
     @Override
     public int defaultPort() {
         return 1521;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         return jdbcUrl != null && jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle:");
     }
 
+    /** {@inheritDoc} */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -73,6 +78,7 @@ public class OracleDialectPlugin extends DialectPlugin {
         return "jdbc:oracle:thin:@//" + normalizedHost + ':' + port + '/' + service;
     }
 
+    /** {@inheritDoc} */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -92,6 +98,7 @@ public class OracleDialectPlugin extends DialectPlugin {
         return null;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         ParsedJdbcUrl parsed = parseJdbcUrl(jdbcUrl);
@@ -100,21 +107,25 @@ public class OracleDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void configurePool(HikariConfig config, DataSourceEntity source) {
         config.setConnectionTestQuery("SELECT 1 FROM DUAL");
     }
 
+    /** {@inheritDoc} */
     @Override
     public String healthCheckSql() {
         return "SELECT 1 FROM DUAL";
     }
 
+    /** {@inheritDoc} */
     @Override
     public void prepareConnection(Connection connection, DataSourceEntity source) throws SQLException {
         // schema 由查询显式限定；保持连接当前用户默认 schema
     }
 
+    /** {@inheritDoc} */
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
             throws SQLException {
@@ -127,26 +138,31 @@ public class OracleDialectPlugin extends DialectPlugin {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void useNamespace(Connection connection, String namespace) throws SQLException {
         connection.setSchema(namespace);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean defaultDatabaseIsNamespace() {
         return false;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String metaCatalog(String namespace) {
         return null;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String metaSchema(String namespace) {
         return namespace;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<String> listNamespaces(Connection connection, DatabaseMetaData metadata) throws SQLException {
         Set<String> schemas = new LinkedHashSet<>();
@@ -165,11 +181,13 @@ public class OracleDialectPlugin extends DialectPlugin {
         return List.copyOf(schemas);
     }
 
+    /** {@inheritDoc} */
     @Override
     public Set<String> systemNamespaces() {
         return SYSTEM_NAMESPACES;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
             throws SQLException {
@@ -197,6 +215,7 @@ public class OracleDialectPlugin extends DialectPlugin {
         return tables;
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
             throws SQLException {
@@ -230,21 +249,30 @@ public class OracleDialectPlugin extends DialectPlugin {
         return columns;
     }
 
+    /** {@inheritDoc} */
     @Override
     public char identifierQuote() {
         return '"';
     }
 
+    /** {@inheritDoc} */
     @Override
     public String quoteIdentifier(String value) {
         return '"' + value.replace("\"", "\"\"") + '"';
     }
 
+    /** {@inheritDoc} */
     @Override
     public String limitPlaceholder() {
         return "FETCH FIRST ? ROWS ONLY";
     }
 
+    /**
+     * 通过 all_users 收集业务 schema（用户）。
+     *
+     * @param connection JDBC 连接
+     * @param schemas    待填充的 schema 集合
+     */
     private void collectFromAllUsers(Connection connection, Set<String> schemas) throws SQLException {
         String sql = """
                 SELECT username FROM all_users
@@ -267,6 +295,12 @@ public class OracleDialectPlugin extends DialectPlugin {
         }
     }
 
+    /**
+     * 将非系统 schema 加入集合，忽略空值与 Oracle 系统用户。
+     *
+     * @param schemas 业务 schema 集合
+     * @param schema  待判定的 schema 名
+     */
     private void addBusinessNamespace(Set<String> schemas, String schema) {
         if (schema == null || schema.isBlank()) {
             return;
@@ -277,6 +311,12 @@ public class OracleDialectPlugin extends DialectPlugin {
         schemas.add(schema);
     }
 
+    /**
+     * 将 JDBC 数值对象转为 Integer；非数值时返回 null。
+     *
+     * @param value 结果集字段值
+     * @return 整数值或 null
+     */
     private static Integer intOrNull(Object value) {
         if (value instanceof Number number) {
             return number.intValue();

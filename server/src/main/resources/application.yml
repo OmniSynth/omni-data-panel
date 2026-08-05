@@ -64,8 +64,9 @@ omni:
   query:
     timeout-seconds: ${QUERY_TIMEOUT_SECONDS:30}
     max-rows: ${QUERY_MAX_ROWS:1000}
-    per-user-concurrency: ${QUERY_USER_CONCURRENCY:3}
-    per-source-concurrency: ${QUERY_SOURCE_CONCURRENCY:5}
+    # 仪表盘按波次并行；用户并发宜大于单看板卡片数，避免互相挤占
+    per-user-concurrency: ${QUERY_USER_CONCURRENCY:16}
+    per-source-concurrency: ${QUERY_SOURCE_CONCURRENCY:8}
     redis-result-limit-bytes: ${QUERY_REDIS_RESULT_LIMIT_BYTES:524288}
   minio:
     endpoint: ${MINIO_ENDPOINT:}

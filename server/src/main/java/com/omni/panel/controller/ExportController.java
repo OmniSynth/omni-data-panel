@@ -29,6 +29,11 @@ import com.omni.panel.service.ExportService;
 public class ExportController {
     private final ExportService service;
 
+    /**
+     * 注入导出业务服务。
+     *
+     * @param service 导出服务
+     */
     public ExportController(ExportService service) {
         this.service = service;
     }

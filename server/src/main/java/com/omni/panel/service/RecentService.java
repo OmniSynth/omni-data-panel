@@ -27,6 +27,15 @@ public class RecentService {
     private final DatasetMapper datasetMapper;
     private final PermissionService permissionService;
 
+    /**
+     * 注入最近访问持久化、资源 Mapper 与权限服务。
+     *
+     * @param mapper            最近访问数据访问
+     * @param chartMapper       图表数据访问
+     * @param dashboardMapper   仪表盘数据访问
+     * @param datasetMapper     数据集数据访问
+     * @param permissionService 权限服务
+     */
     public RecentService(RecentItemMapper mapper, ChartMapper chartMapper,
                          DashboardMapper dashboardMapper, DatasetMapper datasetMapper,
                          PermissionService permissionService) {

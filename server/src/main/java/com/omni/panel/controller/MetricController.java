@@ -27,6 +27,11 @@ import com.omni.panel.service.MetricService;
 public class MetricController {
     private final MetricService service;
 
+    /**
+     * 注入指标业务服务。
+     *
+     * @param service 指标服务
+     */
     public MetricController(MetricService service) {
         this.service = service;
     }
@@ -95,6 +100,13 @@ public class MetricController {
 
     /**
      * 指标保存请求。
+     *
+     * @param name            名称
+     * @param description     描述
+     * @param modelId         关联模型标识
+     * @param expressionJson  表达式 JSON
+     * @param aggregation     聚合方式
+     * @param collectionId    所属集合标识
      */
     public record SaveRequest(@NotBlank String name, String description, @NotNull Long modelId,
                               @NotBlank String expressionJson, @NotBlank String aggregation,
