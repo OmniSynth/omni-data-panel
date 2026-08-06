@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import com.omni.panel.common.BusinessException;
 import com.omni.panel.common.ClientRequestInfo;
 import com.omni.panel.config.AuthenticatedUser;
+import com.omni.panel.config.OmniMetrics;
 import com.omni.panel.datasource.dialect.DialectRegistry;
 import com.omni.panel.entity.DataSourceEntity;
 import com.omni.panel.entity.DatasetEntity;
@@ -56,6 +57,7 @@ public class QueryService {
     private final QueryAuditMapper auditMapper;
     private final ObjectMapper objectMapper;
     private final MetricService metricService;
+    private final OmniMetrics omniMetrics;
     private final ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /**
@@ -74,13 +76,15 @@ public class QueryService {
      * @param auditMapper            查询审计持久化
      * @param objectMapper           JSON 序列化
      * @param metricService          指标业务服务
+     * @param omniMetrics            业务指标
      */
     public QueryService(DatasetService datasetService, DataSourceService dataSourceService,
                         DataSourceMapper dataSourceMapper, DataPolicyMapper dataPolicyMapper,
                         QueryCompiler compiler, SqlPolicyGuard sqlPolicyGuard,
                         SqlObjectAccessGuard sqlObjectAccessGuard, JdbcQueryExecutor executor,
                         DialectRegistry dialectRegistry, QueryStateStore stateStore,
-                        QueryAuditMapper auditMapper, ObjectMapper objectMapper, MetricService metricService) {
+                        QueryAuditMapper auditMapper, ObjectMapper objectMapper, MetricService metricService,
+                        OmniMetrics omniMetrics) {
         this.datasetService = datasetService;
         this.dataSourceService = dataSourceService;
         this.dataSourceMapper = dataSourceMapper;
@@ -94,6 +98,7 @@ public class QueryService {
         this.auditMapper = auditMapper;
         this.objectMapper = objectMapper;
         this.metricService = metricService;
+        this.omniMetrics = omniMetrics;
     }
 
     /**
@@ -128,6 +133,7 @@ public class QueryService {
         stateStore.save(snapshot(queryId, user.id(), execution.source().getId(), "QUEUED", null, null, startedAtMs));
         auditMapper.start(queryId, user.id(), execution.source().getId(), execution.sql(),
                 clientInfo.clientIp(), clientInfo.userAgent());
+        omniMetrics.querySubmit();
         virtualExecutor.submit(() -> run(queryId, user.id(), execution, startedAtMs));
         return queryId;
     }
@@ -328,6 +334,7 @@ public class QueryService {
         Integer rowCount = result == null ? null : result.rows().size();
         String preview = "SUCCEEDED".equals(status) ? QueryAuditPreview.build(objectMapper, result) : null;
         auditMapper.finish(queryId, status, rowCount, error, durationMs, preview);
+        omniMetrics.queryComplete(status, startedAtMs);
     }
 
     /**

@@ -2,6 +2,8 @@
 
 用 Docker Compose 同时启动 Web、API、MySQL、Redis、MinIO，**无需分别启动前后端**。
 
+部署模型为**单租户自建**（一组织一实例）；不做多客户同集群多租户。多环境隔离请起多套 Compose / 多套 `.env`。
+
 ## 前置条件
 
 - Docker Engine 24+ 与 Compose v2（Windows / macOS 可用 Docker Desktop）
@@ -10,6 +12,8 @@
   - Docker Hub（MySQL / Redis / MinIO 基础镜像）
 
 若 GHCR 包为私有，需先 `docker login ghcr.io`；公开包可直接拉取。仓库维护者请在 GitHub Packages 将两个包设为 **Public**。
+
+投产变量说明见 [docs/production.md](../docs/production.md)（`TRUSTED_PROXIES`、`EMBED_ALLOWED_ORIGINS`、`OMNI_METRICS_TOKEN` 等）。应用启动后也可打开 **帮助**（`/help`）阅读同源文档。
 
 ## 三步启动
 

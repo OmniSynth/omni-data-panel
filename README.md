@@ -4,6 +4,12 @@
 
 付费 BI 往往把「看数」锁在授权席位、封闭插件和厂商托管里：方言受限、嵌入受限、权限模型不透明，成本随人数与数据源线性膨胀。Omni Data Panel 把分析能力交还给团队——源码可控、部署自有、连接你已有的数仓与业务库，用开放架构覆盖从取数到分享的完整链路。
 
+### 定位与非目标
+
+- **定位**：开源、**单租户自建** BI——一个组织部署一份实例，元数据与权限在该实例内管理。
+- **非目标**：**不做**多客户共享集群的多租户 SaaS（无 `tenant_id` 隔离、无按租户计费/配额）。需要隔离时请分别部署多套实例。
+- **组织内协作**：用角色、资源 ACL、集合与数据策略满足部门/项目权限，不等于多租户。
+
 > 默认账号 `admin` / `admin123` 仅用于本地开发。生产必须通过 `ADMIN_INITIAL_PASSWORD` 设置至少 10 位的非默认初始密码，并替换 `deploy/.env` 中全部密码与密钥。
 
 ## 我们解决什么问题
@@ -39,12 +45,15 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 
 | 文档 | 说明 |
 |---|---|
-| [docs/user-guide.md](docs/user-guide.md) | 使用手册：模型 / 指标 / 图表 / 仪表盘参数 |
+| [docs/user-guide.md](docs/user-guide.md) | 使用手册：模型 / 图表 / 仪表盘 / **管理端设置·订阅·调度** |
 | [docs/api-log-dashboard-guide.md](docs/api-log-dashboard-guide.md) | 实战：`sys_api_log` 看板（含截图） |
-| [docs/embed-integration.md](docs/embed-integration.md) | 业务系统签名嵌入对接 |
+| [docs/embed-integration.md](docs/embed-integration.md) | 业务系统签名嵌入（含域名白名单） |
 | [docs/oidc-sso.md](docs/oidc-sso.md) | 企业 OIDC SSO |
-| [docs/production.md](docs/production.md) | 生产密钥、探针与加固清单 |
+| [docs/production.md](docs/production.md) | 生产密钥、探针、可信代理与加固清单 |
+| [docs/observability.md](docs/observability.md) | Prometheus 指标、requestId、告警示例 |
 | [deploy/README.md](deploy/README.md) | Compose / Release 一键部署 |
+
+应用内 **帮助**（`/help`）与上表 `docs/*.md` **同源**渲染，改文档即更新页面。
 
 ## 完整功能
 
@@ -96,7 +105,7 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 | 方式 | 适用场景 | 要点 |
 |---|---|---|
 | 公开链接 | 对外只读分享 | 可撤销；永久直至删除 |
-| 签名嵌入 | 嵌进业务系统 | 短期 JWT（约 1h）、需开启 `embed.enabled`、**服务端代签** |
+| 签名嵌入 | 嵌进业务系统 | 短期 JWT（约 1h）、开启 `embed.enabled`、配置嵌入域名白名单、**服务端代签** |
 | 打印页 | 订阅邮件 PDF | Playwright 无头打开 `/print/dashboard/{token}` |
 
 仪表盘安全渲染（`/api/dashboards/{id}/render`）：以图表所有者权限执行已保存查询，只返回展示配置与结果，不向只读用户暴露查询 JSON、模型或数据源细节。公开 / 嵌入侧使用参数默认值。
@@ -106,7 +115,7 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 ### 调度与订阅
 
 - **订阅（产品 UI）**：管理端按 Cron 将仪表盘邮件推送给站内用户；可手动触发；可选附带 PDF（`SUBSCRIPTION_PDF_ENABLED`）。
-- **通用调度 API**：`/api/schedules`（需 `schedule:manage`）已提供 Quartz 任务 CRUD；JobStore 为 JDBC（主库 `QRTZ_*`）并开启集群。**当前前端未提供调度管理页**，自动化请走订阅或直接调 API。
+- **通用调度（产品 UI）**：管理端「调度」页（`/admin/schedules`，需 `schedule:manage`）管理 Quartz 任务：元数据同步、仪表盘后台刷新、按已有订阅发送；JobStore 为 JDBC（主库 `QRTZ_*`）并开启集群。
 - **邮件**：管理端配置 SMTP 并测试发送；亦可使用环境变量 `MAIL_*`。
 
 ### 权限与安全
@@ -116,20 +125,21 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 - **资源 ACL**：集合 / 仪表盘 / 图表 / 模型 / 指标 / 数据源等按角色授予 `READ` / `WRITE`（取最高；`WRITE` 含 `READ`）。数据源角色仅 `READ`；连接维护仅 `ADMIN`。集合权限可继承；个人集合不可共享。
 - **登录 hardening**：HMAC 登录挑战、JWT、可选 TOTP 双因素与备份码、并发会话上限（`auth.session.max-concurrent`）。
 - **企业 SSO（OIDC）**：可选对接 IdP（`OIDC_*`）；保留本地密码登录；首次登录可 JIT 建号并赋予默认 `USER` 角色。详见 [docs/oidc-sso.md](docs/oidc-sso.md)。
-- **限流与响应头**：登录 / 公开链接 / 嵌入接口按 IP 进程内限流（`omni.security.rate-limit.*`）；响应带 `X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`；为支持 iframe 嵌入关闭 `X-Frame-Options`。
+- **限流与响应头**：登录 / 公开 / 嵌入按 IP 限流（Redis 优先，`omni.security.rate-limit.*`）；`TRUSTED_PROXIES` 控制是否信任 `X-Forwarded-For`；响应带 `X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`、CSP `frame-ancestors`。
 - **审计**：登录、查询（含详情）、模型变更、系统日志；支持清理。连接池健康页便于运维排障。
 
 ### 管理控制台（`/admin`）
 
 | 分组 | 能力 |
 |---|---|
-| 系统 | 站点名称、嵌入开关、查询缓存、会话上限、SMTP |
+| 系统 | 站点名称、嵌入开关与域名白名单、查询缓存、会话上限、SMTP；**订阅**、**调度** |
 | 人员 | 用户多角色、启停、密码重置、激活邮件、MFA 重置；角色与权限目录 |
 | 数据源 | 连接维护、连接池健康、对象 ACL / 角色授权 |
-| 运营 | 仪表盘订阅 |
 | 审计 | 查询 / 登录 / 系统日志 / 模型审计 |
 
-通用设置键：`site.name`、`embed.enabled`、`cache.query.enabled`、`cache.query.ttl-seconds`、`auth.session.max-concurrent`、`mail.*`。
+通用设置键：`site.name`、`embed.enabled`、`embed.allowed-origins`、`cache.query.enabled`、`cache.query.ttl-seconds`、`auth.session.max-concurrent`、`mail.*`。
+
+部署相关环境变量（详见 [production.md](docs/production.md)）：`TRUSTED_PROXIES`、`EMBED_ALLOWED_ORIGINS`、`OMNI_METRICS_TOKEN`、`OIDC_*`。
 
 ## 概念速查
 

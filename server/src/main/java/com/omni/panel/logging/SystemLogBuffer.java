@@ -111,7 +111,8 @@ public final class SystemLogBuffer {
         return contains(entry.loggerName(), q)
                 || contains(entry.message(), q)
                 || contains(entry.threadName(), q)
-                || contains(entry.stackTrace(), q);
+                || contains(entry.stackTrace(), q)
+                || contains(entry.requestId(), q);
     }
 
     /**
@@ -147,6 +148,7 @@ public final class SystemLogBuffer {
             String message,
             String stackTrace,
             String threadName,
+            String requestId,
             LocalDateTime createdAt
     ) {
     }

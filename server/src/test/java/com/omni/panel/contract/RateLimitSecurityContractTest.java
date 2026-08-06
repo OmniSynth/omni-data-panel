@@ -16,16 +16,27 @@ class RateLimitSecurityContractTest {
                 "rate-limit:",
                 "auth-per-minute:",
                 "public-per-minute:",
-                "embed-per-minute:");
+                "embed-per-minute:",
+                "trusted-proxies:",
+                "TRUSTED_PROXIES");
 
         String security = Files.readString(
                 Path.of("src/main/java/com/omni/panel/config/SecurityConfig.java"), StandardCharsets.UTF_8);
         assertThat(security).contains(
                 "RateLimitFilter",
+                "FrameAncestorsFilter",
                 "frameOptions",
                 "disable",
                 "contentTypeOptions",
                 "STRICT_ORIGIN_WHEN_CROSS_ORIGIN",
                 "permissionsPolicy");
+
+        String filter = Files.readString(
+                Path.of("src/main/java/com/omni/panel/config/RateLimitFilter.java"), StandardCharsets.UTF_8);
+        assertThat(filter).contains("RateLimiter");
+
+        assertThat(Files.exists(Path.of("src/main/java/com/omni/panel/config/DelegatingRateLimiter.java"))).isTrue();
+        assertThat(Files.exists(Path.of("src/main/java/com/omni/panel/config/RedisFixedWindowRateLimiter.java"))).isTrue();
+        assertThat(Files.exists(Path.of("src/main/java/com/omni/panel/common/ClientIpResolver.java"))).isTrue();
     }
 }

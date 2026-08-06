@@ -38,7 +38,20 @@ class SystemLogBufferTest {
         assertThat(page.items().get(0).message()).isEqualTo("msg-" + (SystemLogBuffer.CAPACITY + 2));
     }
 
+    @Test
+    void 可按requestId关键字检索() {
+        SystemLogBuffer buffer = SystemLogBuffer.get();
+        buffer.append(new SystemLogBuffer.Entry(
+                "INFO", "com.omni.panel.test", "hello", null, "main", "req-aaa-001", LocalDateTime.now()));
+        buffer.append(new SystemLogBuffer.Entry(
+                "ERROR", "com.omni.panel.test", "boom", null, "main", "req-bbb-002", LocalDateTime.now()));
+
+        SystemLogBuffer.Page page = buffer.page("req-aaa", null, 1, 10);
+        assertThat(page.total()).isEqualTo(1);
+        assertThat(page.items().get(0).requestId()).isEqualTo("req-aaa-001");
+    }
+
     private static SystemLogBuffer.Entry entry(String level, String message) {
-        return new SystemLogBuffer.Entry(level, "com.omni.panel.test", message, null, "main", LocalDateTime.now());
+        return new SystemLogBuffer.Entry(level, "com.omni.panel.test", message, null, "main", null, LocalDateTime.now());
     }
 }

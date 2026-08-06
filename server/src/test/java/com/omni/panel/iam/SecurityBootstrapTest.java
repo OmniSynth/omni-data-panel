@@ -65,7 +65,7 @@ class SecurityBootstrapTest {
     }
 
     private SecurityBootstrap bootstrap(String initialPassword) {
-        var properties = new SecurityProperties(JWT_SECRET, Duration.ofHours(8), initialPassword);
+        var properties = new SecurityProperties(JWT_SECRET, Duration.ofHours(8), initialPassword, null);
         return new SecurityBootstrap(environment, properties, userMapper, passwordEncoder);
     }
 

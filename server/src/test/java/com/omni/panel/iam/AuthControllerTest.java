@@ -16,6 +16,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import com.omni.panel.common.BusinessException;
 import com.omni.panel.config.AuthenticatedUser;
+import com.omni.panel.config.OmniMetrics;
 import com.omni.panel.controller.AuthController;
 import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.UserMapper;
@@ -33,7 +34,7 @@ class AuthControllerTest {
     private final AuthController controller = new AuthController(
             userMapper, passwordEncoder, mock(JwtService.class), mock(LoginAuditService.class),
             mock(UserService.class), mock(TotpService.class), mock(LoginChallengeService.class),
-            mock(UserSessionRegistry.class));
+            mock(UserSessionRegistry.class), mock(OmniMetrics.class));
 
     @AfterEach
     void 清理认证上下文() {

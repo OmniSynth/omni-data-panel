@@ -41,10 +41,30 @@ function contentType(file: string): string {
   return 'application/octet-stream'
 }
 
+/** 开发服务器下发 frame-ancestors，对齐生产 nginx 行为 */
+function frameAncestorsPlugin(allowedOrigins: string): Plugin {
+  const embedCsp = allowedOrigins.trim()
+    ? `frame-ancestors 'self' ${allowedOrigins.trim()}`
+    : "frame-ancestors 'self'"
+  const selfOnly = "frame-ancestors 'self'"
+  return {
+    name: 'omni-frame-ancestors',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const pathName = (req.url || '/').split('?')[0]
+        const embeddable = pathName.startsWith('/embed/') || pathName.startsWith('/public/')
+        res.setHeader('Content-Security-Policy', embeddable ? embedCsp : selfOnly)
+        next()
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const embedOrigins = env.VITE_EMBED_ALLOWED_ORIGINS || env.EMBED_ALLOWED_ORIGINS || ''
   return {
-    plugins: [vue(), docsAssetsPlugin()],
+    plugins: [vue(), docsAssetsPlugin(), frameAncestorsPlugin(embedOrigins)],
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },

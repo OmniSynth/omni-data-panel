@@ -1,8 +1,7 @@
-# 本地非 Docker 参考配置（无 envsubst）。生产镜像使用 nginx.conf.template。
 map $request_uri $csp_frame_ancestors {
     default "frame-ancestors 'self'";
-    ~*^/embed/  "frame-ancestors 'self'";
-    ~*^/public/ "frame-ancestors 'self'";
+    ~*^/embed/  "frame-ancestors 'self' ${EMBED_ALLOWED_ORIGINS}";
+    ~*^/public/ "frame-ancestors 'self' ${EMBED_ALLOWED_ORIGINS}";
 }
 
 server {

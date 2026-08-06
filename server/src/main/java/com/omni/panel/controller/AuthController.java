@@ -22,6 +22,7 @@ import com.omni.panel.common.ApiResponse;
 import com.omni.panel.common.BusinessException;
 import com.omni.panel.common.ClientRequestInfo;
 import com.omni.panel.config.AuthenticatedUser;
+import com.omni.panel.config.OmniMetrics;
 import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.UserMapper;
 import com.omni.panel.service.JwtService;
@@ -45,6 +46,7 @@ public class AuthController {
     private final TotpService totpService;
     private final LoginChallengeService loginChallengeService;
     private final UserSessionRegistry sessionRegistry;
+    private final OmniMetrics omniMetrics;
 
     /**
      * 构造认证控制器并注入依赖。
@@ -57,10 +59,12 @@ public class AuthController {
      * @param totpService            双因子认证
      * @param loginChallengeService  登录挑战与签名校验
      * @param sessionRegistry        会话注册表
+     * @param omniMetrics            业务指标
      */
     public AuthController(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtService jwtService,
                           LoginAuditService loginAuditService, UserService userService, TotpService totpService,
-                          LoginChallengeService loginChallengeService, UserSessionRegistry sessionRegistry) {
+                          LoginChallengeService loginChallengeService, UserSessionRegistry sessionRegistry,
+                          OmniMetrics omniMetrics) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -69,6 +73,7 @@ public class AuthController {
         this.totpService = totpService;
         this.loginChallengeService = loginChallengeService;
         this.sessionRegistry = sessionRegistry;
+        this.omniMetrics = omniMetrics;
     }
 
     /**
@@ -97,30 +102,37 @@ public class AuthController {
                     request.username(), request.password(), request.signature());
         } catch (BusinessException exception) {
             loginAuditService.record(request.username(), null, false, "登录签名失败", client);
+            omniMetrics.authLogin("failure");
             throw exception;
         }
         SysUser user = userMapper.selectOne(Wrappers.<SysUser>lambdaQuery().eq(SysUser::getUsername, request.username()));
         if (user == null) {
             loginAuditService.record(request.username(), null, false, "用户不存在", client);
+            omniMetrics.authLogin("failure");
             throw new BusinessException(401, "用户名或密码错误");
         }
         if (!Boolean.TRUE.equals(user.getEnabled())) {
             loginAuditService.record(request.username(), user.getId(), false, "账号已停用", client);
+            omniMetrics.authLogin("failure");
             throw new BusinessException(401, "用户名或密码错误");
         }
         if (user.getActivated() != null && !user.getActivated()) {
             loginAuditService.record(request.username(), user.getId(), false, "账号未激活", client);
+            omniMetrics.authLogin("failure");
             throw new BusinessException(401, "账号未激活，请查收邮件设置密码");
         }
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             loginAuditService.record(request.username(), user.getId(), false, "密码错误", client);
+            omniMetrics.authLogin("failure");
             throw new BusinessException(401, "用户名或密码错误");
         }
         if (Boolean.TRUE.equals(user.getTotpEnabled())) {
             loginAuditService.record(request.username(), user.getId(), false, "需要MFA", client);
+            omniMetrics.authLogin("mfa_required");
             return ApiResponse.ok(LoginResult.needMfa(jwtService.createMfaPending(user.getId(), user.getUsername())));
         }
         loginAuditService.record(request.username(), user.getId(), true, "登录成功", client);
+        omniMetrics.authLogin("success");
         return ApiResponse.ok(LoginResult.bearer(issueAccessToken(user)));
     }
 
@@ -139,13 +151,16 @@ public class AuthController {
         SysUser user = userMapper.selectById(userId);
         if (user == null || !Boolean.TRUE.equals(user.getEnabled())) {
             loginAuditService.record(user == null ? "" : user.getUsername(), userId, false, "MFA验证失败", client);
+            omniMetrics.authLogin("failure");
             throw new BusinessException(401, "MFA 验证失败");
         }
         if (!totpService.verifyLoginCode(userId, request.code())) {
             loginAuditService.record(user.getUsername(), userId, false, "MFA验证失败", client);
+            omniMetrics.authLogin("failure");
             throw new BusinessException(401, "验证码错误");
         }
         loginAuditService.record(user.getUsername(), userId, true, "登录成功(MFA)", client);
+        omniMetrics.authLogin("success");
         return ApiResponse.ok(LoginResult.bearer(issueAccessToken(user)));
     }
 

@@ -5,8 +5,8 @@ import type {
   DashboardRender, DataSource, DataSourceHealthOverview, Dataset, DatasetAudit, DialectInfo, ExportTask, FieldPermissionRow,
   Id, LoginAudit, Metric, MetadataColumn, MetadataTable, PageResult, Permission, PublicLink, PublicQuestion,
   PublicResourceType, QueryAudit, QuerySnapshot, QuerySubmission, QuerySubmitResult, RecentItem,
-  ResourceType, Role, RoleResourceGrant, RowRule, SearchHit, SiteSettings, Subscription, SystemLogEntry, SystemLogMeta,
-  TrashItem, User, UserDirectoryItem, DataSourceObjectAcl, ObjectAclColumnRef, ObjectAclTableRef,
+  ResourceType, Role, RoleResourceGrant, RowRule, Schedule, SearchHit, SiteSettings, Subscription, SystemLogEntry,
+  SystemLogMeta, TrashItem, User, UserDirectoryItem, DataSourceObjectAcl, ObjectAclColumnRef, ObjectAclTableRef,
 } from './types'
 
 interface ApiResponse<T> {
@@ -475,6 +475,25 @@ export const subscriptionApi = {
   }),
   remove: (id: Id) => request<void>({ url: `/subscriptions/${String(id)}`, method: 'DELETE' }),
   runNow: (id: Id) => request<void>({ url: `/subscriptions/${String(id)}/run`, method: 'POST' }),
+}
+
+const scheduleSave = (data: Partial<Schedule>) => ({
+  name: data.name || '',
+  scheduleType: data.scheduleType || 'METADATA_SYNC',
+  targetId: String(data.targetId),
+  cronExpression: data.cronExpression || '',
+  enabled: data.enabled ?? true,
+})
+
+export const scheduleApi = {
+  list: () => request<Schedule[]>({ url: '/schedules' }),
+  create: (data: Partial<Schedule>) => request<Schedule>({
+    url: '/schedules', method: 'POST', data: scheduleSave(data),
+  }),
+  update: (id: Id, data: Partial<Schedule>) => request<Schedule>({
+    url: `/schedules/${String(id)}`, method: 'PUT', data: scheduleSave(data),
+  }),
+  remove: (id: Id) => request<void>({ url: `/schedules/${String(id)}`, method: 'DELETE' }),
 }
 
 export const exportApi = {

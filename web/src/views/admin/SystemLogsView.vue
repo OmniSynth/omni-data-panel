@@ -33,6 +33,7 @@ const filteredEntries = computed(() => {
       entry.threadName,
       entry.stackTrace,
       entry.level,
+      entry.requestId,
     ].join('\n').toLowerCase()
     return haystack.includes(q)
   })
@@ -48,7 +49,8 @@ function formatEntry(entry: SystemLogEntry) {
   const level = (entry.level || 'INFO').padEnd(5, ' ')
   const logger = entry.loggerName || '-'
   const thread = entry.threadName ? ` [${entry.threadName}]` : ''
-  const lines = [`${time} ${level} ${logger}${thread} ${entry.message || ''}`]
+  const requestId = entry.requestId ? ` req=${entry.requestId}` : ''
+  const lines = [`${time} ${level} ${logger}${thread}${requestId} ${entry.message || ''}`]
   if (entry.stackTrace) {
     for (const line of entry.stackTrace.split('\n')) {
       if (line.trim()) lines.push(`    ${line}`)

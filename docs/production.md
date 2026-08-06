@@ -1,6 +1,8 @@
 # 生产部署清单
 
-面向单组织自建投产。多租户 SaaS / 强合规托管不在本文范围。
+面向**单组织 / 单租户自建**投产（开源项目默认模型：一组织一实例）。
+
+**不在范围**：多客户同集群的多租户 SaaS、按租户计费/配额、强合规对外托管。需要隔离请部署多套实例，勿期望库内 `tenant` 分区。
 
 ## 1. 启动前必做
 
@@ -28,7 +30,7 @@ openssl rand -base64 32
 2. 复制 `.env.example` → `.env` 并按上表改密。
 3. Windows：`.\start.ps1`；Linux/macOS：`./start.sh`（内部 `docker compose pull && up -d`）。
 4. 对外只暴露 Web（nginx）与必要的 API；MinIO Console、MySQL、Redis **不要**对公网开放。
-5. TLS 终止放在前置反向代理；保证代理正确传递 `X-Forwarded-For` / `X-Forwarded-Proto`（见 §4）。
+5. TLS 终止放在前置反向代理；保证代理正确传递 `X-Forwarded-For` / `X-Forwarded-Proto`，并配置 `TRUSTED_PROXIES`（见 §4）。
 
 **源码目录构建**（开发或镜像未发布时）：在仓库 `deploy/` 下配置 `.env` 后执行 `docker compose up --build -d`。
 
@@ -51,18 +53,21 @@ openssl rand -base64 32
 | 能力 | 配置 | 说明 |
 |---|---|---|
 | 签名嵌入 | 管理端 `embed.enabled` | 业务系统 iframe 嵌入前必须开启 |
+| 嵌入域名白名单 | `embed.allowed-origins` + `EMBED_ALLOWED_ORIGINS` | CSP `frame-ancestors`；Compose 环境变量须与设置一致 |
 | 查询缓存 | `cache.query.enabled` / TTL | 站点级；编辑页可强制回源 |
 | 企业 SSO | `OIDC_*` | 见 [oidc-sso.md](oidc-sso.md) |
 | 订阅 PDF | `SUBSCRIPTION_PDF_ENABLED` | 需镜像内 Playwright Chromium |
 | 并发会话 | `auth.session.max-concurrent` | 超限踢最旧会话 |
+| Prometheus 指标 | `OMNI_METRICS_TOKEN` | 配置后开放 `/actuator/prometheus`；见 [observability.md](observability.md) |
 
 ## 4. 安全加固（投产前核对）
 
 ### 已内置
 
 - HMAC 登录挑战 + JWT + 可选 TOTP MFA
-- 登录 / 公开链接 / 嵌入接口按 IP **进程内**限流（默认鉴权 30/分、公开 120/分、嵌入 180/分）
-- 响应头：`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`
+- 登录 / 公开链接 / 嵌入接口按 IP 限流（默认鉴权 30/分、公开 120/分、嵌入 180/分）；**Redis 固定窗口优先**，不可用时降级本机 Caffeine
+- 可信代理：`TRUSTED_PROXIES`（CIDR）；仅当 `remoteAddr` 属于白名单时才解析 `X-Forwarded-For`（自右向左剥可信跳）；默认空 = 不信任转发头
+- 响应头：`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`、CSP `frame-ancestors`（嵌入域名白名单）
 - Quartz **JDBC 集群**（多实例共享触发器，避免重复订阅）
 - 只读 SQL 门禁、对象 ACL、资源 ACL、登录/查询/模型审计
 
@@ -70,16 +75,15 @@ openssl rand -base64 32
 
 | 风险 | 建议 |
 |---|---|
-| 为嵌入关闭了 `X-Frame-Options`，无 `frame-ancestors` | 在前置 nginx/CDN 对**非嵌入路径**加 CSP `frame-ancestors`；嵌入页可单独放宽到业务域名 |
-| 限流为进程内固定窗口 | 多副本各自计数；高流量场景改用网关/Redis 限流 |
-| 信任 `X-Forwarded-For` | 仅在可信反向代理后部署；丢弃客户端伪造头或使用代理真实 IP 模块 |
 | OIDC 按邮箱绑定账号 | 确保 IdP 邮箱已验证；见 [oidc-sso.md](oidc-sso.md) §安全注意 |
 | Hive / ClickHouse 驱动 | 默认胖包不含 ClickHouse；Hive 需 `server/lib` 或 `-Dloader.path`（见 README 驱动说明） |
+| 管理端白名单与 nginx 环境变量不同步 | 修改 `embed.allowed-origins` 后同步更新 `EMBED_ALLOWED_ORIGINS` 并重启 web 容器 |
+| `TRUSTED_PROXIES` 过宽且 server 对公网可达 | 攻击者可直连并伪造 XFF；仅在前置代理后暴露 API，或收紧为代理 IP/CIDR |
 
 ## 5. 调度与订阅
 
-- **仪表盘订阅**：管理端「运营 → 订阅」配置 Cron 与收件人；产品 UI 已覆盖。
-- **通用 Schedule API**（`/api/schedules`，需 `schedule:manage`）：后端与 Quartz JDBC 已就绪，**当前前端未提供管理页**。自动化任务请暂时走订阅或直接调 API。
+- **仪表盘订阅**：管理端「系统 → 订阅」配置 Cron 与收件人；产品 UI 已覆盖。
+- **通用调度**：管理端「系统 → 调度」（`/admin/schedules`，需 `schedule:manage`）配置元数据同步、仪表盘后台刷新、按已有订阅发送；Quartz JobStore 为 JDBC 并开启集群。
 
 ## 6. 备份与演练
 
@@ -94,15 +98,19 @@ openssl rand -base64 32
 - [ ] `GET /actuator/health/readiness` 返回 UP
 - [ ] 管理员可登录；默认 `admin123` 已不可用
 - [ ] 创建数据源 → 同步元数据 → 语义查询出数
-- [ ] （若启用）OIDC 登录闭环与 JIT 角色符合预期
-- [ ] （若启用）签名嵌入 iframe 在业务域名下可加载，公开链接可撤销
-- [ ] （若启用）订阅任务在多实例下不重复发送
-- [ ] 故意输错密码多次，观察鉴权限流是否返回 429
+- [ ] （若启用）OIDC 登录闭环与 JIT 角色符合预期；IdP 已强制 MFA / 邮箱验证
+- [ ] （若启用）签名嵌入：管理端白名单含业务 Origin，且 `EMBED_ALLOWED_ORIGINS` 已同步；iframe 可加载
+- [ ] （若启用）订阅任务在多实例下不重复发送；调度页可创建元数据同步任务
+- [ ] 故意输错密码多次，观察鉴权限流是否返回 429（多副本时配额在 Redis 合计）
+- [ ] （若启用）Prometheus 刮取带 `OMNI_METRICS_TOKEN` 成功；系统日志可按 `requestId` 检索
 
 ## 8. 相关文档
 
 - 产品总览与本地开发：[README.md](../README.md)
 - Compose 一键部署：[deploy/README.md](../deploy/README.md)
+- 可观测性：[observability.md](observability.md)
 - OIDC SSO：[oidc-sso.md](oidc-sso.md)
 - 签名嵌入：[embed-integration.md](embed-integration.md)
-- 使用手册：[user-guide.md](user-guide.md)
+- 使用手册（含管理端调度/设置）：[user-guide.md](user-guide.md)
+
+应用内 **帮助**（`/help`）与上述 `docs/*.md` 同源渲染。

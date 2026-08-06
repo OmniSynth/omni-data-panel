@@ -107,6 +107,9 @@ services:
       OIDC_CLIENT_NAME: ${OIDC_CLIENT_NAME:-企业登录}
       OIDC_DEFAULT_ROLE_CODE: ${OIDC_DEFAULT_ROLE_CODE:-USER}
       OIDC_FRONTEND_REDIRECT_URI: ${OIDC_FRONTEND_REDIRECT_URI:-}
+      OMNI_METRICS_TOKEN: ${OMNI_METRICS_TOKEN:-}
+      # server 不直接对公网时，信任 Compose/内网代理以便正确解析客户端 IP
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     ports:
       - "${SERVER_PORT:-8080}:8080"
     depends_on:
@@ -125,6 +128,9 @@ services:
       context: ..
       dockerfile: web/Dockerfile
     restart: unless-stopped
+    environment:
+      # 空格分隔 Origin，须与管理端 embed.allowed-origins 保持一致（如 https://app.example.com）
+      EMBED_ALLOWED_ORIGINS: ${EMBED_ALLOWED_ORIGINS:-}
     ports:
       - "${WEB_PORT:-80}:8080"
     depends_on:

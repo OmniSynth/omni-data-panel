@@ -18,6 +18,7 @@ const passwordSet = ref(false)
 const form = ref({
   siteName: '',
   embedEnabled: false,
+  embedAllowedOrigins: '',
   sqlTipsCollapsedDefault: false,
   queryCacheEnabled: false,
   queryCacheTtlSeconds: 300,
@@ -64,6 +65,7 @@ async function load() {
     form.value = {
       siteName: String(settings['site.name'] || t('settings.defaultSiteName')),
       embedEnabled: asBool(settings['embed.enabled']),
+      embedAllowedOrigins: String(settings['embed.allowed-origins'] || ''),
       sqlTipsCollapsedDefault: asBool(settings['ui.sql.tips-collapsed-default']),
       queryCacheEnabled: asBool(settings['cache.query.enabled']),
       queryCacheTtlSeconds: Number.isFinite(ttl) && ttl > 0 ? ttl : 300,
@@ -89,6 +91,7 @@ function buildPayload(): SiteSettings {
   const payload: SiteSettings = {
     'site.name': form.value.siteName.trim() || t('settings.defaultSiteName'),
     'embed.enabled': form.value.embedEnabled ? 'true' : 'false',
+    'embed.allowed-origins': form.value.embedAllowedOrigins.trim(),
     'ui.sql.tips-collapsed-default': form.value.sqlTipsCollapsedDefault ? 'true' : 'false',
     'cache.query.enabled': form.value.queryCacheEnabled ? 'true' : 'false',
     'cache.query.ttl-seconds': String(form.value.queryCacheTtlSeconds),
@@ -161,6 +164,16 @@ onMounted(load)
         </el-form-item>
         <el-form-item :label="t('settings.embedEnabled')">
           <el-switch v-model="form.embedEnabled" @change="markDirty" />
+        </el-form-item>
+        <el-form-item :label="t('settings.embedAllowedOrigins')">
+          <el-input
+            v-model="form.embedAllowedOrigins"
+            type="textarea"
+            :rows="3"
+            :placeholder="t('settings.embedAllowedOriginsPlaceholder')"
+            @input="markDirty"
+          />
+          <div class="hint">{{ t('settings.embedAllowedOriginsHint') }}</div>
         </el-form-item>
         <el-form-item :label="t('settings.sqlTipsCollapsed')">
           <el-switch v-model="form.sqlTipsCollapsedDefault" @change="markDirty" />

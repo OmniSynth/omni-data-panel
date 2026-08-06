@@ -17,6 +17,7 @@ const menuGroups = computed(() => [
       { path: '/admin/users', label: t('adminShell.users') },
       { path: '/admin/roles', label: t('adminShell.roles') },
       { path: '/admin/subscriptions', label: t('adminShell.subscriptions') },
+      { path: '/admin/schedules', label: t('adminShell.schedules') },
     ],
   },
   {

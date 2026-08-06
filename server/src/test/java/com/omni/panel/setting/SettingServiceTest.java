@@ -46,9 +46,52 @@ class SettingServiceTest {
         Map<String, String> values = service.list();
         assertThat(values).containsEntry("cache.query.enabled", "false")
                 .containsEntry("cache.query.ttl-seconds", "300")
+                .containsEntry("embed.allowed-origins", "")
                 .containsEntry("mail.port", "25")
                 .containsEntry("mail.password.set", "false")
                 .doesNotContainKey("mail.password");
+    }
+
+    @Test
+    void 缺省frameAncestors仅允许self() {
+        assertThat(service.frameAncestorsCsp()).isEqualTo("frame-ancestors 'self'");
+        assertThat(service.embedAllowedOrigins()).isEmpty();
+    }
+
+    @Test
+    void 管理员可保存嵌入域名白名单() {
+        asAdmin();
+        when(mapper.selectById("embed.allowed-origins")).thenReturn(null);
+
+        service.update(Map.of("embed.allowed-origins",
+                "https://App.Example.com\nhttps://portal.example.com:8443, http://localhost:3000"));
+
+        ArgumentCaptor<SettingEntity> captor = ArgumentCaptor.forClass(SettingEntity.class);
+        verify(mapper).insert(captor.capture());
+        assertThat(captor.getValue().getSettingKey()).isEqualTo("embed.allowed-origins");
+        assertThat(captor.getValue().getSettingValue())
+                .isEqualTo("https://app.example.com\nhttps://portal.example.com:8443\nhttp://localhost:3000");
+
+        SettingEntity stored = new SettingEntity();
+        stored.setSettingKey("embed.allowed-origins");
+        stored.setSettingValue(captor.getValue().getSettingValue());
+        when(mapper.selectById("embed.allowed-origins")).thenReturn(stored);
+        assertThat(service.frameAncestorsCsp())
+                .isEqualTo("frame-ancestors 'self' https://app.example.com https://portal.example.com:8443 http://localhost:3000");
+    }
+
+    @Test
+    void 非法嵌入域名被拒绝() {
+        asAdmin();
+        assertThatThrownBy(() -> service.update(Map.of("embed.allowed-origins", "https://evil.example.com/path")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("路径");
+        assertThatThrownBy(() -> service.update(Map.of("embed.allowed-origins", "*")))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.update(Map.of("embed.allowed-origins", "ftp://files.example.com")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("http/https");
+        verify(mapper, never()).insert(any(SettingEntity.class));
     }
 
     @Test

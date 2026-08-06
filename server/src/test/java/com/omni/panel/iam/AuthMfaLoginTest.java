@@ -23,6 +23,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.omni.panel.common.BusinessException;
 import com.omni.panel.common.ClientRequestInfo;
+import com.omni.panel.config.OmniMetrics;
 import com.omni.panel.controller.AuthController;
 import com.omni.panel.entity.SysUser;
 import com.omni.panel.mapper.UserMapper;
@@ -52,7 +53,7 @@ class AuthMfaLoginTest {
     private final UserSessionRegistry sessionRegistry = mock(UserSessionRegistry.class);
     private final AuthController controller = new AuthController(
             userMapper, passwordEncoder, jwtService, loginAuditService, mock(UserService.class), totpService,
-            loginChallengeService, sessionRegistry);
+            loginChallengeService, sessionRegistry, mock(OmniMetrics.class));
     private final HttpServletRequest httpRequest = mock(HttpServletRequest.class);
 
     @BeforeEach

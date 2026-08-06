@@ -9,7 +9,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 /**
  * 基于 Caffeine 的固定窗口计数限流器（进程内）。
  */
-public class FixedWindowRateLimiter {
+public class FixedWindowRateLimiter implements RateLimiter {
     private final Cache<String, AtomicInteger> counters;
     private final long windowMillis;
 
@@ -32,6 +32,7 @@ public class FixedWindowRateLimiter {
      * @param limit 窗口内最大次数
      * @return 未超限返回 {@code true}
      */
+    @Override
     public boolean tryAcquire(String key, int limit) {
         if (limit < 1) {
             return false;

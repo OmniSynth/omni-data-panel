@@ -1,9 +1,12 @@
 package com.omni.panel.service;
 
+import java.net.URI;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -23,6 +26,7 @@ import com.omni.panel.mapper.SettingMapper;
  */
 @Service
 public class SettingService {
+    static final String EMBED_ALLOWED_ORIGINS = "embed.allowed-origins";
     static final String CACHE_QUERY_ENABLED = "cache.query.enabled";
     static final String CACHE_QUERY_TTL_SECONDS = "cache.query.ttl-seconds";
     static final String AUTH_SESSION_MAX_CONCURRENT = "auth.session.max-concurrent";
@@ -42,11 +46,14 @@ public class SettingService {
     private static final int MIN_MAX_CONCURRENT_SESSIONS = 0;
     private static final int MAX_MAX_CONCURRENT_SESSIONS = 100;
     private static final int DEFAULT_MAIL_PORT = 25;
+    private static final int MAX_EMBED_ORIGINS = 50;
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    private static final Pattern ORIGIN_SPLIT = Pattern.compile("[,\\s]+");
 
     private static final List<String> ALLOWED_KEYS = List.of(
             "site.name",
             "embed.enabled",
+            EMBED_ALLOWED_ORIGINS,
             "ui.sql.tips-collapsed-default",
             CACHE_QUERY_ENABLED,
             CACHE_QUERY_TTL_SECONDS,
@@ -68,6 +75,7 @@ public class SettingService {
     private static final Map<String, String> DEFAULTS = Map.ofEntries(
             Map.entry("site.name", "全域数据分析"),
             Map.entry("embed.enabled", "true"),
+            Map.entry(EMBED_ALLOWED_ORIGINS, ""),
             Map.entry("ui.sql.tips-collapsed-default", "false"),
             Map.entry(CACHE_QUERY_ENABLED, "false"),
             Map.entry(CACHE_QUERY_TTL_SECONDS, String.valueOf(DEFAULT_CACHE_TTL_SECONDS)),
@@ -156,6 +164,29 @@ public class SettingService {
     public boolean embedEnabled() {
         String value = get("embed.enabled");
         return value == null || Boolean.parseBoolean(value);
+    }
+
+    /**
+     * 读取已规范化的嵌入父页面 Origin 白名单（可能为空）。
+     *
+     * @return Origin 列表，如 {@code https://app.example.com}
+     */
+    public List<String> embedAllowedOrigins() {
+        return parseOrigins(getOrDefault(EMBED_ALLOWED_ORIGINS));
+    }
+
+    /**
+     * 组装仅含 {@code frame-ancestors} 的 Content-Security-Policy 值。
+     * 白名单为空时仅允许 {@code 'self'}。
+     *
+     * @return CSP 头值
+     */
+    public String frameAncestorsCsp() {
+        List<String> origins = embedAllowedOrigins();
+        if (origins.isEmpty()) {
+            return "frame-ancestors 'self'";
+        }
+        return "frame-ancestors 'self' " + String.join(" ", origins);
     }
 
     /**
@@ -293,6 +324,13 @@ public class SettingService {
             }
             return Boolean.parseBoolean(raw) ? "true" : "false";
         }
+        if (EMBED_ALLOWED_ORIGINS.equals(key)) {
+            List<String> origins = parseOrigins(raw);
+            if (origins.size() > MAX_EMBED_ORIGINS) {
+                throw new BusinessException("嵌入域名白名单最多 " + MAX_EMBED_ORIGINS + " 项");
+            }
+            return String.join("\n", origins);
+        }
         if (CACHE_QUERY_TTL_SECONDS.equals(key)) {
             int seconds;
             try {
@@ -362,5 +400,67 @@ public class SettingService {
         } catch (AddressException exception) {
             throw new BusinessException(message);
         }
+    }
+
+    /**
+     * 解析并校验嵌入 Origin 列表；非法项抛出业务异常。
+     *
+     * @param raw 原始文本（逗号 / 空白 / 换行分隔）
+     * @return 去重后的 Origin 列表
+     */
+    static List<String> parseOrigins(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        LinkedHashSet<String> unique = new LinkedHashSet<>();
+        for (String token : ORIGIN_SPLIT.split(raw.trim())) {
+            if (token.isBlank()) {
+                continue;
+            }
+            unique.add(normalizeOrigin(token.trim()));
+        }
+        return new ArrayList<>(unique);
+    }
+
+    /**
+     * 将单个输入规范化为 {@code scheme://host[:port]} Origin。
+     *
+     * @param raw 原始 Origin
+     * @return 规范化 Origin
+     */
+    private static String normalizeOrigin(String raw) {
+        String candidate = raw;
+        if (candidate.contains("*") || candidate.contains("'")) {
+            throw new BusinessException("嵌入域名不允许通配或引号：" + raw);
+        }
+        URI uri;
+        try {
+            uri = URI.create(candidate);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException("嵌入域名格式不合法：" + raw);
+        }
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+        if (!"http".equals(scheme) && !"https".equals(scheme)) {
+            throw new BusinessException("嵌入域名仅支持 http/https：" + raw);
+        }
+        if (uri.getHost() == null || uri.getHost().isBlank()) {
+            throw new BusinessException("嵌入域名缺少主机名：" + raw);
+        }
+        if (uri.getUserInfo() != null) {
+            throw new BusinessException("嵌入域名不能包含用户信息：" + raw);
+        }
+        String path = uri.getPath();
+        if (path != null && !path.isEmpty() && !"/".equals(path)) {
+            throw new BusinessException("嵌入域名不能包含路径：" + raw);
+        }
+        if (uri.getQuery() != null || uri.getFragment() != null) {
+            throw new BusinessException("嵌入域名不能包含查询或片段：" + raw);
+        }
+        StringBuilder origin = new StringBuilder();
+        origin.append(scheme).append("://").append(uri.getHost().toLowerCase(Locale.ROOT));
+        if (uri.getPort() > 0) {
+            origin.append(':').append(uri.getPort());
+        }
+        return origin.toString();
     }
 }

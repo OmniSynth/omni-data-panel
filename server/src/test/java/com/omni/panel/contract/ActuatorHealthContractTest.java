@@ -17,7 +17,7 @@ class ActuatorHealthContractTest {
         String applicationYml = Files.readString(
                 Path.of("src/main/resources/application.yml"), StandardCharsets.UTF_8);
         assertThat(applicationYml).contains(
-                "include: health",
+                "include: health,prometheus",
                 "probes:",
                 "enabled: true",
                 "show-details: never",
@@ -29,7 +29,7 @@ class ActuatorHealthContractTest {
         String securityConfig = Files.readString(
                 Path.of("src/main/java/com/omni/panel/config/SecurityConfig.java"),
                 StandardCharsets.UTF_8);
-        assertThat(securityConfig).contains("\"/actuator/health\"", "\"/actuator/health/**\"");
+        assertThat(securityConfig).contains("\"/actuator/health\"", "\"/actuator/health/**\"", "\"/actuator/prometheus\"");
 
         String dockerfile = Files.readString(Path.of("Dockerfile"), StandardCharsets.UTF_8);
         assertThat(dockerfile).contains(

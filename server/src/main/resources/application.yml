@@ -67,7 +67,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
   endpoint:
     health:
       probes:
@@ -81,12 +81,23 @@ management:
     # SMTP 常未配置或非就绪依赖；邮件连通性由设置页测试发送验证，不参与探针
     mail:
       enabled: false
+  metrics:
+    tags:
+      application: omni-data-panel
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [%X{requestId}] %logger{36} - %msg%n"
 
 omni:
+  observability:
+    metrics-token: ${OMNI_METRICS_TOKEN:}
   security:
     jwt-secret: ${JWT_SECRET:}
     jwt-expiration: ${JWT_EXPIRATION:8h}
     initial-admin-password: ${ADMIN_INITIAL_PASSWORD:}
+    # 可信反向代理 CIDR/IP（逗号分隔）；空则忽略 X-Forwarded-For / X-Real-IP
+    trusted-proxies: ${TRUSTED_PROXIES:}
     rate-limit:
       enabled: ${RATE_LIMIT_ENABLED:true}
       auth-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:30}

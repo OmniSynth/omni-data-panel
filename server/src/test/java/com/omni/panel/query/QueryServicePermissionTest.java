@@ -18,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.omni.panel.common.BusinessException;
 import com.omni.panel.config.AuthenticatedUser;
+import com.omni.panel.config.OmniMetrics;
 import com.omni.panel.datasource.dialect.DialectRegistry;
 import com.omni.panel.datasource.dialect.MysqlDialectPlugin;
 import com.omni.panel.entity.DataSourceEntity;
@@ -46,7 +47,7 @@ class QueryServicePermissionTest {
     private final MetricService metricService = mock(MetricService.class);
     private final QueryService service = new QueryService(datasetService, dataSourceService, dataSourceMapper,
             dataPolicyMapper, compiler, sqlPolicyGuard, sqlObjectAccessGuard, executor, dialectRegistry, stateStore,
-            auditMapper, new ObjectMapper(), metricService);
+            auditMapper, new ObjectMapper(), metricService, mock(OmniMetrics.class));
 
     @AfterEach
     void 清理上下文() {

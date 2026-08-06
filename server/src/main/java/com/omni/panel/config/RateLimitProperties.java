@@ -3,7 +3,7 @@ package com.omni.panel.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * 登录与公开接口 IP 限流配置（进程内固定窗口）。
+ * 登录与公开接口 IP 限流配置（Redis 优先固定窗口，失败降级本机）。
  *
  * @param enabled         是否启用限流
  * @param authPerMinute   认证相关接口每 IP 每分钟限额

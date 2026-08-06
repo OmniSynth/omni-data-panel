@@ -47,11 +47,23 @@ public class SystemLogBufferAppender extends AppenderBase<ILoggingEvent> {
                     truncate(event.getFormattedMessage(), MESSAGE_LIMIT),
                     truncate(stackTrace(event.getThrowableProxy()), STACK_LIMIT),
                     event.getThreadName(),
+                    mdcValue(event, "requestId"),
                     LocalDateTime.ofInstant(Instant.ofEpochMilli(event.getTimeStamp()), ZoneId.systemDefault())
             ));
         } catch (RuntimeException ignored) {
             // 日志采集失败不得影响业务
         }
+    }
+
+    private static String mdcValue(ILoggingEvent event, String key) {
+        if (event.getMDCPropertyMap() == null) {
+            return null;
+        }
+        String value = event.getMDCPropertyMap().get(key);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     /**

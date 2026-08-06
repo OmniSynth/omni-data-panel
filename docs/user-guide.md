@@ -1,4 +1,4 @@
-# Omni Data Panel 使用手册
+﻿# Omni Data Panel 使用手册
 
 > **关于截图**：通用步骤见下文；基于 `big_data.sys_api_log` 的实战截图与看板说明见 **[api-log-dashboard-guide.md](api-log-dashboard-guide.md)**（含日期筛选）。
 
@@ -17,6 +17,8 @@ flowchart LR
 ---
 
 ## 1. 写在前面
+
+本产品为**单租户自建**：一个部署实例服务一个组织。角色与 ACL 用于组织内授权，**不是**多客户共享集群的多租户模型；需要隔离请分别部署。
 
 | 界面说法 | 含义 |
 |----------|------|
@@ -321,19 +323,55 @@ flowchart TD
 
 ---
 
-## 10. 分享、嵌入与订阅
+## 10. 管理端：设置、订阅与调度
+
+需管理员或具备对应权限（如 `schedule:manage`）。
+
+### 10.1 通用设置（`/admin/settings`）
+
+| 项 | 说明 |
+|----|------|
+| 站点名称 | 登录页、标题栏展示名 |
+| 允许嵌入 | `embed.enabled`；关闭后无法签发/解析嵌入令牌 |
+| 嵌入域名白名单 | `embed.allowed-origins`；每行一个 Origin（如 `https://app.example.com`）。**空则仅允许同源嵌套**。Compose 须同步 `EMBED_ALLOWED_ORIGINS`（空格分隔）并重启 web |
+| 查询缓存 | 站点级开关与 TTL |
+| 同时登录设备数 | `auth.session.max-concurrent`；`0` 表示不限制 |
+| 邮件 SMTP | 订阅与系统邮件依赖；可测试发送 |
+
+可信代理 `TRUSTED_PROXIES` **不在管理端配置**，写在部署环境变量中（见 [production.md](production.md)）：仅当直连 IP 属于可信 CIDR 时才采信 `X-Forwarded-For`。
+
+### 10.2 订阅（`/admin/subscriptions`）
+
+按 Cron 向站内用户邮箱推送仪表盘（可选 PDF）。需配置 SMTP。可启停、编辑收件人、立即发送。
+
+### 10.3 调度（`/admin/schedules`）
+
+通用 Quartz 任务（与订阅并列，需 `schedule:manage`）：
+
+| 类型 | 目标 | 作用 |
+|------|------|------|
+| 元数据同步 | 数据源 | 定时同步库表元数据 |
+| 仪表盘刷新 | 仪表盘 | 后台安全渲染刷新 |
+| 订阅发送 | 已有订阅 | 按订阅配置发送（收件人仍在「订阅」页维护） |
+
+JobStore 为 JDBC 集群；多实例共享触发器。
+
+---
+
+## 11. 分享与嵌入
 
 | 能力 | 入口 | 要点 |
 |------|------|------|
 | 公开链接 | 仪表盘 / 图表分享 | 可撤销；适合对外只读；不过期直至删除 |
-| 签名嵌入 | 业务系统服务端代签 | 短期 JWT（约 1h）；需开启「允许嵌入」；见 [embed-integration.md](embed-integration.md) |
-| 邮件订阅 | 管理端 → 运营 → 订阅 | Cron 推送；可选 PDF；需配置 SMTP |
+| 签名嵌入 | 业务系统服务端代签 | 短期 JWT（约 1h）；开启「允许嵌入」并配置域名白名单；见 [embed-integration.md](embed-integration.md) |
+| 邮件订阅 | 管理后台 → 系统 → 订阅 | 见 §10.2 |
+| 通用调度 | 管理后台 → 系统 → 调度 | 见 §10.3 |
 
 嵌入与公开视图使用参数**默认值**，访客不能像登录态查看页那样改参重刷。
 
 ---
 
-## 11. 常见问题
+## 12. 常见问题
 
 | 现象 | 可能原因 |
 |------|----------|
@@ -345,23 +383,26 @@ flowchart TD
 | 动态选项为空 | 模型无 READ；字段被列权限排除；语义名写错 |
 | 无法编辑仪表盘 | 访问级别不是 ADMIN / OWNER / WRITE |
 | 登录页无企业按钮 | 未启用 OIDC 或 issuer/client 配置不全 |
-| 嵌入 iframe 空白 | 未开 `embed.enabled`、令牌过期、或混合内容（HTTPS 嵌 HTTP） |
-| 接口返回 429 | 触发登录 / 公开 / 嵌入 IP 限流 |
+| 嵌入 iframe 空白 | 未开 `embed.enabled`、白名单未含父页面 Origin / 未同步 `EMBED_ALLOWED_ORIGINS`、令牌过期、或混合内容（HTTPS 嵌 HTTP） |
+| 接口返回 429 | 触发登录 / 公开 / 嵌入 IP 限流；多副本下配额在 Redis 合计 |
+| 限流误伤全站 | 未配 `TRUSTED_PROXIES`，所有人共用代理 IP 一个桶；或白名单过宽导致伪造 XFF |
+| 调度不执行 | 任务未启用、Cron 非法、目标资源无权，或 Quartz JDBC 未就绪 |
 
 ---
 
-## 12. 相关文档
+## 13. 相关文档
 
 | 文档 | 内容 |
 |------|------|
 | [README.md](../README.md) | 产品总览、部署、API 索引 |
-| [production.md](production.md) | 生产密钥、探针、加固清单 |
+| [production.md](production.md) | 生产密钥、探针、可信代理、加固清单 |
 | [oidc-sso.md](oidc-sso.md) | 企业 OIDC 对接 |
 | [embed-integration.md](embed-integration.md) | 业务系统签名嵌入 |
+| [observability.md](observability.md) | Prometheus、requestId、告警 |
 | [api-log-dashboard-guide.md](api-log-dashboard-guide.md) | `sys_api_log` 实战截图 |
 
-应用内也可打开侧栏 **帮助**（`/help`）阅读上述文档的渲染版。
+应用内也可打开侧栏 **帮助**（`/help`）阅读上述文档的渲染版（与仓库 `docs/` 同源）。
 
 ---
 
-如需**实机截图版**：请启动前端（如 `http://localhost:5173`）与后端，告知地址与可用账号；可用 Playwright 按本章步骤自动截图并回填到本文对应小节。
+如需**实机截图版**：请启动前端（如 `http://localhost:5173`）与后端，告知地址与可用账号；可用 Playwright 按本章步骤自动截图并回填到本文对应章节。

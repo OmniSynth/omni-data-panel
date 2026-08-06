@@ -2,7 +2,6 @@ package com.omni.panel.config;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.Set;
 
 import jakarta.servlet.FilterChain;
@@ -17,7 +16,7 @@ import com.omni.panel.common.ApiResponse;
 import com.omni.panel.common.ClientRequestInfo;
 
 /**
- * 对登录与公开/嵌入 API 按客户端 IP 做固定窗口限流。
+ * 对登录与公开/嵌入 API 按客户端 IP 做固定窗口限流（Redis 优先）。
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
@@ -31,12 +30,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimitProperties properties;
     private final ObjectMapper objectMapper;
-    private final FixedWindowRateLimiter limiter;
+    private final RateLimiter limiter;
+    private final OmniMetrics omniMetrics;
 
-    public RateLimitFilter(RateLimitProperties properties, ObjectMapper objectMapper) {
+    public RateLimitFilter(RateLimitProperties properties, ObjectMapper objectMapper, OmniMetrics omniMetrics,
+                           RateLimiter limiter) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.limiter = new FixedWindowRateLimiter(Duration.ofMinutes(1), 100_000);
+        this.omniMetrics = omniMetrics;
+        this.limiter = limiter;
     }
 
     @Override
@@ -57,6 +59,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         int limit = limitFor(bucket);
         if (!limiter.tryAcquire(bucket + ':' + ip, limit)) {
+            omniMetrics.rateLimited(bucket);
             response.setStatus(429);
             response.setHeader("Retry-After", "60");
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());

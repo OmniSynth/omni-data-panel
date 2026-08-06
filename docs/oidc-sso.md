@@ -80,4 +80,7 @@ SSO 路径**不**再强制应用内 TOTP；本地密码登录仍走原有 HMAC �
 ## 相关文档
 
 - 投产清单：[production.md](production.md)
+- 使用手册：[user-guide.md](user-guide.md)
 - 产品总览：[README.md](../README.md)
+
+应用内帮助页（`/help?tab=oidc`）可直接阅读本说明。

@@ -27,7 +27,7 @@ class UserSessionRegistryTest {
         when(settingService.maxConcurrentSessions()).thenReturn(2);
         registry = new UserSessionRegistry(
                 settingService,
-                new SecurityProperties("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", Duration.ofHours(8), null),
+                new SecurityProperties("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", Duration.ofHours(8), null, null),
                 redisProvider);
         registry.clearLocalForTest();
     }

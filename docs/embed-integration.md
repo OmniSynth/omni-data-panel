@@ -38,11 +38,30 @@ Omni 返回 embed JWT（1h）
 
 ## 2. 前置条件
 
-1. **开启嵌入**：管理端「设置」中打开「允许嵌入」（配置键 `embed.enabled`）。关闭后签发与解析均会失败。
+1. **开启嵌入**：管理端「设置」中打开「允许嵌入」（`embed.enabled`），并配置「嵌入域名白名单」（`embed.allowed-origins`）。关闭嵌入开关后签发与解析均会失败；白名单为空时外域无法 iframe 嵌入页。
 2. **服务账号**：准备一个具备目标仪表盘或图表 **WRITE** 权限的账号（所有者或被授予 WRITE 的角色）。签发接口会校验写权限。
-3. **网络**：业务前端所在浏览器能访问 Omni 的 Web 基址（iframe 与 `/api`）。服务端已关闭 `X-Frame-Options`（未设置限制性 `frame-ancestors`），任意父页面均可嵌套；另下发 `X-Content-Type-Options: nosniff`、`Referrer-Policy`、`Permissions-Policy`。若后续加嵌入域名白名单，需同步调整业务域名。
-4. **限流**：`/api/embed/**` 与 `/api/public/**` 按客户端 IP 做进程内限流（默认嵌入 180 次/分钟、公开 120 次/分钟，见 `omni.security.rate-limit.*`）；超限返回 HTTP 429。
+3. **网络与 frame-ancestors**：业务前端所在浏览器能访问 Omni 的 Web 基址（iframe 与 `/api`）。服务端与 Web 网关下发 CSP `frame-ancestors`：
+   - 管理端「嵌入域名白名单」（`embed.allowed-origins`）为权威列表；空则仅允许同源嵌套。
+   - Compose / 镜像通过环境变量 `EMBED_ALLOWED_ORIGINS`（**空格分隔** Origin）注入 nginx，须与管理端白名单一致，否则 HTML 页与 API 策略可能不一致。
+   - 登录与后台页固定 `frame-ancestors 'self'`，不可被外域嵌套。
+4. **限流**：`/api/embed/**` 与 `/api/public/**` 按客户端 IP 限流（Redis 优先固定窗口，默认嵌入 180 次/分钟、公开 120 次/分钟，见 `omni.security.rate-limit.*`）；超限返回 HTTP 429。客户端 IP 仅在 `TRUSTED_PROXIES` 匹配时采信转发头。
 5. **生产安全**：更换默认管理员密码与 `JWT_SECRET`；服务账号密码与用户 JWT **只放在业务服务端**。
+### 嵌入域名白名单示例
+
+管理端多行：
+
+```text
+https://app.example.com
+https://portal.example.com:8443
+```
+
+Compose `.env`：
+
+```bash
+EMBED_ALLOWED_ORIGINS=https://app.example.com https://portal.example.com:8443
+```
+
+本地 Vite 开发可设 `VITE_EMBED_ALLOWED_ORIGINS`（空格分隔），行为与 nginx 一致。
 
 ## 3. API 说明
 
@@ -227,18 +246,19 @@ public String buildDashboardEmbedUrl(long dashboardId) {
 | `429` | 触发 IP 限流 | 降低轮询/重试频率；检查代理是否透传真实客户端 IP |
 | 「仪表盘/图表不存在」或无权限 | `resourceId` 错误，或账号无 WRITE | 核对资源 ID；为服务账号授权 |
 | 「嵌入仅支持 DASHBOARD 或 QUESTION」 | `resourceType` 拼写错误 | 使用大写 `DASHBOARD` / `QUESTION` |
-| iframe 空白或无法加载 | 基址错误、混合内容（HTTPS 页嵌 HTTP）、网络不通 | 使用与业务页一致的 HTTPS 基址；检查浏览器控制台 |
+| iframe 空白或被拒嵌 | 基址错误、混合内容、白名单未含业务 Origin / 未同步 `EMBED_ALLOWED_ORIGINS`、网络不通 | 管理端配置白名单并重启 web；使用 HTTPS 同源策略；检查控制台 CSP 报错 |
 | 嵌入后参数无法改 | 产品设计如此 | 公开/嵌入仅默认参数；登录态渲染才支持交互传参 |
 
 ## 8. 后续增强（尚未提供）
 
 以下能力当前**未实现**，若业务强依赖需单独排期：
 
-- JWT 内锁定参数（按部门/租户过滤）
-- 嵌入域名 / `frame-ancestors` 白名单
+- JWT 内锁定参数（按部门/业务线过滤）
 - 独立 embed 签名密钥与可配置 TTL
 - 嵌入签发 UI / iframe 片段一键复制
 - SSO / 业务用户会话桥接
+
+已提供：`embed.enabled`、嵌入域名白名单（`embed.allowed-origins` + `EMBED_ALLOWED_ORIGINS`）、CSP `frame-ancestors`、Redis 优先 IP 限流与 `TRUSTED_PROXIES`。
 
 ---
 

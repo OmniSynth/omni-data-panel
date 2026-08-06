@@ -80,6 +80,7 @@ const router = createRouter({
         { path: 'users', component: () => import('@/views/UsersView.vue') },
         { path: 'roles', component: () => import('@/views/RolesView.vue') },
         { path: 'subscriptions', component: () => import('@/views/SubscriptionsView.vue'), meta: { permission: 'schedule:manage' } },
+        { path: 'schedules', component: () => import('@/views/SchedulesView.vue'), meta: { permission: 'schedule:manage' } },
       ],
     },
   ],

@@ -25,17 +25,25 @@ public class SecurityConfig {
     /**
      * 配置 JWT 安全过滤链、公开端点白名单、安全响应头与可选 OIDC。
      *
-     * @param http               Spring Security 配置器
-     * @param jwtFilter          JWT 认证过滤器
-     * @param rateLimitFilter    登录与公开接口限流过滤器
-     * @param oidcProperties     OIDC 配置
-     * @param oidcSuccessHandler OIDC 成功处理器（未启用时可为空）
+     * @param http                 Spring Security 配置器
+     * @param jwtFilter            JWT 认证过滤器
+     * @param rateLimitFilter      登录与公开接口限流过滤器
+     * @param metricsScrapeFilter  Prometheus 刮取令牌过滤器
+     * @param requestIdFilter      请求 ID 过滤器
+     * @param frameAncestorsFilter frame-ancestors CSP 过滤器
+     * @param oidcProperties       OIDC 配置
+     * @param oidcSuccessHandler   OIDC 成功处理器（未启用时可为空）
+     * @param oidcFailureHandler   OIDC 失败处理器（未启用时可为空）
      * @return 已构建的安全过滤链
      * @throws Exception 安全配置失败时抛出
      */
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtFilter,
-                                            RateLimitFilter rateLimitFilter, OidcProperties oidcProperties,
+                                            RateLimitFilter rateLimitFilter,
+                                            MetricsScrapeFilter metricsScrapeFilter,
+                                            RequestIdFilter requestIdFilter,
+                                            FrameAncestorsFilter frameAncestorsFilter,
+                                            OidcProperties oidcProperties,
                                             Optional<OidcLoginSuccessHandler> oidcSuccessHandler,
                                             Optional<OidcLoginFailureHandler> oidcFailureHandler) throws Exception {
         http
@@ -63,12 +71,16 @@ public class SecurityConfig {
                                 "/oauth2/authorization/**",
                                 "/login/oauth2/code/**",
                                 "/actuator/health",
-                                "/actuator/health/**").permitAll()
+                                "/actuator/health/**",
+                                "/actuator/prometheus").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/embed/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class);
+                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
+                .addFilterBefore(metricsScrapeFilter, RateLimitFilter.class)
+                .addFilterBefore(requestIdFilter, MetricsScrapeFilter.class)
+                .addFilterAfter(frameAncestorsFilter, RequestIdFilter.class);
 
         if (oidcProperties.isConfigured() && oidcSuccessHandler.isPresent()) {
             http.oauth2Login(oauth -> {

@@ -8,12 +8,13 @@ import apiLogGuideMd from '../../../docs/api-log-dashboard-guide.md?raw'
 import oidcSsoMd from '../../../docs/oidc-sso.md?raw'
 import embedMd from '../../../docs/embed-integration.md?raw'
 import productionMd from '../../../docs/production.md?raw'
+import observabilityMd from '../../../docs/observability.md?raw'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-const TAB_IDS = ['guide', 'api-log', 'oidc', 'embed', 'production'] as const
+const TAB_IDS = ['guide', 'api-log', 'oidc', 'embed', 'production', 'observability'] as const
 type TabId = (typeof TAB_IDS)[number]
 
 function resolveTab(value: unknown): TabId {
@@ -46,6 +47,7 @@ function rewriteMarkdown(source: string): string {
     .replace(/\]\(oidc-sso\.md\)/g, '](#oidc)')
     .replace(/\]\(embed-integration\.md\)/g, '](#embed)')
     .replace(/\]\(production\.md\)/g, '](#production)')
+    .replace(/\]\(observability\.md\)/g, '](#observability)')
     .replace(/\[([^\]]+)\]\(\.\.\/README\.md\)/g, '$1')
     .replace(/!\[([^\]]*)\]\(assets\//g, '![$1](/docs-assets/')
     .replace(/```mermaid[\s\S]*?```/g, (block) => {
@@ -67,6 +69,7 @@ const sources: Record<TabId, string> = {
   oidc: oidcSsoMd,
   embed: embedMd,
   production: productionMd,
+  observability: observabilityMd,
 }
 
 const htmlByTab = computed(() => {
@@ -107,6 +110,7 @@ function onDocClick(event: MouseEvent) {
       <el-tab-pane :label="t('help.tabOidc')" name="oidc" />
       <el-tab-pane :label="t('help.tabEmbed')" name="embed" />
       <el-tab-pane :label="t('help.tabProduction')" name="production" />
+      <el-tab-pane :label="t('help.tabObservability')" name="observability" />
     </el-tabs>
 
     <article

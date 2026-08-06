@@ -310,6 +310,7 @@ export interface SystemLogEntry {
   message: string
   stackTrace?: string | null
   threadName?: string
+  requestId?: string | null
   createdAt?: string
 }
 
@@ -475,6 +476,20 @@ export interface Subscription {
   ownerId?: Id
 }
 
+export type ScheduleType = 'METADATA_SYNC' | 'DASHBOARD_REFRESH' | 'SUBSCRIPTION'
+
+export interface Schedule {
+  id: Id
+  name: string
+  scheduleType: ScheduleType
+  targetId: Id
+  cronExpression: string
+  payloadJson?: string
+  enabled: boolean
+  ownerId?: Id
+  lastRunAt?: string
+}
+
 export interface Collection {
   id: Id
   name: string
@@ -557,6 +572,7 @@ export interface PublicQuestion {
 export interface SiteSettings {
   'site.name'?: string
   'embed.enabled'?: string | boolean
+  'embed.allowed-origins'?: string
   'ui.sql.tips-collapsed-default'?: string | boolean
   'cache.query.enabled'?: string | boolean
   'cache.query.ttl-seconds'?: string | number

@@ -1,0 +1,49 @@
+groups:
+  - name: omni-data-panel
+    rules:
+      - alert: OmniPanelTargetDown
+        expr: up{job="omni-data-panel"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Omni Data Panel 指标目标不可达"
+          description: "job={{ $labels.job }} instance={{ $labels.instance }} 已连续 2 分钟 up=0。"
+
+      - alert: OmniPanelRateLimitedSpike
+        expr: |
+          sum(rate(omni_http_rate_limited_total[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Omni 限流触发速率偏高"
+          description: "近 5 分钟限流速率 {{ $value | humanize }} /s，请检查爆破或代理 IP 透传。"
+
+      - alert: OmniPanelQueryFailureRate
+        expr: |
+          (
+            sum(rate(omni_query_complete_total{status="failed"}[10m]))
+            /
+            clamp_min(sum(rate(omni_query_complete_total[10m])), 0.001)
+          ) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "查询失败率过高"
+          description: "近 10 分钟查询失败占比 {{ $value | humanizePercentage }}。"
+
+      - alert: OmniPanelJvmHeapHigh
+        expr: |
+          (
+            sum by (instance) (jvm_memory_used_bytes{area="heap", application="omni-data-panel"})
+            /
+            clamp_min(sum by (instance) (jvm_memory_max_bytes{area="heap", application="omni-data-panel"}), 1)
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM 堆使用率过高"
+          description: "instance={{ $labels.instance }} 堆使用率 {{ $value | humanizePercentage }}。"
