@@ -2,18 +2,25 @@ FROM eclipse-temurin:21-jdk-jammy AS build
 
 # mvnw 解压发行包需要 unzip
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends unzip \
+    && apt-get install -y --no-install-recommends unzip ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace/server
 
 COPY server/.mvn .mvn
 COPY server/mvnw server/pom.xml ./
+# pom 中 hive-jdbc 为 system 依赖，打包前必须存在
+COPY server/lib lib
 RUN chmod +x mvnw && ./mvnw -B dependency:go-offline
 
 COPY server/src src
-RUN ./mvnw -B -DskipTests package \
-    && ./mvnw -B exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
+RUN ./mvnw -B -DskipTests package
+
+# 订阅 PDF 用 Chromium（单独一层，失败时与 package 区分）
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN ./mvnw -B org.codehaus.mojo:exec-maven-plugin:3.5.0:java \
+    -Dexec.mainClass=com.microsoft.playwright.CLI \
+    -Dexec.args="install chromium"
 
 FROM eclipse-temurin:21-jre-jammy
 
@@ -47,8 +54,8 @@ RUN apt-get update \
     && useradd --system --gid omni --home-dir /app --shell /usr/sbin/nologin omni
 
 WORKDIR /app
-COPY --from=build --chown=omni:omni /workspace/server/target/*.jar app.jar
-COPY --from=build --chown=omni:omni /root/.cache/ms-playwright /ms-playwright
+COPY --from=build --chown=omni:omni /workspace/server/target/omni-data-panel-server-*.jar app.jar
+COPY --from=build --chown=omni:omni /ms-playwright /ms-playwright
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 USER omni
