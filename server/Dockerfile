@@ -1,5 +1,10 @@
 FROM eclipse-temurin:21-jdk-jammy AS build
 
+# mvnw 解压发行包需要 unzip
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace/server
 
 COPY server/.mvn .mvn
