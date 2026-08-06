@@ -26,7 +26,9 @@ jobs:
           cache: maven
           cache-dependency-path: server/pom.xml
       - name: Verify
-        run: ./mvnw -B -q verify
+        run: |
+          chmod +x mvnw
+          ./mvnw -B -q verify
 
   web:
     name: web
