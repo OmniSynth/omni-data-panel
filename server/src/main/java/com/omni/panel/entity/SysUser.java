@@ -58,6 +58,14 @@ public class SysUser {
      * 绑定过程中尚未确认的 TOTP 密钥密文
      */
     private String totpPendingSecret;
+    /**
+     * 认证来源：LOCAL 或 OIDC
+     */
+    private String authSource;
+    /**
+     * 企业 IdP 主体标识（OIDC sub）
+     */
+    private String idpSubject;
 
     public Long getId() {
         return id;
@@ -145,5 +153,21 @@ public class SysUser {
 
     public void setTotpPendingSecret(String totpPendingSecret) {
         this.totpPendingSecret = totpPendingSecret;
+    }
+
+    public String getAuthSource() {
+        return authSource;
+    }
+
+    public void setAuthSource(String authSource) {
+        this.authSource = authSource;
+    }
+
+    public String getIdpSubject() {
+        return idpSubject;
+    }
+
+    public void setIdpSubject(String idpSubject) {
+        this.idpSubject = idpSubject;
     }
 }

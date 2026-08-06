@@ -11,8 +11,10 @@ import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 import { minLengthRule, requiredRule, validateForm } from '@/form/rules'
 import { resourcePath, resourceTypeLabel } from '@/nav'
 import { refreshShellNavKey } from '@/nav/shellNav'
+import { applyDocumentTitle } from '@/siteBranding'
 import { useUserStore } from '@/stores/user'
 import type { Collection, CollectionItem, Id, ResourceType, SiteSettings } from '@/types'
+import { copyText } from '@/utils/clipboard'
 
 const SIDEBAR_COLLAPSED_KEY = 'omni.sidebarCollapsed'
 
@@ -187,7 +189,10 @@ async function loadShell() {
     defaultExpandedKeys.value = tree
       .filter((item) => item.personalOwnerId != null && String(item.personalOwnerId) === String(myUserId))
       .map((item) => `collection:${item.id}`)
-    if (settings['site.name']) siteName.value = String(settings['site.name'])
+    if (settings['site.name']) {
+      siteName.value = String(settings['site.name'])
+      applyDocumentTitle(siteName.value)
+    }
     if (!createForm.collectionId) {
       createForm.collectionId = createCollectionIdDefault()
     }
@@ -284,10 +289,9 @@ async function confirmMfaSetup() {
 }
 
 async function copyBackupCodes() {
-  try {
-    await navigator.clipboard.writeText(mfaBackupCodes.value.join('\n'))
+  if (await copyText(mfaBackupCodes.value.join('\n'))) {
     ElMessage.success(t('shell.mfaBackupCopied'))
-  } catch {
+  } else {
     ElMessage.error(t('shell.mfaBackupCopyFailed'))
   }
 }
@@ -401,6 +405,7 @@ function onNavNodeClick(data: NavTreeNode) {
 function onUserMenu(command: string) {
   if (command === 'admin') router.push('/admin')
   else if (command === 'trash') router.push('/trash')
+  else if (command === 'help') router.push('/help')
   else if (command === 'password') openPasswordDialog()
   else if (command === 'mfa') void openMfaDialog()
   else if (command === 'logout') logout()
@@ -541,6 +546,7 @@ onMounted(loadShell)
                 <el-dropdown-menu>
                   <el-dropdown-item v-if="userStore.isAdmin" command="admin">{{ t('shell.admin') }}</el-dropdown-item>
                   <el-dropdown-item command="trash">{{ t('shell.trash') }}</el-dropdown-item>
+                  <el-dropdown-item command="help">{{ t('shell.userGuide') }}</el-dropdown-item>
                   <el-dropdown-item divided command="password">{{ t('shell.changePassword') }}</el-dropdown-item>
                   <el-dropdown-item command="mfa">{{ t('shell.mfa') }}</el-dropdown-item>
                   <el-dropdown-item command="logout">{{ t('shell.logout') }}</el-dropdown-item>

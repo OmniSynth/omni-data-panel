@@ -27,6 +27,7 @@ import com.omni.panel.mapper.DataSourceMapper;
 import com.omni.panel.mapper.QueryAuditMapper;
 import com.omni.panel.metric.MetricExpression;
 import com.omni.panel.query.JdbcQueryExecutor;
+import com.omni.panel.query.NamedSqlExpander;
 import com.omni.panel.query.QueryCompiler;
 import com.omni.panel.query.QueryRequest;
 import com.omni.panel.query.QueryStateStore;
@@ -146,9 +147,13 @@ public class QueryService {
             throw new BusinessException(403, "缺少原生 SQL 查询权限");
         }
         DataSourceEntity source = dataSourceService.require(submission.sourceId(), "READ");
+        NamedSqlExpander.Expanded expanded = NamedSqlExpander.expand(
+                submission.sql(),
+                submission.parameters(),
+                submission.namedParameters());
         sqlObjectAccessGuard.validateForCurrentUser(
-                source.getId(), submission.sql(), source.getDefaultDatabase());
-        return new Execution(source, submission.sql(), submission.parameters() == null ? List.of() : submission.parameters());
+                source.getId(), expanded.sql(), source.getDefaultDatabase());
+        return new Execution(source, expanded.sql(), expanded.parameters());
     }
 
     /**
@@ -407,12 +412,20 @@ public class QueryService {
     /**
      * 查询提交内容；{@code query} 为空时按原生 SQL 查询处理。
      *
-     * @param sourceId   原生 SQL 使用的数据源标识
-     * @param sql        原生 SQL 文本
-     * @param parameters 原生 SQL 占位符参数
-     * @param query      语义查询请求
+     * @param sourceId         原生 SQL 使用的数据源标识
+     * @param sql              原生 SQL 文本（可含 {@code :name} 或 {@code ?}）
+     * @param parameters       裸 {@code ?} 的顺序参数
+     * @param namedParameters  {@code :name} 命名参数；可为 {@code null}
+     * @param query            语义查询请求
      */
-    public record QuerySubmission(Long sourceId, String sql, List<Object> parameters, QueryRequest query) {
+    public record QuerySubmission(Long sourceId, String sql, List<Object> parameters,
+                                  Map<String, Object> namedParameters, QueryRequest query) {
+        /**
+         * 兼容旧调用：无命名参数。
+         */
+        public QuerySubmission(Long sourceId, String sql, List<Object> parameters, QueryRequest query) {
+            this(sourceId, sql, parameters, null, query);
+        }
     }
 
     /**

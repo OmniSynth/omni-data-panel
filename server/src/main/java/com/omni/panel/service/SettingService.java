@@ -47,6 +47,7 @@ public class SettingService {
     private static final List<String> ALLOWED_KEYS = List.of(
             "site.name",
             "embed.enabled",
+            "ui.sql.tips-collapsed-default",
             CACHE_QUERY_ENABLED,
             CACHE_QUERY_TTL_SECONDS,
             AUTH_SESSION_MAX_CONCURRENT,
@@ -60,12 +61,14 @@ public class SettingService {
     private static final Set<String> ALLOWED = new LinkedHashSet<>(ALLOWED_KEYS);
     private static final Set<String> BOOLEAN_KEYS = Set.of(
             "embed.enabled",
+            "ui.sql.tips-collapsed-default",
             CACHE_QUERY_ENABLED,
             MAIL_SMTP_AUTH,
             MAIL_SMTP_STARTTLS);
     private static final Map<String, String> DEFAULTS = Map.ofEntries(
             Map.entry("site.name", "全域数据分析"),
             Map.entry("embed.enabled", "true"),
+            Map.entry("ui.sql.tips-collapsed-default", "false"),
             Map.entry(CACHE_QUERY_ENABLED, "false"),
             Map.entry(CACHE_QUERY_TTL_SECONDS, String.valueOf(DEFAULT_CACHE_TTL_SECONDS)),
             Map.entry(AUTH_SESSION_MAX_CONCURRENT, String.valueOf(DEFAULT_MAX_CONCURRENT_SESSIONS)),
@@ -132,6 +135,17 @@ public class SettingService {
             return value;
         }
         return DEFAULTS.getOrDefault(key, "");
+    }
+
+    /**
+     * 未登录可暴露的品牌设置（不含邮件等敏感项）。
+     *
+     * @return 仅含 {@code site.name} 的映射
+     */
+    public Map<String, String> publicBranding() {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("site.name", getOrDefault("site.name"));
+        return values;
     }
 
     /**

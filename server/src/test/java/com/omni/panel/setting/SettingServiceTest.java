@@ -52,6 +52,13 @@ class SettingServiceTest {
     }
 
     @Test
+    void 公开品牌仅返回站点名称() {
+        Map<String, String> values = service.publicBranding();
+        assertThat(values).containsOnlyKeys("site.name")
+                .containsEntry("site.name", "全域数据分析");
+    }
+
+    @Test
     void 列表在密码已配置时仅标记已设置() {
         SettingEntity password = new SettingEntity();
         password.setSettingKey("mail.password");

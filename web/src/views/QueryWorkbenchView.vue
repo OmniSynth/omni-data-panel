@@ -20,7 +20,7 @@ import {
 import { resolveSqlDialect } from '@/sql/dialects'
 import { QUERY_RESULT_DISPLAY_LIMIT } from '@/query/limits'
 import { formatDuration } from '@/query/duration'
-import { alignSqlParameters } from '@/sql/parameters'
+import { alignNamedParameters, alignSqlParameters, extractNamedPlaceholders } from '@/sql/parameters'
 import { chartTypeOptions, mergeChartConfig, parseChartConfig, type ChartEncoding } from '@/dashboard/config'
 import ChartEncodingForm from '@/components/ChartEncodingForm.vue'
 
@@ -37,6 +37,8 @@ const sourceId = ref<Id>()
 const sql = ref('')
 const sqlEditorRef = ref<{ format: () => boolean }>()
 const sqlParameters = ref<string[]>([])
+const namedSqlParameters = reactive<Record<string, string>>({})
+const namedParamNames = computed(() => extractNamedPlaceholders(sql.value))
 const editorSchema = ref<EditorSqlSchema>({})
 const completionPayload = ref<CompletionSchemaPayload | null>(null)
 const definition = reactive<SemanticQuery>({
@@ -155,6 +157,11 @@ async function hydrateQuestion(id: string) {
     mode.value = 'sql'
     sourceId.value = submission.sourceId
     sql.value = submission.sql
+    const named = alignNamedParameters(submission.sql, submission.namedParameters)
+    for (const key of Object.keys(namedSqlParameters)) delete namedSqlParameters[key]
+    for (const [key, value] of Object.entries(named)) {
+      namedSqlParameters[key] = String(value ?? '')
+    }
     sqlParameters.value = alignSqlParameters(submission.sql, (submission.parameters || []).map(String)) as string[]
     if (submission.sourceId !== undefined) await loadCompletionSchema(submission.sourceId)
   } else if (submission.query) {
@@ -189,10 +196,27 @@ watch(() => definition.datasetId, (id, previous) => {
 })
 
 function syncSqlParameters() {
+  const named = alignNamedParameters(sql.value, namedSqlParameters)
+  for (const key of Object.keys(namedSqlParameters)) {
+    if (!(key in named)) delete namedSqlParameters[key]
+  }
+  for (const [key, value] of Object.entries(named)) {
+    if (!(key in namedSqlParameters)) namedSqlParameters[key] = String(value ?? '')
+  }
   sqlParameters.value = alignSqlParameters(sql.value, sqlParameters.value).map((item) => String(item ?? ''))
 }
 
 watch(sql, syncSqlParameters)
+
+function buildNamedPayload(): Record<string, unknown> | undefined {
+  const names = extractNamedPlaceholders(sql.value)
+  if (!names.length) return undefined
+  const payload: Record<string, unknown> = {}
+  for (const name of names) {
+    payload[name] = namedSqlParameters[name] ?? ''
+  }
+  return payload
+}
 
 function payload(): QuerySubmission {
   return mode.value === 'sql'
@@ -200,6 +224,7 @@ function payload(): QuerySubmission {
       sourceId: sourceId.value,
       sql: sql.value,
       parameters: alignSqlParameters(sql.value, sqlParameters.value),
+      namedParameters: buildNamedPayload(),
     }
     : {
       query: {
@@ -425,9 +450,14 @@ watch(sourceId, async (value) => {
           :schema="editorSchema"
           :default-schema="editorDefaultSchema"
         />
-        <div v-if="sqlParameters.length" class="sql-params">
+        <div v-if="namedParamNames.length || sqlParameters.length" class="sql-params">
           <div class="sql-params-title">{{ t('workbench.sqlParams') }}</div>
-          <div v-for="(_, index) in sqlParameters" :key="index" class="row">
+          <div v-for="name in namedParamNames" :key="name" class="row">
+            <el-input v-model="namedSqlParameters[name]" :placeholder="`:${name}`">
+              <template #prepend>{{ name }}</template>
+            </el-input>
+          </div>
+          <div v-for="(_, index) in sqlParameters" :key="`pos-${index}`" class="row">
             <el-input v-model="sqlParameters[index]" :placeholder="t('workbench.paramN', { n: index + 1 })" />
           </div>
         </div>

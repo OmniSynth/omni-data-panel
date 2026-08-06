@@ -122,4 +122,24 @@ class QueryParameterApplierTest {
         assertThat(range.get("start")).isEqualTo(today.minusDays(6).toString());
         assertThat(range.get("end")).isEqualTo(today.toString());
     }
+
+    @Test
+    void SQL按名写入namedParameters() {
+        QueryService.QuerySubmission submission =
+                new QueryService.QuerySubmission(3L,
+                        "SELECT * FROM t WHERE a=:channel_id AND b=:start_date", List.of(), null);
+        List<QueryParameterApplier.Binding> bindings = List.of(
+                new QueryParameterApplier.Binding("ch", "sql", null, null, null, "channel_id"),
+                new QueryParameterApplier.Binding("st", "sql", null, null, null, "start_date"));
+
+        QueryService.QuerySubmission applied = applier.apply(submission, bindings,
+                Map.of("ch", 93, "st", "2026-08-04"),
+                Map.of(
+                        "ch", new QueryParameterApplier.ParameterMeta("ch", "number", false),
+                        "st", new QueryParameterApplier.ParameterMeta("st", "date", false)));
+
+        assertThat(applied.namedParameters())
+                .containsEntry("channel_id", 93)
+                .containsEntry("start_date", "2026-08-04");
+    }
 }

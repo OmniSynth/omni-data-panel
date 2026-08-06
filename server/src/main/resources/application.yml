@@ -2,6 +2,7 @@ server:
   address: ${SERVER_ADDRESS:0.0.0.0}
   port: ${SERVER_PORT:8080}
   shutdown: graceful
+  forward-headers-strategy: framework
 
 spring:
   application:
@@ -31,7 +32,15 @@ spring:
       timeout: 2s
       connect-timeout: 2s
   quartz:
-    job-store-type: memory
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    overwrite-existing-jobs: true
+    properties:
+      org.quartz.scheduler.instanceId: AUTO
+      org.quartz.jobStore.isClustered: true
+      org.quartz.jobStore.clusterCheckinInterval: 20000
+      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.StdJDBCDelegate
   mail:
     host: ${MAIL_HOST:}
     port: ${MAIL_PORT:25}
@@ -54,11 +63,43 @@ mybatis-plus:
     db-config:
       id-type: auto
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+    # SMTP 常未配置或非就绪依赖；邮件连通性由设置页测试发送验证，不参与探针
+    mail:
+      enabled: false
+
 omni:
   security:
     jwt-secret: ${JWT_SECRET:}
     jwt-expiration: ${JWT_EXPIRATION:8h}
     initial-admin-password: ${ADMIN_INITIAL_PASSWORD:}
+    rate-limit:
+      enabled: ${RATE_LIMIT_ENABLED:true}
+      auth-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:30}
+      public-per-minute: ${RATE_LIMIT_PUBLIC_PER_MINUTE:120}
+      embed-per-minute: ${RATE_LIMIT_EMBED_PER_MINUTE:180}
+    oidc:
+      enabled: ${OIDC_ENABLED:false}
+      issuer-uri: ${OIDC_ISSUER_URI:}
+      client-id: ${OIDC_CLIENT_ID:}
+      client-secret: ${OIDC_CLIENT_SECRET:}
+      client-name: ${OIDC_CLIENT_NAME:企业登录}
+      default-role-code: ${OIDC_DEFAULT_ROLE_CODE:USER}
+      frontend-redirect-uri: ${OIDC_FRONTEND_REDIRECT_URI:}
   crypto:
     master-key: ${CREDENTIAL_MASTER_KEY:}
   query:

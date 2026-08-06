@@ -40,9 +40,17 @@ public class QueryParameterApplier {
      * @param mode           semantic 或 sql
      * @param field          语义字段名
      * @param operator       语义运算符
-     * @param parameterIndex SQL 占位参数下标
+     * @param parameterIndex SQL 位置占位下标（兼容旧配置）
+     * @param parameterName  SQL 命名占位名（如 channel_id 对应 :channel_id）
      */
-    public record Binding(String parameterId, String mode, String field, String operator, Integer parameterIndex) {
+    public record Binding(String parameterId, String mode, String field, String operator,
+                          Integer parameterIndex, String parameterName) {
+        /**
+         * 兼容旧调用：无 parameterName。
+         */
+        public Binding(String parameterId, String mode, String field, String operator, Integer parameterIndex) {
+            this(parameterId, mode, field, operator, parameterIndex, null);
+        }
     }
 
     /**
@@ -266,7 +274,7 @@ public class QueryParameterApplier {
     }
 
     /**
-     * 将 sql 绑定写入 JDBC 占位参数列表（按 parameterIndex）。
+     * 将 sql 绑定写入命名参数映射或 JDBC 占位参数列表。
      *
      * @param submission 原始查询
      * @param bindings   卡片绑定
@@ -282,19 +290,28 @@ public class QueryParameterApplier {
         if (submission.parameters() != null) {
             parameters.addAll(submission.parameters());
         }
+        Map<String, Object> namedParameters = new LinkedHashMap<>();
+        if (submission.namedParameters() != null) {
+            namedParameters.putAll(submission.namedParameters());
+        }
         for (Binding binding : bindings) {
-            if (!"sql".equalsIgnoreCase(binding.mode()) || binding.parameterIndex() == null) {
+            if (!"sql".equalsIgnoreCase(binding.mode())) {
                 continue;
             }
-            int index = binding.parameterIndex();
-            if (index < 0) {
-                throw new BusinessException("SQL 参数下标无效");
+            boolean byName = binding.parameterName() != null && !binding.parameterName().isBlank();
+            boolean byIndex = binding.parameterIndex() != null;
+            if (!byName && !byIndex) {
+                continue;
             }
             ParameterMeta meta = metas.get(binding.parameterId());
             Object value = values.get(binding.parameterId());
             if (isEmptyValue(value)) {
                 if (meta != null && meta.required()) {
                     throw new BusinessException("参数 " + binding.parameterId() + " 不能为空");
+                }
+                // 可选空值仍写入命名映射，避免展开时报「缺少命名参数」
+                if (byName) {
+                    namedParameters.put(binding.parameterName().trim(), null);
                 }
                 continue;
             }
@@ -304,13 +321,26 @@ public class QueryParameterApplier {
             if ("date-range".equalsIgnoreCase(meta == null ? "" : meta.type())) {
                 throw new BusinessException("SQL 参数不支持 date-range，请拆成两个标量参数");
             }
+            Object scalar = scalarValue(value);
+            if (byName) {
+                namedParameters.put(binding.parameterName().trim(), scalar);
+                continue;
+            }
+            int index = binding.parameterIndex();
+            if (index < 0) {
+                throw new BusinessException("SQL 参数下标无效");
+            }
             while (parameters.size() <= index) {
                 parameters.add(null);
             }
-            parameters.set(index, scalarValue(value));
+            parameters.set(index, scalar);
         }
-        return new QueryService.QuerySubmission(submission.sourceId(), submission.sql(),
-                List.copyOf(parameters), null);
+        return new QueryService.QuerySubmission(
+                submission.sourceId(),
+                submission.sql(),
+                List.copyOf(parameters),
+                namedParameters.isEmpty() ? null : Map.copyOf(namedParameters),
+                null);
     }
 
     /**

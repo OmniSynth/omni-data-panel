@@ -172,3 +172,11 @@ npx playwright test tests/capture-api-log-guide.spec.ts
 - `date-range` 只能走**语义绑定**；SQL 图表请拆成两个 `date` 参数绑两个 `?`。  
 - 仪表盘多卡并行查远程库时，偶发「图表查询失败」，点 **刷新** 或减少同时展示的卡片即可。  
 - 明细类查询不要把「指标」字段当维度塞进可视化表格（会报「字段语义类型不匹配」），明细用 SQL 图表更合适。
+
+---
+
+## 9. 相关文档
+
+- 通用操作步骤：[user-guide.md](user-guide.md)
+- 产品总览：[README.md](../README.md)
+- 应用内帮助：侧栏 **帮助**（`/help`），本页对应「接口日志实战」标签

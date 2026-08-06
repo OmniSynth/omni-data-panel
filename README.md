@@ -33,9 +33,18 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 | `server/` | Java 21、Spring Boot 3 后端（含 Maven Wrapper） |
 | `web/` | Vue 3 前端 |
 | `deploy/` | Docker Compose 与环境变量示例 |
-| `docs/embed-integration.md` | 业务系统签名嵌入对接说明 |
-| `docs/user-guide.md` | 使用手册：模型 / 指标 / 图表 / 仪表盘参数绑定 |
-| `docs/api-log-dashboard-guide.md` | 实战图文：`sys_api_log` 接口请求日志看板（含截图） |
+| `docs/` | 使用手册、嵌入、OIDC、投产清单（应用内 `/help` 同步渲染） |
+
+### 文档索引
+
+| 文档 | 说明 |
+|---|---|
+| [docs/user-guide.md](docs/user-guide.md) | 使用手册：模型 / 指标 / 图表 / 仪表盘参数 |
+| [docs/api-log-dashboard-guide.md](docs/api-log-dashboard-guide.md) | 实战：`sys_api_log` 看板（含截图） |
+| [docs/embed-integration.md](docs/embed-integration.md) | 业务系统签名嵌入对接 |
+| [docs/oidc-sso.md](docs/oidc-sso.md) | 企业 OIDC SSO |
+| [docs/production.md](docs/production.md) | 生产密钥、探针与加固清单 |
+| [deploy/README.md](deploy/README.md) | Compose / Release 一键部署 |
 
 ## 完整功能
 
@@ -96,8 +105,8 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 
 ### 调度与订阅
 
-- **调度**：Quartz 任务 CRUD（需 `schedule:manage`）。
-- **订阅**：按 Cron 将仪表盘邮件推送给站内用户；可手动触发；可选附带 PDF（`SUBSCRIPTION_PDF_ENABLED`）。
+- **订阅（产品 UI）**：管理端按 Cron 将仪表盘邮件推送给站内用户；可手动触发；可选附带 PDF（`SUBSCRIPTION_PDF_ENABLED`）。
+- **通用调度 API**：`/api/schedules`（需 `schedule:manage`）已提供 Quartz 任务 CRUD；JobStore 为 JDBC（主库 `QRTZ_*`）并开启集群。**当前前端未提供调度管理页**，自动化请走订阅或直接调 API。
 - **邮件**：管理端配置 SMTP 并测试发送；亦可使用环境变量 `MAIL_*`。
 
 ### 权限与安全
@@ -106,6 +115,8 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 - **功能权限示例**：`data-source:manage`、`dataset:manage`、`dashboard:manage`、`query:execute`、`query:raw`、`schedule:manage`、`export:execute`。
 - **资源 ACL**：集合 / 仪表盘 / 图表 / 模型 / 指标 / 数据源等按角色授予 `READ` / `WRITE`（取最高；`WRITE` 含 `READ`）。数据源角色仅 `READ`；连接维护仅 `ADMIN`。集合权限可继承；个人集合不可共享。
 - **登录 hardening**：HMAC 登录挑战、JWT、可选 TOTP 双因素与备份码、并发会话上限（`auth.session.max-concurrent`）。
+- **企业 SSO（OIDC）**：可选对接 IdP（`OIDC_*`）；保留本地密码登录；首次登录可 JIT 建号并赋予默认 `USER` 角色。详见 [docs/oidc-sso.md](docs/oidc-sso.md)。
+- **限流与响应头**：登录 / 公开链接 / 嵌入接口按 IP 进程内限流（`omni.security.rate-limit.*`）；响应带 `X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`；为支持 iframe 嵌入关闭 `X-Frame-Options`。
 - **审计**：登录、查询（含详情）、模型变更、系统日志；支持清理。连接池健康页便于运维排障。
 
 ### 管理控制台（`/admin`）
@@ -133,7 +144,7 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 
 ## API 概览
 
-业务 API 前缀 `/api`。公开端点：`/api/auth/login`、`/api/public/**`、`GET /api/embed/**`、`/actuator/health`；其余需 Bearer JWT。
+业务 API 前缀 `/api`。公开端点：`/api/auth/login`、`/api/public/**`、`GET /api/embed/**`、`GET /actuator/health`、`GET /actuator/health/liveness`、`GET /actuator/health/readiness`；其余需 Bearer JWT。健康探针仅暴露 `health`（`show-details: never`）；liveness 表示进程存活，readiness 聚合元数据库与 Redis。
 
 | 模块 | 路径 |
 |---|---|
@@ -154,21 +165,46 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 
 ### 前置条件
 
-本地：JDK 21、Node.js 22、MySQL 8；可选 Redis、MinIO。  
-容器：Docker Engine 24+、Compose v2。
+- **一键部署（推荐）**：Docker Engine 24+、Compose v2（Windows / macOS 可用 Docker Desktop）
+- **源码开发**：JDK 21、Node.js 22、MySQL 8；可选 Redis、MinIO
 
-### Docker Compose（推荐体验）
+### GitHub Release 一键包（推荐）
+
+打 `v*` tag 后，CI 会推送预构建镜像到 GHCR，并在 [Releases](https://github.com/OmniSynth/omni-data-panel/releases) 附上 `omni-data-panel-vX.Y.Z-compose.zip`。
+
+1. 下载并解压 zip  
+2. 复制 `.env.example` → `.env`，替换全部密码与密钥  
+3. Windows：`.\start.ps1`；Linux / macOS：`chmod +x start.sh && ./start.sh`  
+4. 浏览器打开 `http://localhost`（账号 `admin` / `.env` 中 `ADMIN_INITIAL_PASSWORD`）
+
+无需分别启动前后端。说明见 [deploy/README.md](deploy/README.md)。
+
+发布新版本（维护者）：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+首次发布后请到 GitHub → Packages，将 `omni-data-panel-server` / `omni-data-panel-web` 设为 **Public**，否则匿名无法 `docker pull`。
+
+### 源码目录 Compose（本地构建）
+
+在仓库内从源码构建镜像（开发或镜像尚未发布时）：
 
 ```powershell
 Copy-Item deploy/.env.example deploy/.env
 cd deploy
-docker compose up --build -d
+.\start.ps1
+# 若 pull 失败：docker compose up --build -d
 ```
 
 ```bash
 cp deploy/.env.example deploy/.env
 cd deploy
-docker compose up --build -d
+chmod +x start.sh stop.sh
+./start.sh
+# 若 pull 失败：docker compose up --build -d
 ```
 
 - Web：`http://localhost`
@@ -214,10 +250,12 @@ npm run dev
 | 数据库 | `MYSQL_*`、`DB_URL` / `DB_USERNAME` / `DB_PASSWORD` |
 | Redis / MinIO | `REDIS_*`、`MINIO_*` |
 | 安全 | `JWT_SECRET`、`CREDENTIAL_MASTER_KEY`、`ADMIN_INITIAL_PASSWORD` |
+| OIDC（可选） | `OIDC_ENABLED`、`OIDC_ISSUER_URI`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`、`OIDC_CLIENT_NAME`、`OIDC_DEFAULT_ROLE_CODE` |
 | 邮件 / 订阅 | `MAIL_*`、`FRONTEND_URL`、`SUBSCRIPTION_PDF_ENABLED`、`SUBSCRIPTION_PDF_TIMEOUT_MS` |
 | 端口 | `SERVER_PORT`、`WEB_PORT` |
+| 镜像（Compose） | `OMNI_SERVER_IMAGE`、`OMNI_WEB_IMAGE`（Release 包已写入版本 tag） |
 
-生产部署前用 `openssl rand -base64 32` 重新生成密钥，替换全部示例密码。订阅 PDF 需本机安装 Chromium：
+生产部署前用 `openssl rand -base64 32` 重新生成密钥，替换全部示例密码；完整核对项见 [docs/production.md](docs/production.md)。订阅 PDF 在官方 server 镜像内已含 Chromium；源码本地跑订阅 PDF 需自行安装：
 
 ```bash
 cd server
@@ -227,6 +265,8 @@ cd server
 未配置 SMTP 时可保存订阅，发送任务会明确失败。
 
 ## 构建与测试
+
+CI（GitHub Actions）：推送 / PR 到 `main` 或 `master` 时并行跑后端 `mvnw verify` 与前端 `npm test` + `npm run build`。推送 `v*` tag 时运行 Release 流水线（构建推送 GHCR 镜像并上传 Compose 一键包）。默认 CI **不**跑依赖全栈的 Playwright e2e。
 
 ```powershell
 cd server
@@ -242,8 +282,10 @@ cd server && ./mvnw clean verify
 ```bash
 cd web
 npm ci
+npm test          # Vitest 单元测试
 npm run build
-npm run test:e2e   # 需先启动前后端
+# e2e（可选）：需已启动前后端，并设置 E2E_USERNAME / E2E_PASSWORD
+npm run test:e2e
 ```
 
 ## 设计原则

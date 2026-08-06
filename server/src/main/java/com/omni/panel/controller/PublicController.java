@@ -1,5 +1,7 @@
 package com.omni.panel.controller;
 
+import java.util.Map;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -9,6 +11,7 @@ import com.omni.panel.common.BusinessException;
 import com.omni.panel.entity.PublicLinkEntity;
 import com.omni.panel.service.DashboardRenderService;
 import com.omni.panel.service.PublicLinkService;
+import com.omni.panel.service.SettingService;
 import com.omni.panel.service.SubscriptionPrintTokenService;
 
 /**
@@ -20,12 +23,24 @@ public class PublicController {
     private final PublicLinkService publicLinkService;
     private final DashboardRenderService renderService;
     private final SubscriptionPrintTokenService printTokenService;
+    private final SettingService settingService;
 
     public PublicController(PublicLinkService publicLinkService, DashboardRenderService renderService,
-                            SubscriptionPrintTokenService printTokenService) {
+                            SubscriptionPrintTokenService printTokenService, SettingService settingService) {
         this.publicLinkService = publicLinkService;
         this.renderService = renderService;
         this.printTokenService = printTokenService;
+        this.settingService = settingService;
+    }
+
+    /**
+     * 读取公开品牌设置（站点名称等），供登录页与浏览器标题使用。
+     *
+     * @return 仅含非敏感品牌键的映射
+     */
+    @GetMapping("/site")
+    public ApiResponse<Map<String, String>> site() {
+        return ApiResponse.ok(settingService.publicBranding());
     }
 
     /**

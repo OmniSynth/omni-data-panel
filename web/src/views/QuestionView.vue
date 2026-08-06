@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -7,7 +7,12 @@ import { chartApi, publicLinkApi, queryApi } from '@/api'
 import { displayLabel } from '@/display'
 import type { Chart, PublicLink, QueryResult, QuerySubmission } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
-import { alignSqlParameters, countSqlPlaceholders } from '@/sql/parameters'
+import {
+  alignNamedParameters,
+  alignSqlParameters,
+  countSqlPlaceholders,
+  extractNamedPlaceholders,
+} from '@/sql/parameters'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -19,10 +24,13 @@ const error = ref('')
 const links = ref<PublicLink[]>([])
 const sharing = ref(false)
 const sqlParameters = ref<string[]>([])
+const namedSqlParameters = reactive<Record<string, string>>({})
+const namedParamNames = computed(() => extractNamedPlaceholders(submission.value?.sql || ''))
 const submission = ref<QuerySubmission>()
 
 const chartId = computed(() => String(route.params.id))
-const hasSqlParams = computed(() => countSqlPlaceholders(submission.value?.sql || '') > 0)
+const hasSqlParams = computed(() =>
+  namedParamNames.value.length > 0 || countSqlPlaceholders(submission.value?.sql || '') > 0)
 const activeLinks = computed(() => links.value.filter(isActiveQuestionLink))
 
 async function load() {
@@ -34,11 +42,17 @@ async function load() {
     chart.value = await chartApi.get(chartId.value)
     submission.value = JSON.parse(chart.value.queryJson) as QuerySubmission
     if (submission.value.sql) {
+      const named = alignNamedParameters(submission.value.sql, submission.value.namedParameters)
+      for (const key of Object.keys(namedSqlParameters)) delete namedSqlParameters[key]
+      for (const [key, value] of Object.entries(named)) {
+        namedSqlParameters[key] = String(value ?? '')
+      }
       sqlParameters.value = alignSqlParameters(
         submission.value.sql,
         (submission.value.parameters || []).map(String),
       ).map((item) => String(item ?? ''))
     } else {
+      for (const key of Object.keys(namedSqlParameters)) delete namedSqlParameters[key]
       sqlParameters.value = []
     }
     await Promise.all([runPreview(), loadLinks()])
@@ -57,6 +71,9 @@ async function runPreview() {
         sourceId: submission.value.sourceId,
         sql: submission.value.sql,
         parameters: alignSqlParameters(submission.value.sql, sqlParameters.value),
+        namedParameters: namedParamNames.value.length
+          ? Object.fromEntries(namedParamNames.value.map((name) => [name, namedSqlParameters[name] ?? '']))
+          : undefined,
       }
       : submission.value
     const { queryId } = await queryApi.submit(payload)
@@ -139,7 +156,12 @@ onMounted(load)
     </div>
     <el-card v-if="hasSqlParams" class="mb">
       <div class="param-title">{{ t('chart.queryParams') }}</div>
-      <div v-for="(_, index) in sqlParameters" :key="index" class="param-row">
+      <div v-for="name in namedParamNames" :key="name" class="param-row">
+        <el-input v-model="namedSqlParameters[name]" :placeholder="`:${name}`" style="max-width:320px">
+          <template #prepend>{{ name }}</template>
+        </el-input>
+      </div>
+      <div v-for="(_, index) in sqlParameters" :key="`pos-${index}`" class="param-row">
         <el-input v-model="sqlParameters[index]" :placeholder="t('chart.paramN', { n: index + 1 })" style="max-width:320px" />
       </div>
       <el-button type="primary" @click="runPreview">{{ t('chart.applyRerun') }}</el-button>

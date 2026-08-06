@@ -10,6 +10,7 @@ import { useUserStore } from '@/stores/user'
 import type { Dashboard, Id, PublicLink } from '@/types'
 import PublicShareDialog from '@/components/PublicShareDialog.vue'
 import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
+import { copyText } from '@/utils/clipboard'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -105,8 +106,12 @@ async function createPublicLink() {
       resourceId: linksDashboard.value.id,
     })
     links.value = [link, ...links.value.filter((item) => item.token !== link.token)]
-    await navigator.clipboard.writeText(publicUrl(link.token))
-    ElMessage.success(t('dashboard.linkCopied'))
+    const url = publicUrl(link.token)
+    if (await copyText(url)) {
+      ElMessage.success(t('dashboard.linkCopied'))
+    } else {
+      ElMessage.success(t('dashboard.linkCreated'))
+    }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('dashboard.linkCreateFailed'))
   } finally {
@@ -115,11 +120,10 @@ async function createPublicLink() {
 }
 
 async function copyLink(link: PublicLink) {
-  try {
-    await navigator.clipboard.writeText(publicUrl(link.token))
+  if (await copyText(publicUrl(link.token))) {
     ElMessage.success(t('dashboard.linkCopied'))
-  } catch {
-    ElMessage.error(t('dashboard.linkCreateFailed'))
+  } else {
+    ElMessage.error(t('dashboard.linkCopyFailed'))
   }
 }
 

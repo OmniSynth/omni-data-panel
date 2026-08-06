@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -23,6 +25,7 @@
     "gridstack": "^11.5.1",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
+    "marked": "^18.0.9",
     "pinia": "^3.0.1",
     "qrcode": "^1.5.4",
     "sql-formatter": "^15.8.2",
@@ -37,6 +40,7 @@
     "@vitejs/plugin-vue": "^5.2.3",
     "typescript": "~5.7.2",
     "vite": "^6.4.3",
+    "vitest": "^3.0.9",
     "vue-tsc": "^2.2.8"
   }
 }

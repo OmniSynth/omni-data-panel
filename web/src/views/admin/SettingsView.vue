@@ -5,6 +5,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { settingsApi } from '@/api'
 import { emailRule, requiredRule, validateForm } from '@/form/rules'
+import { applyDocumentTitle } from '@/siteBranding'
 import type { SiteSettings } from '@/types'
 
 const { t } = useI18n()
@@ -17,6 +18,7 @@ const passwordSet = ref(false)
 const form = ref({
   siteName: '',
   embedEnabled: false,
+  sqlTipsCollapsedDefault: false,
   queryCacheEnabled: false,
   queryCacheTtlSeconds: 300,
   maxConcurrentSessions: 2,
@@ -62,6 +64,7 @@ async function load() {
     form.value = {
       siteName: String(settings['site.name'] || t('settings.defaultSiteName')),
       embedEnabled: asBool(settings['embed.enabled']),
+      sqlTipsCollapsedDefault: asBool(settings['ui.sql.tips-collapsed-default']),
       queryCacheEnabled: asBool(settings['cache.query.enabled']),
       queryCacheTtlSeconds: Number.isFinite(ttl) && ttl > 0 ? ttl : 300,
       maxConcurrentSessions: Number.isFinite(sessions) && sessions >= 0 ? sessions : 2,
@@ -86,6 +89,7 @@ function buildPayload(): SiteSettings {
   const payload: SiteSettings = {
     'site.name': form.value.siteName.trim() || t('settings.defaultSiteName'),
     'embed.enabled': form.value.embedEnabled ? 'true' : 'false',
+    'ui.sql.tips-collapsed-default': form.value.sqlTipsCollapsedDefault ? 'true' : 'false',
     'cache.query.enabled': form.value.queryCacheEnabled ? 'true' : 'false',
     'cache.query.ttl-seconds': String(form.value.queryCacheTtlSeconds),
     'auth.session.max-concurrent': String(form.value.maxConcurrentSessions),
@@ -110,6 +114,7 @@ async function save() {
     passwordSet.value = asBool(settings['mail.password.set'])
     form.value.mailPassword = ''
     dirty.value = false
+    applyDocumentTitle(settings['site.name'] || form.value.siteName)
     ElMessage.success(t('settings.saved'))
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('common.saveFailed'))
@@ -156,6 +161,10 @@ onMounted(load)
         </el-form-item>
         <el-form-item :label="t('settings.embedEnabled')">
           <el-switch v-model="form.embedEnabled" @change="markDirty" />
+        </el-form-item>
+        <el-form-item :label="t('settings.sqlTipsCollapsed')">
+          <el-switch v-model="form.sqlTipsCollapsedDefault" @change="markDirty" />
+          <div class="hint">{{ t('settings.sqlTipsCollapsedHint') }}</div>
         </el-form-item>
         <el-form-item :label="t('settings.queryCache')">
           <el-switch v-model="form.queryCacheEnabled" @change="markDirty" />

@@ -14,6 +14,7 @@ import ChartPreview from '@/components/ChartPreview.vue'
 import ChartEncodingForm from '@/components/ChartEncodingForm.vue'
 import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
 import { chartTypeOptions, mergeChartConfig, parseChartConfig, type ChartEncoding } from '@/dashboard/config'
+import { copyText } from '@/utils/clipboard'
 
 const { t } = useI18n()
 const userStore = useUserStore()
@@ -151,8 +152,12 @@ async function savePreviewEncoding() {
 async function share(chart: Chart) {
   try {
     const link = await publicLinkApi.create({ resourceType: 'QUESTION', resourceId: chart.id })
-    await navigator.clipboard.writeText(`${location.origin}/public/question/${link.token}`)
-    ElMessage.success(t('chart.linkCopied'))
+    const url = `${location.origin}/public/question/${link.token}`
+    if (await copyText(url)) {
+      ElMessage.success(t('chart.linkCopied'))
+    } else {
+      ElMessage.success(t('chart.linkCreated'))
+    }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('chart.linkCreateFailed'))
   }

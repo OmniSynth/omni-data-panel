@@ -378,12 +378,21 @@ function fixedDateDefault(parameter: DashboardParameter): string {
   return typeof parameter.defaultValue === 'string' ? parameter.defaultValue : ''
 }
 
+function onBindingModeChange(binding: CardParameterBinding, mode: string) {
+  binding.mode = mode === 'sql' ? 'sql' : 'semantic'
+  if (binding.mode === 'sql' && !binding.parameterName) {
+    binding.parameterName = binding.parameterId
+  }
+}
+
 function addBinding() {
+  const parameterId = parameters.value[0]?.id || ''
   bindingDraft.value.push({
-    parameterId: parameters.value[0]?.id || '',
+    parameterId,
     mode: 'semantic',
     field: '',
     operator: 'EQ',
+    parameterName: parameterId,
   })
 }
 
@@ -807,10 +816,19 @@ onBeforeUnmount(() => {
         </el-form>
         <h4>{{ t('dashboard.bindings') }}</h4>
         <div v-for="(binding, index) in bindingDraft" :key="index" class="binding-row">
-          <el-select v-model="binding.parameterId" :placeholder="t('dashboard.parameter')" style="width:120px">
+          <el-select
+            v-model="binding.parameterId"
+            :placeholder="t('dashboard.parameter')"
+            style="width:120px"
+            @change="binding.parameterName = binding.parameterName || String($event || '')"
+          >
             <el-option v-for="item in parameters" :key="item.id" :label="item.label" :value="item.id" />
           </el-select>
-          <el-select v-model="binding.mode" style="width:110px">
+          <el-select
+            :model-value="binding.mode"
+            style="width:110px"
+            @update:model-value="onBindingModeChange(binding, String($event))"
+          >
             <el-option :label="t('dashboard.semantic')" value="semantic" />
             <el-option :label="displayLabel('SQL')" value="sql" />
           </el-select>
@@ -832,8 +850,16 @@ onBeforeUnmount(() => {
               :value="op"
             />
           </el-select>
-          <el-input-number
+          <el-input
             v-if="binding.mode === 'sql'"
+            v-model="binding.parameterName"
+            :placeholder="t('dashboard.sqlParamName')"
+            style="width:140px"
+          >
+            <template #prepend>:</template>
+          </el-input>
+          <el-input-number
+            v-if="binding.mode === 'sql' && binding.parameterIndex != null && !binding.parameterName"
             v-model="binding.parameterIndex"
             :min="0"
             controls-position="right"

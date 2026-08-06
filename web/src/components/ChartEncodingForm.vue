@@ -20,6 +20,7 @@ const { t } = useI18n()
 
 const isMap = computed(() => props.chartType === 'map')
 const singleValue = computed(() => isSingleValueChart(props.chartType))
+const isCombo = computed(() => props.chartType === 'combo')
 
 const showMapping = computed(() =>
   !['table'].includes(props.chartType) && props.columns.length > 0)
@@ -119,90 +120,178 @@ function setSeriesType(column: string, type: 'bar' | 'line') {
 
 <template>
   <div v-if="showMapping" class="encoding">
-    <div v-if="isMap" class="row">
-      <span>{{ t('encoding.lng') }}</span>
-      <el-select
-        :model-value="modelValue.lng"
-        style="width:140px"
-        @update:model-value="emit('update:modelValue', { ...modelValue, lng: $event })"
-      >
-        <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
-      </el-select>
-      <span>{{ t('encoding.lat') }}</span>
-      <el-select
-        :model-value="modelValue.lat"
-        style="width:140px"
-        @update:model-value="emit('update:modelValue', { ...modelValue, lat: $event })"
-      >
-        <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
-      </el-select>
-      <span>{{ t('encoding.value') }}</span>
-      <el-select
-        :model-value="Array.isArray(modelValue.value) ? modelValue.value[0] : modelValue.value"
-        style="width:160px"
-        @update:model-value="emit('update:modelValue', { ...modelValue, value: $event })"
-      >
-        <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
-      </el-select>
-      <span>{{ t('encoding.name') }}</span>
-      <el-select
-        clearable
-        :model-value="modelValue.category"
-        style="width:140px"
-        @update:model-value="emit('update:modelValue', { ...modelValue, category: $event || undefined })"
-      >
-        <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
-      </el-select>
-    </div>
-    <div v-else-if="showCategory" class="row">
-      <span>{{ t('encoding.category') }}</span>
-      <el-select
-        :model-value="modelValue.category"
-        style="width:160px"
-        @update:model-value="emit('update:modelValue', { ...modelValue, category: $event })"
-      >
-        <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
-      </el-select>
-      <span>{{ t('encoding.value') }}</span>
-      <el-select
-        v-model="valueList"
-        :multiple="!singleValue"
-        collapse-tags
-        style="width:220px"
-      >
-        <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
-      </el-select>
-    </div>
-    <div v-if="chartType === 'combo' && valueList.length" class="combo-types">
-      <div v-for="column in valueList" :key="column" class="combo-row">
-        <span>{{ column }}</span>
-        <el-select :model-value="seriesType(column)" style="width:100px" @update:model-value="setSeriesType(column, $event)">
-          <el-option :label="t('encoding.bar')" value="bar" />
-          <el-option :label="t('encoding.line')" value="line" />
+    <div v-if="isMap" class="grid map-grid">
+      <label class="field">
+        <span class="label">{{ t('encoding.lng') }}</span>
+        <el-select
+          class="control"
+          :model-value="modelValue.lng"
+          @update:model-value="emit('update:modelValue', { ...modelValue, lng: $event })"
+        >
+          <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
         </el-select>
+      </label>
+      <label class="field">
+        <span class="label">{{ t('encoding.lat') }}</span>
+        <el-select
+          class="control"
+          :model-value="modelValue.lat"
+          @update:model-value="emit('update:modelValue', { ...modelValue, lat: $event })"
+        >
+          <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
+        </el-select>
+      </label>
+      <label class="field">
+        <span class="label">{{ t('encoding.value') }}</span>
+        <el-select
+          class="control"
+          :model-value="Array.isArray(modelValue.value) ? modelValue.value[0] : modelValue.value"
+          @update:model-value="emit('update:modelValue', { ...modelValue, value: $event })"
+        >
+          <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
+        </el-select>
+      </label>
+      <label class="field">
+        <span class="label">{{ t('encoding.name') }}</span>
+        <el-select
+          class="control"
+          clearable
+          :model-value="modelValue.category"
+          @update:model-value="emit('update:modelValue', { ...modelValue, category: $event || undefined })"
+        >
+          <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
+        </el-select>
+      </label>
+    </div>
+
+    <div v-else-if="showCategory" class="grid main-grid">
+      <label class="field">
+        <span class="label">{{ t('encoding.category') }}</span>
+        <el-select
+          class="control"
+          :model-value="modelValue.category"
+          @update:model-value="emit('update:modelValue', { ...modelValue, category: $event })"
+        >
+          <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
+        </el-select>
+      </label>
+      <div class="field">
+        <span class="label">{{ t('encoding.value') }}</span>
+        <el-select
+          v-model="valueList"
+          class="control"
+          :multiple="!singleValue"
+          collapse-tags
+          collapse-tags-tooltip
+        >
+          <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
+        </el-select>
+        <div v-if="isCombo && valueList.length" class="series-list">
+          <div v-for="column in valueList" :key="column" class="series-row">
+            <span class="series-name" :title="column">{{ column }}</span>
+            <el-select
+              class="series-type"
+              :model-value="seriesType(column)"
+              @update:model-value="setSeriesType(column, $event)"
+            >
+              <el-option :label="t('encoding.bar')" value="bar" />
+              <el-option :label="t('encoding.line')" value="line" />
+            </el-select>
+          </div>
+        </div>
       </div>
     </div>
-    <div v-if="showDrillPath" class="drill-row">
-      <span>{{ t('encoding.drillPath') }}</span>
+
+    <div v-if="showDrillPath" class="field drill-field">
+      <span class="label">{{ t('encoding.drillPath') }}</span>
       <el-select
         v-model="drillPathModel"
+        class="control"
         multiple
         collapse-tags
         collapse-tags-tooltip
-        style="width:320px"
+        filterable
+        clearable
       >
         <el-option v-for="column in columns" :key="column" :label="column" :value="column" />
       </el-select>
-      <span class="hint">{{ t('encoding.drillPathHint') }}</span>
+      <p class="hint">{{ t('encoding.drillPathHint') }}</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-.encoding { margin: 8px 0 12px; }
-.row, .drill-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.drill-row { margin-top: 8px; }
-.hint { color: var(--el-text-color-secondary); font-size: 12px; }
-.combo-types { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
-.combo-row { display: flex; gap: 8px; align-items: center; }
+.encoding {
+  margin: 4px 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+}
+.grid {
+  display: grid;
+  gap: 12px 16px;
+}
+.main-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.map-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  line-height: 1.2;
+}
+.control {
+  width: 100%;
+}
+.series-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+}
+.series-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 8px;
+  align-items: center;
+}
+.series-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.series-type {
+  width: 88px;
+}
+.drill-field {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-extra-light);
+}
+.hint {
+  margin: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+@media (max-width: 720px) {
+  .main-grid,
+  .map-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

@@ -40,8 +40,9 @@ Omni 返回 embed JWT（1h）
 
 1. **开启嵌入**：管理端「设置」中打开「允许嵌入」（配置键 `embed.enabled`）。关闭后签发与解析均会失败。
 2. **服务账号**：准备一个具备目标仪表盘或图表 **WRITE** 权限的账号（所有者或被授予 WRITE 的角色）。签发接口会校验写权限。
-3. **网络**：业务前端所在浏览器能访问 Omni 的 Web 基址（iframe 与 `/api`）。当前部署默认未设置 `X-Frame-Options` / `Content-Security-Policy: frame-ancestors`，任意父页面均可嵌套；若后续加白名单，需同步调整业务域名。
-4. **生产安全**：更换默认管理员密码与 `JWT_SECRET`；服务账号密码与用户 JWT **只放在业务服务端**。
+3. **网络**：业务前端所在浏览器能访问 Omni 的 Web 基址（iframe 与 `/api`）。服务端已关闭 `X-Frame-Options`（未设置限制性 `frame-ancestors`），任意父页面均可嵌套；另下发 `X-Content-Type-Options: nosniff`、`Referrer-Policy`、`Permissions-Policy`。若后续加嵌入域名白名单，需同步调整业务域名。
+4. **限流**：`/api/embed/**` 与 `/api/public/**` 按客户端 IP 做进程内限流（默认嵌入 180 次/分钟、公开 120 次/分钟，见 `omni.security.rate-limit.*`）；超限返回 HTTP 429。
+5. **生产安全**：更换默认管理员密码与 `JWT_SECRET`；服务账号密码与用户 JWT **只放在业务服务端**。
 
 ## 3. API 说明
 
@@ -59,19 +60,26 @@ Omni 返回 embed JWT（1h）
 
 ### 3.1 登录（获取用户 JWT）
 
-- **方法 / 路径**：`POST /api/auth/login`
-- **鉴权**：无
+本地密码登录需先取**一次性挑战**再提交 HMAC 签名，不可只传用户名密码。
 
-请求：
+1. `GET /api/auth/login-challenge` → `challengeId`、`nonce`、`timestamp`、`expiresAt`、`signKey`（十六进制）
+2. 计算签名：`HMAC-SHA256(signKey, username + "\n" + password + "\n" + nonce + "\n" + timestamp)`，结果为小写十六进制；其中 `timestamp` 为客户端当前 Unix 秒
+3. `POST /api/auth/login` 提交完整载荷
+
+请求体：
 
 ```json
 {
   "username": "embed-service",
-  "password": "********"
+  "password": "********",
+  "challengeId": "<来自挑战>",
+  "nonce": "<来自挑战>",
+  "timestamp": 1710000000,
+  "signature": "<hmac-hex>"
 }
 ```
 
-成功响应 `data`：
+成功响应 `data`（若该账号启用了 TOTP，则先返回 `mfaToken`，需再调 `POST /api/auth/mfa/verify`；服务账号建议关闭 MFA 或由自动化完成第二步）：
 
 ```json
 {
@@ -82,7 +90,7 @@ Omni 返回 embed JWT（1h）
 
 后续签发请求头：`Authorization: Bearer <accessToken>`。
 
-建议在业务服务端缓存该 token，并在 401 时重新登录；**不要**把用户 JWT 下发给业务前端。
+建议在业务服务端缓存该 token，并在 401 时重新走挑战登录；**不要**把用户 JWT 下发给业务前端。前端参考实现：`web/src/auth/loginSignature.ts`。
 
 ### 3.2 签发嵌入令牌
 
@@ -137,10 +145,9 @@ Omni 返回 embed JWT（1h）
 
 ```bash
 OMNI_BASE=https://bi.example.com
-USER_JWT=$(curl -s -X POST "$OMNI_BASE/api/auth/login" \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"embed-service","password":"********"}' \
-  | jq -r '.data.accessToken')
+# 实际对接请在业务后端实现：先 GET /api/auth/login-challenge，
+# 再按 §3.1 计算 HMAC 后 POST /api/auth/login（下列伪变量仅示意顺序）。
+USER_JWT="<完成挑战登录后的 accessToken>"
 
 EMBED_JWT=$(curl -s -X POST "$OMNI_BASE/api/embed/tokens" \
   -H "Authorization: Bearer $USER_JWT" \
@@ -215,7 +222,9 @@ public String buildDashboardEmbedUrl(long dashboardId) {
 |------|----------|------|
 | `403` /「嵌入功能已关闭」 | `embed.enabled` 为 false | 管理端开启「允许嵌入」 |
 | `401` /「嵌入令牌无效或已过期」 | JWT 损坏、过期或签名不匹配 | 重新签发；检查 Omni 实例与密钥是否一致 |
-| `401` 签发时失败 | 用户 JWT 无效 | 重新 `POST /api/auth/login` |
+| `401` 签发时失败 | 用户 JWT 无效 | 重新走挑战登录（§3.1） |
+| `401` /「登录挑战…」 | 未签名或挑战过期/已用 | 每次登录重新 `GET /login-challenge` |
+| `429` | 触发 IP 限流 | 降低轮询/重试频率；检查代理是否透传真实客户端 IP |
 | 「仪表盘/图表不存在」或无权限 | `resourceId` 错误，或账号无 WRITE | 核对资源 ID；为服务账号授权 |
 | 「嵌入仅支持 DASHBOARD 或 QUESTION」 | `resourceType` 拼写错误 | 使用大写 `DASHBOARD` / `QUESTION` |
 | iframe 空白或无法加载 | 基址错误、混合内容（HTTPS 页嵌 HTTP）、网络不通 | 使用与业务页一致的 HTTPS 基址；检查浏览器控制台 |
@@ -238,3 +247,6 @@ public String buildDashboardEmbedUrl(long dashboardId) {
 - 签发与渲染：`server/.../controller/EmbedController.java`
 - 令牌逻辑：`server/.../service/EmbedTokenService.java`
 - 嵌入页：`web/src/views/EmbedDashboardView.vue`、`EmbedQuestionView.vue`
+- 登录签名：`web/src/auth/loginSignature.ts`、`LoginChallengeService`
+
+投产与反代加固见 [production.md](production.md)。应用内帮助页（`/help`）可直接阅读本说明。

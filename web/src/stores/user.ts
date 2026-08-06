@@ -49,6 +49,16 @@ export const useUserStore = defineStore('user', {
       localStorage.setItem(TOKEN_KEY, result.accessToken)
       await this.loadUser()
     },
+    async completeOidcLogin(code: string) {
+      const result = await authApi.oidcExchange(code)
+      if (!result.accessToken) {
+        throw new Error('登录响应无效')
+      }
+      this.mfaToken = ''
+      this.token = result.accessToken
+      localStorage.setItem(TOKEN_KEY, result.accessToken)
+      await this.loadUser()
+    },
     clearMfaChallenge() {
       this.mfaToken = ''
     },

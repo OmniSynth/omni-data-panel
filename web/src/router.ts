@@ -8,6 +8,11 @@ const router = createRouter({
   routes: [
     { path: '/login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
     {
+      path: '/login/oidc/callback',
+      component: () => import('@/views/OidcCallbackView.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/setup-password',
       component: () => import('@/views/SetupPasswordView.vue'),
       meta: { public: true },
@@ -55,6 +60,7 @@ const router = createRouter({
         { path: 'dashboards/:id/edit', component: () => import('@/views/DashboardEditorView.vue') },
         { path: 'dashboards/:id/view', component: () => import('@/views/DashboardView.vue') },
         { path: 'trash', component: () => import('@/views/TrashView.vue') },
+        { path: 'help', component: () => import('@/views/UserGuideView.vue') },
         { path: 'search', component: () => import('@/views/SearchView.vue') },
       ],
     },

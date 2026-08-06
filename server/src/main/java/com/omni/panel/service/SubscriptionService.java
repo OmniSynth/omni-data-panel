@@ -206,6 +206,8 @@ public class SubscriptionService {
         }
         try {
             var job = JobBuilder.newJob(SubscriptionDispatchJob.class).withIdentity(jobKey(entity.getId()))
+                    .storeDurably()
+                    .requestRecovery(true)
                     .usingJobData("subscriptionId", entity.getId()).build();
             var trigger = TriggerBuilder.newTrigger().withIdentity("subscription-trigger-" + entity.getId())
                     .withSchedule(CronScheduleBuilder.cronSchedule(entity.getCronExpression())

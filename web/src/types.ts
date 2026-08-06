@@ -193,6 +193,7 @@ export interface QuerySubmission {
   sourceId?: Id
   sql?: string
   parameters?: unknown[]
+  namedParameters?: Record<string, unknown>
   query?: SemanticQuery
 }
 
@@ -408,7 +409,10 @@ export interface CardParameterBinding {
   mode: 'semantic' | 'sql'
   field?: string
   operator?: 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'LIKE' | 'IN'
+  /** 兼容旧配置：裸 ? 下标 */
   parameterIndex?: number
+  /** SQL 命名占位名（不含冒号），对应 :name */
+  parameterName?: string
 }
 
 export interface CardClickAction {
@@ -553,6 +557,7 @@ export interface PublicQuestion {
 export interface SiteSettings {
   'site.name'?: string
   'embed.enabled'?: string | boolean
+  'ui.sql.tips-collapsed-default'?: string | boolean
   'cache.query.enabled'?: string | boolean
   'cache.query.ttl-seconds'?: string | number
   'auth.session.max-concurrent'?: string | number

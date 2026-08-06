@@ -180,6 +180,8 @@ public class ScheduleService {
                 return;
             }
             var job = JobBuilder.newJob(ScheduleDispatchJob.class).withIdentity(jobKey(entity.getId()))
+                    .storeDurably()
+                    .requestRecovery(true)
                     .usingJobData("scheduleId", entity.getId()).build();
             var trigger = TriggerBuilder.newTrigger().withIdentity("schedule-trigger-" + entity.getId())
                     .withSchedule(CronScheduleBuilder.cronSchedule(entity.getCronExpression())

@@ -34,7 +34,9 @@ http.interceptors.response.use(
         && !location.pathname.startsWith('/setup-password')
         && !location.pathname.startsWith('/public/')
         && !location.pathname.startsWith('/print/')
-        && !location.pathname.startsWith('/embed/')) {
+        && !location.pathname.startsWith('/embed/')
+        && !location.pathname.startsWith('/oauth2/')
+        && !location.pathname.startsWith('/login/oauth2/')) {
         location.href = '/login'
       }
     }
@@ -99,6 +101,12 @@ export const authApi = {
     }),
   completeSetupPassword: (token: string, password: string) =>
     request<void>({ url: '/auth/setup-password', method: 'POST', data: { token, password } }),
+  oidcStatus: () =>
+    request<{ enabled: boolean; authorizationUrl: string | null; clientName: string }>({
+      url: '/auth/oidc/status',
+    }),
+  oidcExchange: (code: string) =>
+    request<LoginResult>({ url: '/auth/oidc/exchange', method: 'POST', data: { code } }),
 }
 
 export const dataSourceApi = {
@@ -587,6 +595,7 @@ export const publicLinkApi = {
 }
 
 export const publicApi = {
+  site: () => request<Pick<SiteSettings, 'site.name'>>({ url: '/public/site' }),
   dashboard: (token: string) => request<DashboardRender>({ url: `/public/dashboards/${token}` }),
   printDashboard: (token: string) => request<DashboardRender>({ url: `/public/print/dashboards/${token}` }),
   question: (token: string) => request<PublicQuestion>({ url: `/public/questions/${token}` }),

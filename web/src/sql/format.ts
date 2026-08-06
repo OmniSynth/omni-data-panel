@@ -15,7 +15,7 @@ const dialectLanguage: Record<SqlDialectId, SqlLanguage> = {
   GENERIC: 'sql',
 }
 
-/** 按数据源方言格式化 SQL；空串原样返回。 */
+/** 按数据源方言格式化 SQL；空串原样返回。支持 `:name` 命名占位与裸 `?`。 */
 export function formatSql(sql: string, dialect?: string | null, jdbcUrl?: string | null): string {
   const trimmed = sql.trim()
   if (!trimmed) return sql
@@ -26,5 +26,9 @@ export function formatSql(sql: string, dialect?: string | null, jdbcUrl?: string
     keywordCase: 'upper',
     dataTypeCase: 'upper',
     functionCase: 'upper',
+    paramTypes: {
+      named: [':'],
+      positional: true,
+    },
   })
 }

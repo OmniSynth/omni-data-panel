@@ -10,6 +10,11 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
 
+management:
+  health:
+    redis:
+      enabled: false
+
 omni:
   security:
     jwt-secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=

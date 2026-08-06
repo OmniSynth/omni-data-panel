@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { promptBox } from '@/i18n/dialog'
 import { useRoute, useRouter } from 'vue-router'
-import { chartApi, collectionApi, dataSourceApi, exportApi, queryApi } from '@/api'
+import { chartApi, collectionApi, dataSourceApi, exportApi, queryApi, settingsApi } from '@/api'
 import { displayLabel } from '@/display'
 import { useUserStore } from '@/stores/user'
-import type { Chart, Collection, DataSource, Id, QueryResult, QuerySnapshot } from '@/types'
+import type { Chart, Collection, DataSource, Id, QueryResult, QuerySnapshot, SiteSettings } from '@/types'
 import SqlEditor from '@/components/SqlEditor.vue'
 import MetadataBrowsePanel from '@/components/MetadataBrowsePanel.vue'
 import ChartPreview from '@/components/ChartPreview.vue'
@@ -22,7 +22,7 @@ import {
 import { resolveSqlDialect } from '@/sql/dialects'
 import { QUERY_RESULT_DISPLAY_LIMIT } from '@/query/limits'
 import { formatDuration } from '@/query/duration'
-import { alignSqlParameters } from '@/sql/parameters'
+import { alignNamedParameters, alignSqlParameters, extractNamedPlaceholders } from '@/sql/parameters'
 import { chartTypeOptions, mergeChartConfig, type ChartEncoding } from '@/dashboard/config'
 import ChartEncodingForm from '@/components/ChartEncodingForm.vue'
 
@@ -39,6 +39,8 @@ const sourceId = ref<Id | undefined>(
 )
 const sql = ref('')
 const sqlParameters = ref<string[]>([])
+const namedSqlParameters = reactive<Record<string, string>>({})
+const namedParamNames = computed(() => extractNamedPlaceholders(sql.value))
 const sqlEditorRef = ref<{ format: () => boolean; insertText: (text: string) => boolean }>()
 const editorSchema = ref<EditorSqlSchema>({})
 const completionPayload = ref<CompletionSchemaPayload | null>(null)
@@ -132,9 +134,15 @@ function flatten(nodes: Collection[], acc: Collection[] = []): Collection[] {
 async function load() {
   if (!userStore.hasPermission('query:raw')) return
   try {
-    const [sourceList, tree] = await Promise.all([dataSourceApi.list(), collectionApi.tree()])
+    const [sourceList, tree, settings] = await Promise.all([
+      dataSourceApi.list(),
+      collectionApi.tree(),
+      settingsApi.get().catch((): SiteSettings => ({})),
+    ])
     sources.value = sourceList
     collections.value = flatten(tree)
+    const tipsDefault = settings['ui.sql.tips-collapsed-default']
+    tipsCollapsed.value = String(tipsDefault) === 'true' || tipsDefault === true
     if (collectionId.value === undefined) {
       collectionId.value = collections.value[0]?.id
     } else if (!collections.value.some((item) => String(item.id) === String(collectionId.value))) {
@@ -149,6 +157,16 @@ async function load() {
   }
 }
 
+function buildNamedPayload(): Record<string, unknown> | undefined {
+  const names = extractNamedPlaceholders(sql.value)
+  if (!names.length) return undefined
+  const payload: Record<string, unknown> = {}
+  for (const name of names) {
+    payload[name] = namedSqlParameters[name] ?? ''
+  }
+  return payload
+}
+
 async function run() {
   if (!sourceId.value) return ElMessage.warning(t('sql.needSource'))
   if (!sql.value.trim()) return ElMessage.warning(t('sql.needSql'))
@@ -158,6 +176,7 @@ async function run() {
       sourceId: sourceId.value,
       sql: sql.value,
       parameters: alignSqlParameters(sql.value, sqlParameters.value),
+      namedParameters: buildNamedPayload(),
     })
     task.value = { queryId: submitted.queryId, status: 'QUEUED', startedAtMs: Date.now() }
     startClock()
@@ -236,6 +255,7 @@ async function saveQuestion() {
       sourceId: sourceId.value,
       sql: sql.value,
       parameters: alignSqlParameters(sql.value, sqlParameters.value),
+      namedParameters: buildNamedPayload(),
     }),
     chartType: chartType.value || 'table',
     configJson: mergeChartConfig({}, chartEncoding.value, chartDrillPath.value),
@@ -271,6 +291,13 @@ function insertSqlText(text: string) {
 }
 
 watch(sql, () => {
+  const named = alignNamedParameters(sql.value, namedSqlParameters)
+  for (const key of Object.keys(namedSqlParameters)) {
+    if (!(key in named)) delete namedSqlParameters[key]
+  }
+  for (const [key, value] of Object.entries(named)) {
+    if (!(key in namedSqlParameters)) namedSqlParameters[key] = String(value ?? '')
+  }
   sqlParameters.value = alignSqlParameters(sql.value, sqlParameters.value).map((item) => String(item ?? ''))
 })
 watch(() => route.query.sourceId, (value) => {
@@ -432,9 +459,14 @@ onBeforeUnmount(() => {
             @insert="insertSqlText"
           />
         </div>
-        <div v-if="sqlParameters.length" class="sql-params">
+        <div v-if="namedParamNames.length || sqlParameters.length" class="sql-params">
           <div class="sql-params-title">{{ t('sql.sqlParams') }}</div>
-          <div v-for="(_, index) in sqlParameters" :key="index" class="sql-param-row">
+          <div v-for="name in namedParamNames" :key="name" class="sql-param-row">
+            <el-input v-model="namedSqlParameters[name]" :placeholder="`:${name}`">
+              <template #prepend>{{ name }}</template>
+            </el-input>
+          </div>
+          <div v-for="(_, index) in sqlParameters" :key="`pos-${index}`" class="sql-param-row">
             <el-input v-model="sqlParameters[index]" :placeholder="t('sql.paramN', { n: index + 1 })" />
           </div>
         </div>

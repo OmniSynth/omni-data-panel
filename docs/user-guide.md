@@ -183,7 +183,7 @@ flowchart TD
 5. 选择 **展示类型**（表格、柱状、折线、面积、组合、饼图、散点、KPI、漏斗、地图等）。
 6. 填写名称 / 描述 / 集合 → **保存为图表**。
 
-**SQL 模式**（需 `query:raw`）：选数据源、写 SQL、按 `?` 顺序填参数 → 执行 → 保存。
+**SQL 模式**（需 `query:raw`）：选数据源、写 SQL（推荐 `:channel_id` 命名占位，也兼容 `?`）→ 填参数 → 执行 → 保存。
 
 ### 5.3 SQL 查询页另径
 
@@ -262,7 +262,7 @@ flowchart TD
 flowchart TD
   P[仪表盘参数] --> B{绑定模式}
   B -->|语义| F[过滤模型字段]
-  B -->|SQL| Q[绑定到 SQL 的第 N 个问号]
+  B -->|SQL| Q[绑定到 :name 命名占位]
   F --> R[重新渲染卡片]
   Q --> R
 ```
@@ -270,7 +270,7 @@ flowchart TD
 | 模式 | 适用 | 配置 |
 |------|------|------|
 | **语义** | 可视化图表 | 参数 + 字段 + 运算符（EQ/NE/GT/…/IN） |
-| **SQL** | 带 `?` 的 SQL 图表 | 参数 + `parameterIndex`（从 0 起） |
+| **SQL** | 带 `:name` 或 `?` 的 SQL 图表 | 优先填 **参数名**（对应 `:channel_id`）；旧配置仍可用 `parameterIndex` |
 
 配置完点 **保存卡片配置**。
 
@@ -309,7 +309,31 @@ flowchart TD
 
 ---
 
-## 9. 常见问题
+## 9. 登录、MFA 与企业 SSO
+
+| 方式 | 说明 |
+|------|------|
+| 本地密码 | 登录页输入账号密码；客户端先请求登录挑战再 HMAC 签名提交 |
+| TOTP 双因素 | 用户可在个人设置启用；启用后密码通过后还需动态码 / 备份码 |
+| 企业 SSO | 管理员配置 `OIDC_*` 后，登录页出现企业登录按钮；详见 [oidc-sso.md](oidc-sso.md) |
+
+注意：SSO 成功后**不再**要求应用内 TOTP（双因素应在 IdP 侧强制）。并发会话上限见管理端设置 `auth.session.max-concurrent`。
+
+---
+
+## 10. 分享、嵌入与订阅
+
+| 能力 | 入口 | 要点 |
+|------|------|------|
+| 公开链接 | 仪表盘 / 图表分享 | 可撤销；适合对外只读；不过期直至删除 |
+| 签名嵌入 | 业务系统服务端代签 | 短期 JWT（约 1h）；需开启「允许嵌入」；见 [embed-integration.md](embed-integration.md) |
+| 邮件订阅 | 管理端 → 运营 → 订阅 | Cron 推送；可选 PDF；需配置 SMTP |
+
+嵌入与公开视图使用参数**默认值**，访客不能像登录态查看页那样改参重刷。
+
+---
+
+## 11. 常见问题
 
 | 现象 | 可能原因 |
 |------|----------|
@@ -320,13 +344,23 @@ flowchart TD
 | 绑定无效 | 参数未先保存；参数 ID 被改过；语义字段名不对 |
 | 动态选项为空 | 模型无 READ；字段被列权限排除；语义名写错 |
 | 无法编辑仪表盘 | 访问级别不是 ADMIN / OWNER / WRITE |
+| 登录页无企业按钮 | 未启用 OIDC 或 issuer/client 配置不全 |
+| 嵌入 iframe 空白 | 未开 `embed.enabled`、令牌过期、或混合内容（HTTPS 嵌 HTTP） |
+| 接口返回 429 | 触发登录 / 公开 / 嵌入 IP 限流 |
 
 ---
 
-## 10. 相关文档
+## 12. 相关文档
 
-- 产品总览与部署：[README.md](../README.md)
-- 业务系统签名嵌入：[embed-integration.md](embed-integration.md)
+| 文档 | 内容 |
+|------|------|
+| [README.md](../README.md) | 产品总览、部署、API 索引 |
+| [production.md](production.md) | 生产密钥、探针、加固清单 |
+| [oidc-sso.md](oidc-sso.md) | 企业 OIDC 对接 |
+| [embed-integration.md](embed-integration.md) | 业务系统签名嵌入 |
+| [api-log-dashboard-guide.md](api-log-dashboard-guide.md) | `sys_api_log` 实战截图 |
+
+应用内也可打开侧栏 **帮助**（`/help`）阅读上述文档的渲染版。
 
 ---
 
