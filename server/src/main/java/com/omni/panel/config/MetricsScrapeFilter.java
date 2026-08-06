@@ -21,16 +21,32 @@ public class MetricsScrapeFilter extends OncePerRequestFilter {
 
     private final ObservabilityProperties properties;
 
+    /**
+     * @param properties 可观测性配置（指标开关与令牌）
+     */
     public MetricsScrapeFilter(ObservabilityProperties properties) {
         this.properties = properties;
     }
 
+    /**
+     * 仅对 {@code /actuator/prometheus} 路径执行本过滤器。
+     *
+     * @param request HTTP 请求
+     * @return 非 Prometheus 路径时为 true（跳过过滤）
+     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
         return path == null || !path.equals("/actuator/prometheus");
     }
 
+    /**
+     * 校验指标抓取令牌；未启用或令牌不匹配时拒绝访问。
+     *
+     * @param request  HTTP 请求
+     * @param response HTTP 响应
+     * @param chain    过滤器链
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
@@ -47,6 +63,12 @@ public class MetricsScrapeFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
+    /**
+     * 从 {@code X-Metrics-Token} 或 {@code Authorization: Bearer} 头解析令牌。
+     *
+     * @param request HTTP 请求
+     * @return 令牌字符串；未提供时为 null
+     */
     private static String resolveToken(HttpServletRequest request) {
         String header = request.getHeader(HEADER_METRICS_TOKEN);
         if (header != null && !header.isBlank()) {
@@ -59,6 +81,13 @@ public class MetricsScrapeFilter extends OncePerRequestFilter {
         return null;
     }
 
+    /**
+     * 以恒定时间比较两个 UTF-8 字符串，降低时序侧信道风险。
+     *
+     * @param expected 配置的期望令牌
+     * @param actual   请求提供的令牌
+     * @return 内容完全一致时为 true
+     */
     private static boolean constantTimeEquals(String expected, String actual) {
         if (expected == null || actual == null) {
             return false;

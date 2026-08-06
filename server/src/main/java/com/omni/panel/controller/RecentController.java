@@ -18,6 +18,11 @@ import com.omni.panel.service.RecentService;
 public class RecentController {
     private final RecentService service;
 
+    /**
+     * 注入最近访问业务服务。
+     *
+     * @param service 最近访问服务
+     */
     public RecentController(RecentService service) {
         this.service = service;
     }

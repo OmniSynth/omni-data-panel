@@ -30,10 +30,26 @@ public class FrameAncestorsFilter extends OncePerRequestFilter {
         this.settingService = settingService;
     }
 
+    /**
+     * 为响应设置 frame-ancestors CSP 头并继续过滤器链。
+     *
+     * @param request  HTTP 请求
+     * @param response HTTP 响应
+     * @param chain    过滤器链
+     */
+    /**
+     * 写入 CSP 后继续过滤链；读取白名单失败时回落为仅 {@code 'self'}，避免拖垮全部请求。
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        response.setHeader(HEADER, settingService.frameAncestorsCsp());
+        String csp;
+        try {
+            csp = settingService.frameAncestorsCsp();
+        } catch (RuntimeException ignored) {
+            csp = "frame-ancestors 'self'";
+        }
+        response.setHeader(HEADER, csp);
         chain.doFilter(request, response);
     }
 }

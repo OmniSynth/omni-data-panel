@@ -35,11 +35,17 @@ public class ClientIpResolver {
         this.trustedMatchers = List.copyOf(matchers);
     }
 
+    /**
+     * 将当前实例注册为全局解析器，供静态入口使用。
+     */
     @PostConstruct
     void register() {
         holder = this;
     }
 
+    /**
+     * 销毁时若当前实例仍为全局持有者，则清除引用。
+     */
     @PreDestroy
     void unregister() {
         if (holder == this) {
@@ -106,6 +112,12 @@ public class ClientIpResolver {
         return null;
     }
 
+    /**
+     * 判断 IP 是否落在配置的 trusted-proxies CIDR 内。
+     *
+     * @param ip 待检查的 IP
+     * @return 匹配任一可信网段时为 true
+     */
     boolean isTrustedProxy(String ip) {
         if (ip == null || ip.isBlank() || trustedMatchers.isEmpty()) {
             return false;
@@ -122,6 +134,12 @@ public class ClientIpResolver {
         return false;
     }
 
+    /**
+     * 空白字符串转为 null，非空白则 trim。
+     *
+     * @param value 原始字符串
+     * @return trim 后的值；null 或空白时为 null
+     */
     private static String blankToNull(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -129,6 +147,13 @@ public class ClientIpResolver {
         return value.trim();
     }
 
+    /**
+     * 截断字符串至指定最大长度。
+     *
+     * @param value 原始字符串
+     * @param max   最大字符数
+     * @return trim 后的值；超长时截取前 max 个字符；null 时为 null
+     */
     private static String truncate(String value, int max) {
         if (value == null) {
             return null;

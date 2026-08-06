@@ -32,6 +32,9 @@ class QueryCompilerTest {
         assertEquals(List.of("华东' OR 1=1", 100), compiled.parameters());
         assertEquals("SELECT `region` AS `地区`, SUM(`amount`) AS `销售额` FROM `sales`.`orders` "
                 + "WHERE `region` = ? GROUP BY `region` ORDER BY `销售额` DESC LIMIT ?", compiled.sql());
+        assertEquals("SELECT COUNT(*) FROM (SELECT `region` AS `地区`, SUM(`amount`) AS `销售额` FROM `sales`.`orders` "
+                + "WHERE `region` = ? GROUP BY `region` ORDER BY `销售额` DESC) omni_cnt", compiled.countSql());
+        assertEquals(List.of("华东' OR 1=1"), compiled.countParameters());
     }
 
     @Test

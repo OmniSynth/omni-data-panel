@@ -5,6 +5,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -339,7 +340,8 @@ public class QueryParameterApplier {
                 submission.sourceId(),
                 submission.sql(),
                 List.copyOf(parameters),
-                namedParameters.isEmpty() ? null : Map.copyOf(namedParameters),
+                // 允许值为 null（可选 SQL 参数为空时）；Map.copyOf 禁止 null value
+                namedParameters.isEmpty() ? null : Collections.unmodifiableMap(new LinkedHashMap<>(namedParameters)),
                 null);
     }
 

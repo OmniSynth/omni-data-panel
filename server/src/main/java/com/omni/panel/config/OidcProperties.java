@@ -37,6 +37,11 @@ public record OidcProperties(
         }
     }
 
+    /**
+     * 是否已显式启用 OIDC SSO。
+     *
+     * @return 配置项 enabled 为 true 时返回 true
+     */
     public boolean isEnabled() {
         return Boolean.TRUE.equals(enabled);
     }

@@ -23,6 +23,13 @@ public class OidcLoginFailureHandler implements AuthenticationFailureHandler {
     private final OidcProperties oidcProperties;
     private final SubscriptionProperties subscriptionProperties;
 
+    /**
+     * 注入登录审计与 OIDC、前端 URL 配置依赖。
+     *
+     * @param loginAuditService        登录审计服务
+     * @param oidcProperties           OIDC 配置
+     * @param subscriptionProperties   订阅/前端 URL 配置
+     */
     public OidcLoginFailureHandler(LoginAuditService loginAuditService, OidcProperties oidcProperties,
                                    SubscriptionProperties subscriptionProperties) {
         this.loginAuditService = loginAuditService;
@@ -30,6 +37,14 @@ public class OidcLoginFailureHandler implements AuthenticationFailureHandler {
         this.subscriptionProperties = subscriptionProperties;
     }
 
+    /**
+     * OIDC 认证失败时记录审计并将错误信息重定向到前端回调页。
+     *
+     * @param request   HTTP 请求
+     * @param response  HTTP 响应
+     * @param exception 认证异常
+     * @throws IOException 重定向失败时
+     */
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
                                         AuthenticationException exception) throws IOException {
@@ -44,6 +59,11 @@ public class OidcLoginFailureHandler implements AuthenticationFailureHandler {
         response.sendRedirect(target);
     }
 
+    /**
+     * 解析前端 OIDC 回调页 URL：优先使用配置项，否则由 frontend-url 推导。
+     *
+     * @return 前端回调页完整 URL
+     */
     private String resolveFrontendRedirect() {
         String configured = oidcProperties.frontendRedirectUri();
         if (configured != null && !configured.isBlank()) {

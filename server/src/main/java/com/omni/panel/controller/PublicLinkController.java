@@ -24,6 +24,11 @@ import com.omni.panel.service.PublicLinkService;
 public class PublicLinkController {
     private final PublicLinkService service;
 
+    /**
+     * 注入公开链接业务服务。
+     *
+     * @param service 公开链接服务
+     */
     public PublicLinkController(PublicLinkService service) {
         this.service = service;
     }

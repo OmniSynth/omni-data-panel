@@ -24,6 +24,11 @@ public class SubscriptionPrintTokenService {
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(15);
     private final SecretKey key;
 
+    /**
+     * 从安全配置加载 HMAC 签名密钥。
+     *
+     * @param properties 安全相关配置
+     */
     public SubscriptionPrintTokenService(SecurityProperties properties) {
         this.key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(properties.jwtSecret()));
     }

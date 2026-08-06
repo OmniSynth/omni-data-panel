@@ -1,5 +1,6 @@
 package com.omni.panel.query;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -55,16 +56,35 @@ public class JdbcQueryExecutor {
 
     /**
      * 获取用户和数据源并发配额后执行查询，并在结束时释放配额。
+     * <p>COUNT 时对明细 SQL 做包装；语义查询请传入不含 LIMIT 的 countSql。
      *
      * @param queryId    查询任务标识，用于登记可取消的 JDBC 语句
      * @param userId     发起查询的用户标识
      * @param source     目标数据源
      * @param sql        包含占位符的只读 SQL
      * @param parameters 按占位符顺序绑定的参数
-     * @return 保持 JDBC 列顺序的列名和结果行
+     * @return 列名、结果行、真实总数及是否触顶截断
      */
     public QueryResult execute(String queryId, long userId, DataSourceEntity source,
                                String sql, List<Object> parameters) {
+        return execute(queryId, userId, source, sql, parameters, null, null);
+    }
+
+    /**
+     * 获取用户和数据源并发配额后执行查询；触顶时可使用独立的 COUNT SQL。
+     *
+     * @param queryId         查询任务标识
+     * @param userId          发起查询的用户标识
+     * @param source          目标数据源
+     * @param sql             明细 SQL
+     * @param parameters      明细参数
+     * @param countSql        可选 COUNT SQL；为空则对明细 SQL 包装
+     * @param countParameters COUNT 参数；为空时复用明细参数
+     * @return 查询结果
+     */
+    public QueryResult execute(String queryId, long userId, DataSourceEntity source,
+                               String sql, List<Object> parameters,
+                               String countSql, List<Object> countParameters) {
         if (!accepting.get()) {
             throw new BusinessException(503, "查询服务正在关闭");
         }
@@ -73,17 +93,19 @@ public class JdbcQueryExecutor {
             connection.setReadOnly(true);
             dialectRegistry.resolve(source).prepareConnection(connection, source);
             int maxRows = effectiveMaxRows();
+            List<String> columns;
+            List<Map<String, Object>> rows;
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setQueryTimeout(effectiveTimeoutSeconds());
                 statement.setMaxRows(maxRows);
-                statement.setFetchSize(500);
+                statement.setFetchSize(Math.min(500, maxRows));
                 for (int index = 0; index < parameters.size(); index++) {
                     statement.setObject(index + 1, parameters.get(index));
                 }
                 runningStatements.put(queryId, statement);
                 try (ResultSet resultSet = statement.executeQuery()) {
                     var metadata = resultSet.getMetaData();
-                    List<String> columns = new ArrayList<>(metadata.getColumnCount());
+                    columns = new ArrayList<>(metadata.getColumnCount());
                     Set<String> usedColumns = new HashSet<>();
                     for (int index = 1; index <= metadata.getColumnCount(); index++) {
                         String baseName = metadata.getColumnLabel(index);
@@ -94,7 +116,7 @@ public class JdbcQueryExecutor {
                         }
                         columns.add(column);
                     }
-                    List<Map<String, Object>> rows = new ArrayList<>();
+                    rows = new ArrayList<>();
                     while (resultSet.next() && rows.size() < maxRows) {
                         Map<String, Object> row = new LinkedHashMap<>(columns.size());
                         for (int index = 1; index <= columns.size(); index++) {
@@ -102,16 +124,63 @@ public class JdbcQueryExecutor {
                         }
                         rows.add(row);
                     }
-                    return new QueryResult(columns, rows);
                 } finally {
                     runningStatements.remove(queryId);
                 }
             }
+            boolean truncated = rows.size() >= maxRows;
+            long total = rows.size();
+            if (truncated) {
+                total = resolveTotal(connection, queryId, sql, parameters, countSql, countParameters, total);
+            }
+            return new QueryResult(columns, rows, total, truncated);
         } catch (SQLException exception) {
             throw new BusinessException("查询执行失败：" + exception.getMessage());
         } finally {
             limits.release();
         }
+    }
+
+    /**
+     * 触顶后解析真实总数；COUNT 失败则降级为已返回行数。
+     */
+    private long resolveTotal(Connection connection,
+                              String queryId,
+                              String dataSql,
+                              List<Object> dataParameters,
+                              String countSql,
+                              List<Object> countParameters,
+                              long fallback) {
+        String sql = countSql == null || countSql.isBlank() ? wrapCountSql(dataSql) : countSql;
+        List<Object> bound = countParameters != null ? countParameters : dataParameters;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setQueryTimeout(effectiveTimeoutSeconds());
+            for (int index = 0; index < bound.size(); index++) {
+                statement.setObject(index + 1, bound.get(index));
+            }
+            runningStatements.put(queryId, statement);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return Math.max(fallback, resultSet.getLong(1));
+                }
+            } finally {
+                runningStatements.remove(queryId);
+            }
+        } catch (SQLException ignored) {
+            // 降级：总数至少为已返回行数，truncated 仍为 true
+        }
+        return fallback;
+    }
+
+    /**
+     * 将业务 SQL 包装为 COUNT 查询；去掉末尾分号。
+     */
+    static String wrapCountSql(String sql) {
+        String trimmed = sql == null ? "" : sql.trim();
+        while (trimmed.endsWith(";")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1).trim();
+        }
+        return "SELECT COUNT(*) FROM (" + trimmed + ") omni_cnt";
     }
 
     /**
@@ -284,10 +353,18 @@ public class JdbcQueryExecutor {
     /**
      * JDBC 查询结果。
      *
-     * @param columns 按结果集顺序排列且已消除重名的列名
-     * @param rows    按列顺序保存键值的结果行
+     * @param columns   按结果集顺序排列且已消除重名的列名
+     * @param rows      按列顺序保存键值的结果行（受 max-rows 限制）
+     * @param total     真实命中行数（未截断时等于 rows.size；截断时来自 COUNT 或降级值）
+     * @param truncated 是否因 max-rows 触顶而可能未拉全明细
      */
-    public record QueryResult(List<String> columns, List<Map<String, Object>> rows) {
+    public record QueryResult(List<String> columns, List<Map<String, Object>> rows, long total, boolean truncated) {
+        /**
+         * 兼容旧调用：总数等于行数，视为未截断。
+         */
+        public QueryResult(List<String> columns, List<Map<String, Object>> rows) {
+            this(columns, rows, rows == null ? 0L : rows.size(), false);
+        }
     }
 
     /**

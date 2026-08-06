@@ -21,8 +21,9 @@ import { resolveSqlDialect } from '@/sql/dialects'
 import { QUERY_RESULT_DISPLAY_LIMIT } from '@/query/limits'
 import { formatDuration } from '@/query/duration'
 import { alignNamedParameters, alignSqlParameters, extractNamedPlaceholders } from '@/sql/parameters'
-import { chartTypeOptions, mergeChartConfig, parseChartConfig, type ChartEncoding } from '@/dashboard/config'
+import { chartTypeOptions, mergeChartConfig, parseChartConfig, type ChartEncoding, type TableStyle } from '@/dashboard/config'
 import ChartEncodingForm from '@/components/ChartEncodingForm.vue'
+import TableStyleForm from '@/components/TableStyleForm.vue'
 
 const { t } = useI18n()
 const userStore = useUserStore()
@@ -51,6 +52,7 @@ const result = ref<QueryResult>()
 const chartType = ref('table')
 const chartEncoding = ref<ChartEncoding>({})
 const chartDrillPath = ref<string[]>([])
+const chartTableStyle = ref<TableStyle>({})
 const chartConfigBase = ref<Record<string, unknown>>({})
 const questionName = ref('')
 const questionDescription = ref('')
@@ -149,7 +151,8 @@ async function hydrateQuestion(id: string) {
   const parsedConfig = parseChartConfig(chart.configJson)
   chartEncoding.value = parsedConfig.encoding || {}
   chartDrillPath.value = parsedConfig.drillPath || []
-  const { encoding: _ignored, drillPath: _drill, ...rest } = parsedConfig
+  chartTableStyle.value = parsedConfig.tableStyle || {}
+  const { encoding: _ignored, drillPath: _drill, tableStyle: _style, ...rest } = parsedConfig
   chartConfigBase.value = rest
   collectionId.value = chart.collectionId
   const submission = JSON.parse(chart.queryJson || '{}') as QuerySubmission
@@ -310,7 +313,12 @@ async function saveQuestion() {
     collectionId: collectionId.value,
     queryJson: JSON.stringify(payload()),
     chartType: chartType.value || 'table',
-    configJson: mergeChartConfig(chartConfigBase.value, chartEncoding.value, chartDrillPath.value),
+    configJson: mergeChartConfig(
+      chartConfigBase.value,
+      chartEncoding.value,
+      chartDrillPath.value,
+      chartTableStyle.value,
+    ),
     datasetId: mode.value === 'visual' ? definition.datasetId : undefined,
     dataSourceId: mode.value === 'sql' ? sourceId.value : undefined,
   }
@@ -477,17 +485,16 @@ watch(sourceId, async (value) => {
     <el-card v-if="result" class="result-card">
       <div class="toolbar">
         <strong>
-          {{ t('workbench.resultRows', { n: Math.min(result.rows.length, QUERY_RESULT_DISPLAY_LIMIT) }) }}
-          <template v-if="elapsedText"> · {{ t('workbench.duration') }} {{ elapsedText }}</template>
-          <template v-if="result.rows.length > QUERY_RESULT_DISPLAY_LIMIT">{{ t('workbench.truncated') }}</template>
-          ）
+              {{ t('workbench.resultRows', { n: result.rows.length }) }}
+              <template v-if="elapsedText"> · {{ t('workbench.duration') }} {{ elapsedText }}</template>
+              ）
         </strong>
         <div>
           <el-button @click="createExport('CSV')">{{ t('sql.exportCsv') }}</el-button>
           <el-button @click="createExport('XLSX')">{{ t('sql.exportXlsx') }}</el-button>
         </div>
       </div>
-      <QueryResultTable :result="result" :max-height="380" />
+      <QueryResultTable :result="result" :table-style="chartTableStyle" :max-height="380" />
       <el-divider />
       <div v-if="userStore.hasPermission('chart:create')" class="toolbar">
         <span>{{ t('workbench.displayType') }}</span>
@@ -501,6 +508,11 @@ watch(sourceId, async (value) => {
         </el-select>
         <el-button type="primary" @click="saveQuestion">{{ editingExisting ? t('workbench.saveChanges') : t('chart.saveAs') }}</el-button>
       </div>
+      <TableStyleForm
+        v-if="result && chartType === 'table'"
+        v-model="chartTableStyle"
+        :columns="result.columns"
+      />
       <ChartEncodingForm
         v-if="result"
         v-model="chartEncoding"
@@ -512,7 +524,7 @@ watch(sourceId, async (value) => {
         v-if="chartType !== 'table'"
         :result="result"
         :type="chartType"
-        :option="JSON.parse(mergeChartConfig(chartConfigBase, chartEncoding, chartDrillPath))"
+        :option="JSON.parse(mergeChartConfig(chartConfigBase, chartEncoding, chartDrillPath, chartTableStyle))"
       />
     </el-card>
   </div>

@@ -142,4 +142,29 @@ class QueryParameterApplierTest {
                 .containsEntry("channel_id", 93)
                 .containsEntry("start_date", "2026-08-04");
     }
+
+    @Test
+    void SQL可选空参写入null且不抛NPE() {
+        QueryService.QuerySubmission submission =
+                new QueryService.QuerySubmission(3L,
+                        "SELECT * FROM t WHERE (:channelName IS NULL OR t.name LIKE CONCAT('%', :channelName, '%'))"
+                                + " AND d = :date",
+                        List.of(), null);
+        List<QueryParameterApplier.Binding> bindings = List.of(
+                new QueryParameterApplier.Binding("channelName", "sql", null, null, null, "channelName"),
+                new QueryParameterApplier.Binding("date", "sql", null, null, null, "date"));
+
+        QueryService.QuerySubmission applied = applier.apply(submission, bindings,
+                Map.of("date", "2026-08-06"),
+                Map.of(
+                        "channelName", new QueryParameterApplier.ParameterMeta("channelName", "text", false),
+                        "date", new QueryParameterApplier.ParameterMeta("date", "date", false)));
+
+        assertThat(applied.namedParameters())
+                .containsEntry("channelName", null)
+                .containsEntry("date", "2026-08-06");
+        NamedSqlExpander.Expanded expanded = NamedSqlExpander.expand(
+                applied.sql(), applied.parameters(), applied.namedParameters());
+        assertThat(expanded.parameters()).containsExactly(null, null, "2026-08-06");
+    }
 }

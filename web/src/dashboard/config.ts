@@ -255,10 +255,92 @@ export interface ChartEncoding {
   lat?: string
 }
 
+/** 表格列展示格式 */
+export type TableColumnFormat = 'auto' | 'text' | 'number' | 'percent' | 'datetime' | 'boolean' | 'link'
+
+/** 单列样式 */
+export interface TableColumnStyle {
+  format?: TableColumnFormat
+  align?: 'left' | 'center' | 'right'
+  /** 单元格文字色 */
+  color?: string
+}
+
+/** 条件行背景规则（按数组顺序，首条命中生效） */
+export interface TableRowRule {
+  field: string
+  op: 'EQ' | 'NE' | 'LIKE'
+  value: string
+  background: string
+}
+
+/** 表格图表的列格式与条件行色 */
+export interface TableStyle {
+  columns?: Record<string, TableColumnStyle>
+  rowRules?: TableRowRule[]
+}
+
 export type ChartConfigObject = Record<string, unknown> & {
   encoding?: ChartEncoding
   /** 有序维度路径；长度 ≥ 2 时启用同结果集下钻 */
   drillPath?: string[]
+  /** 表格展示样式（仅 chartType=table 时使用） */
+  tableStyle?: TableStyle
+}
+
+const COLUMN_FORMATS: readonly TableColumnFormat[] = [
+  'auto', 'text', 'number', 'percent', 'datetime', 'boolean', 'link',
+]
+const ALIGNS = ['left', 'center', 'right'] as const
+const ROW_OPS = ['EQ', 'NE', 'LIKE'] as const
+
+/** 规范化 tableStyle，剔除非法字段 */
+export function normalizeTableStyle(raw: unknown): TableStyle | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const source = raw as Record<string, unknown>
+  const columns: Record<string, TableColumnStyle> = {}
+  if (source.columns && typeof source.columns === 'object' && !Array.isArray(source.columns)) {
+    for (const [name, style] of Object.entries(source.columns as Record<string, unknown>)) {
+      if (!name || !style || typeof style !== 'object' || Array.isArray(style)) continue
+      const item = style as Record<string, unknown>
+      const next: TableColumnStyle = {}
+      if (typeof item.format === 'string' && COLUMN_FORMATS.includes(item.format as TableColumnFormat)) {
+        next.format = item.format as TableColumnFormat
+      }
+      if (typeof item.align === 'string' && (ALIGNS as readonly string[]).includes(item.align)) {
+        next.align = item.align as TableColumnStyle['align']
+      }
+      if (typeof item.color === 'string' && item.color.trim()) {
+        next.color = item.color.trim()
+      }
+      if (next.format || next.align || next.color) columns[name] = next
+    }
+  }
+  const rowRules: TableRowRule[] = []
+  if (Array.isArray(source.rowRules)) {
+    for (const rule of source.rowRules) {
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) continue
+      const item = rule as Record<string, unknown>
+      const field = typeof item.field === 'string' ? item.field.trim() : ''
+      const op = typeof item.op === 'string' && (ROW_OPS as readonly string[]).includes(item.op)
+        ? (item.op as TableRowRule['op'])
+        : undefined
+      const value = item.value == null ? '' : String(item.value)
+      const background = typeof item.background === 'string' ? item.background.trim() : ''
+      if (!field || !op || !background) continue
+      rowRules.push({ field, op, value, background })
+    }
+  }
+  if (!Object.keys(columns).length && !rowRules.length) return undefined
+  return {
+    ...(Object.keys(columns).length ? { columns } : {}),
+    ...(rowRules.length ? { rowRules } : {}),
+  }
+}
+
+/** tableStyle 是否包含可保存的配置 */
+export function hasTableStyle(style?: TableStyle | null): boolean {
+  return !!normalizeTableStyle(style)
 }
 
 export function parseChartConfig(configJson?: string): ChartConfigObject {
@@ -269,9 +351,11 @@ export function parseChartConfig(configJson?: string): ChartConfigObject {
     const drillPath = Array.isArray(config.drillPath)
       ? config.drillPath.filter((item): item is string => typeof item === 'string')
       : undefined
+    const tableStyle = normalizeTableStyle(config.tableStyle)
     return {
       ...config,
       drillPath: drillPath?.length ? drillPath : undefined,
+      tableStyle,
     }
   } catch {
     return {}
@@ -282,6 +366,7 @@ export function mergeChartConfig(
   base: Record<string, unknown>,
   encoding: ChartEncoding | undefined,
   drillPath?: string[],
+  tableStyle?: TableStyle | null,
 ): string {
   const next: ChartConfigObject = { ...base }
   const hasEncoding = !!(encoding && (
@@ -302,6 +387,14 @@ export function mergeChartConfig(
     next.drillPath = path
   } else {
     delete next.drillPath
+  }
+  const normalized = tableStyle === undefined
+    ? normalizeTableStyle(next.tableStyle)
+    : normalizeTableStyle(tableStyle)
+  if (normalized) {
+    next.tableStyle = normalized
+  } else {
+    delete next.tableStyle
   }
   return JSON.stringify(next)
 }

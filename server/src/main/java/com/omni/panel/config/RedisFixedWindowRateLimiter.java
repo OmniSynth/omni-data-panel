@@ -24,6 +24,13 @@ public class RedisFixedWindowRateLimiter implements RateLimiter {
         this.keyTtl = window.multipliedBy(2);
     }
 
+    /**
+     * 在当前固定窗口内递增计数并判断是否未超限。
+     *
+     * @param key   限流键
+     * @param limit 窗口内允许的最大请求数
+     * @return 未超限时为 true；limit 小于 1 或 Redis 异常时为 false
+     */
     @Override
     public boolean tryAcquire(String key, int limit) {
         if (limit < 1) {

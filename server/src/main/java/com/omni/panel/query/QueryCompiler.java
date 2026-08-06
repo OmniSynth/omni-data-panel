@@ -115,9 +115,12 @@ public class QueryCompiler {
             }).toList();
             sql.append(" ORDER BY ").append(String.join(", ", sorts));
         }
+        String unlimitedSql = sql.toString();
+        List<Object> countParameters = List.copyOf(parameters);
+        String countSql = "SELECT COUNT(*) FROM (" + unlimitedSql + ") omni_cnt";
         sql.append(' ').append(plugin.limitPlaceholder());
-        parameters.add(request.limit() == null ? 1000 : request.limit());
-        return new CompiledQuery(sql.toString(), List.copyOf(parameters));
+        parameters.add(request.limit() == null ? 50_000 : request.limit());
+        return new CompiledQuery(sql.toString(), List.copyOf(parameters), countSql, countParameters);
     }
 
     /**
@@ -340,9 +343,17 @@ public class QueryCompiler {
     /**
      * 编译完成的参数化查询。
      *
-     * @param sql        包含占位符的 SQL 文本
-     * @param parameters 按占位符顺序排列的参数
+     * @param sql              包含占位符的 SQL 文本（明细查询，可含 LIMIT）
+     * @param parameters       按占位符顺序排列的参数
+     * @param countSql         用于真实总数的 COUNT SQL；为 null 时由执行器对明细 SQL 包装
+     * @param countParameters  COUNT 查询参数
      */
-    public record CompiledQuery(String sql, List<Object> parameters) {
+    public record CompiledQuery(String sql, List<Object> parameters, String countSql, List<Object> countParameters) {
+        /**
+         * 无独立 COUNT SQL 时的便捷构造（如 distinct 查询）。
+         */
+        public CompiledQuery(String sql, List<Object> parameters) {
+            this(sql, parameters, null, null);
+        }
     }
 }

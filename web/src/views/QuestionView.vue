@@ -173,6 +173,7 @@ onMounted(load)
         :type="chart.chartType"
         :result="result"
         :option="JSON.parse(chart.configJson || '{}')"
+        :fill="false"
       />
     </el-card>
     <el-card v-if="activeLinks.length" class="mt">

@@ -5,8 +5,8 @@ import { useI18n } from 'vue-i18n'
 import type { QueryResult } from '@/types'
 import { QUERY_RESULT_DISPLAY_LIMIT } from '@/query/limits'
 import QueryResultTable from '@/components/QueryResultTable.vue'
-import type { ChartEncoding } from '@/dashboard/config'
-import { resolveValueColumns } from '@/dashboard/config'
+import type { ChartEncoding, TableStyle } from '@/dashboard/config'
+import { normalizeTableStyle, resolveValueColumns } from '@/dashboard/config'
 import {
   aggregateRows,
   canDrill,
@@ -22,7 +22,17 @@ const props = defineProps<{
   type: string
   option?: Record<string, unknown>
   interactive?: boolean
+  /**
+   * 表格是否铺满父容器。
+   * 仪表盘卡片等有固定高度时应为 true；图表详情等随内容增高时应为 false。
+   */
+  fill?: boolean
 }>()
+
+const tableFill = computed(() => props.fill !== false)
+
+const tableStyle = computed<TableStyle | undefined>(() =>
+  normalizeTableStyle(props.option?.tableStyle))
 
 const emit = defineEmits<{
   click: [{ label: string; seriesName?: string; value?: number | string }]
@@ -55,6 +65,10 @@ const drillEnabled = computed(() => canDrill(drillPath.value))
 
 const cappedSource = computed<QueryResult | undefined>(() => {
   if (!props.result) return undefined
+  // 表格走全量 + 客户端分页；图表类可视化仍限制点数以免卡死
+  if (props.type === 'table') {
+    return props.result
+  }
   return {
     columns: props.result.columns,
     rows: props.result.rows.slice(0, QUERY_RESULT_DISPLAY_LIMIT),
@@ -412,7 +426,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="chart-preview">
+  <div class="chart-preview" :class="{ 'is-table': type === 'table', 'table-fill': type === 'table' && tableFill }">
     <div v-if="drillEnabled && drillStack.length" class="drill-bar">
       <button type="button" class="drill-crumb" @click="drillTo(-1)">{{ t('drill.all') }}</button>
       <template v-for="(item, index) in drillStack" :key="`${item.field}-${item.value}-${index}`">
@@ -426,7 +440,12 @@ onBeforeUnmount(() => {
       </button>
     </div>
     <div v-if="type === 'table'" class="table-box">
-      <QueryResultTable :result="displayResult" :max-height="320" />
+      <QueryResultTable
+        :result="displayResult"
+        :table-style="tableStyle"
+        :fill="tableFill"
+        :max-height="tableFill ? undefined : 480"
+      />
     </div>
     <div v-else-if="type === 'kpi'" class="kpi-box">
       <div class="kpi-value">{{ kpiValue }}</div>
@@ -443,6 +462,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+}
+.chart-preview.is-table:not(.table-fill) {
+  height: auto;
+  overflow: visible;
 }
 .drill-bar {
   display: flex;
@@ -469,8 +492,28 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: 12px;
 }
-.table-box { width: 100%; flex: 1; min-height: 220px; }
-.chart-box { width: 100%; flex: 1; min-height: 220px; }
+.table-box {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.chart-preview.is-table:not(.table-fill) .table-box {
+  flex: 0 1 auto;
+  overflow: visible;
+}
+.table-box :deep(.result-table) {
+  flex: 1;
+  min-height: 0;
+}
+.chart-preview.is-table:not(.table-fill) .table-box :deep(.result-table) {
+  flex: none;
+  height: auto;
+  max-height: none;
+}
+.chart-box { width: 100%; flex: 1; min-height: 0; }
 .chart-box.interactive { cursor: pointer; }
 .kpi-box {
   width: 100%;

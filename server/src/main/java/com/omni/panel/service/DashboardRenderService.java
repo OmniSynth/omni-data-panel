@@ -225,9 +225,11 @@ public class DashboardRenderService {
                     card.getClickActionJson(), null,
                     exception.getMessage() == null ? "图表查询失败" : exception.getMessage());
         } catch (Exception exception) {
+            String detail = exception.getMessage();
             return new RenderedCard(card.getId(), card.getTitle(), chart.getChartType(),
                     chart.getConfigJson(), card.getLayoutJson(), card.getBindingsJson(),
-                    card.getClickActionJson(), null, "图表查询配置错误");
+                    card.getClickActionJson(), null,
+                    detail == null || detail.isBlank() ? "图表查询配置错误" : ("图表查询配置错误：" + detail));
         } finally {
             SecurityContextHolder.setContext(originalContext);
         }

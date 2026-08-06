@@ -55,6 +55,13 @@ public class SystemLogBufferAppender extends AppenderBase<ILoggingEvent> {
         }
     }
 
+    /**
+     * 从日志事件中读取 MDC 键值；空白视为缺失。
+     *
+     * @param event Logback 日志事件
+     * @param key   MDC 键名
+     * @return 去首尾空白后的值，或 null
+     */
     private static String mdcValue(ILoggingEvent event, String key) {
         if (event.getMDCPropertyMap() == null) {
             return null;

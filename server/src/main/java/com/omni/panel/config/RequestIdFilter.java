@@ -25,6 +25,13 @@ public class RequestIdFilter extends OncePerRequestFilter {
 
     private static final Pattern SAFE_ID = Pattern.compile("^[A-Za-z0-9._-]{8,128}$");
 
+    /**
+     * 解析或生成 requestId，写入 MDC 与响应头，并在请求结束后清理 MDC。
+     *
+     * @param request  HTTP 请求
+     * @param response HTTP 响应
+     * @param chain    过滤器链
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {

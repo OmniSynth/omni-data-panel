@@ -32,6 +32,10 @@ public class DelegatingRateLimiter implements RateLimiter {
         this.redisLimiter = redis == null ? null : new RedisFixedWindowRateLimiter(redis, window);
     }
 
+    /**
+     * @param redisLimiter Redis 限流实现，可为 null
+     * @param local        本机降级限流实现
+     */
     private DelegatingRateLimiter(RateLimiter redisLimiter, RateLimiter local) {
         this.redisLimiter = redisLimiter;
         this.local = local;
@@ -44,6 +48,13 @@ public class DelegatingRateLimiter implements RateLimiter {
         return new DelegatingRateLimiter(redisLimiter, local);
     }
 
+    /**
+     * 优先通过 Redis 尝试获取配额；失败或未配置时降级为本机限流。
+     *
+     * @param key   限流键
+     * @param limit 窗口内允许的最大请求数
+     * @return 未超限时为 true
+     */
     @Override
     public boolean tryAcquire(String key, int limit) {
         if (redisLimiter != null) {

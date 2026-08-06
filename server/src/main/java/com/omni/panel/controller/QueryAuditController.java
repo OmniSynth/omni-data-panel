@@ -27,6 +27,9 @@ import com.omni.panel.service.QueryAuditService;
 public class QueryAuditController {
     private final QueryAuditService service;
 
+    /**
+     * @param service 查询审计服务
+     */
     public QueryAuditController(QueryAuditService service) {
         this.service = service;
     }

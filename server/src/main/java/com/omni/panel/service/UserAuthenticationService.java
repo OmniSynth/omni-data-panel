@@ -18,6 +18,11 @@ import com.omni.panel.mapper.UserMapper;
 public class UserAuthenticationService {
     private final UserMapper userMapper;
 
+    /**
+     * 注入用户数据访问。
+     *
+     * @param userMapper 用户持久化
+     */
     public UserAuthenticationService(UserMapper userMapper) {
         this.userMapper = userMapper;
     }

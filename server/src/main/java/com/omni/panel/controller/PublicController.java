@@ -25,6 +25,12 @@ public class PublicController {
     private final SubscriptionPrintTokenService printTokenService;
     private final SettingService settingService;
 
+    /**
+     * @param publicLinkService  公开链接查询
+     * @param renderService      仪表盘与图表渲染
+     * @param printTokenService  订阅打印令牌解析
+     * @param settingService     站点品牌设置
+     */
     public PublicController(PublicLinkService publicLinkService, DashboardRenderService renderService,
                             SubscriptionPrintTokenService printTokenService, SettingService settingService) {
         this.publicLinkService = publicLinkService;

@@ -17,6 +17,11 @@ import com.omni.panel.service.SearchService;
 public class SearchController {
     private final SearchService service;
 
+    /**
+     * 注入全局搜索业务服务。
+     *
+     * @param service 搜索服务
+     */
     public SearchController(SearchService service) {
         this.service = service;
     }

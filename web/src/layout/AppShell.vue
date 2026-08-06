@@ -8,6 +8,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { authApi, collectionApi, dashboardApi, settingsApi } from '@/api'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import FontSizeSwitcher from '@/components/FontSizeSwitcher.vue'
 import { minLengthRule, requiredRule, validateForm } from '@/form/rules'
 import { resourcePath, resourceTypeLabel } from '@/nav'
 import { refreshShellNavKey } from '@/nav/shellNav'
@@ -440,6 +441,7 @@ onMounted(loadShell)
       </div>
       <div class="top-actions">
         <ThemeSwitcher size="small" />
+        <FontSizeSwitcher size="small" />
         <LanguageSwitcher size="small" />
         <el-dropdown trigger="click" @command="openCreate">
           <el-button type="primary">{{ t('shell.create') }}</el-button>

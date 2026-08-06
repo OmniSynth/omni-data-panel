@@ -159,7 +159,7 @@ public class QueryService {
                 submission.namedParameters());
         sqlObjectAccessGuard.validateForCurrentUser(
                 source.getId(), expanded.sql(), source.getDefaultDatabase());
-        return new Execution(source, expanded.sql(), expanded.parameters());
+        return new Execution(source, expanded.sql(), expanded.parameters(), null, null);
     }
 
     /**
@@ -197,7 +197,8 @@ public class QueryService {
                 : dataPolicyMapper.rowRules(dataset.getId(), user.id()).stream().map(this::parseRule).toList();
         QueryCompiler.CompiledQuery compiled = compiler.compile(
                 expanded, definition, denied, rowRules, dialectRegistry.resolve(source));
-        return new Execution(source, compiled.sql(), compiled.parameters());
+        return new Execution(source, compiled.sql(), compiled.parameters(),
+                compiled.countSql(), compiled.countParameters());
     }
 
     /**
@@ -301,7 +302,8 @@ public class QueryService {
         stateStore.save(snapshot(queryId, userId, execution.source().getId(), "RUNNING", null, null, startedAtMs));
         try {
             JdbcQueryExecutor.QueryResult result = executor.execute(
-                    queryId, userId, execution.source(), execution.sql(), execution.parameters());
+                    queryId, userId, execution.source(), execution.sql(), execution.parameters(),
+                    execution.countSql(), execution.countParameters());
             QueryStateStore.QuerySnapshot current = stateStore.get(queryId);
             if (current != null && "CANCELLED".equals(current.status())) {
                 finishAudit(queryId, "CANCELLED", null, null, startedAtMs);
@@ -438,10 +440,13 @@ public class QueryService {
     /**
      * 查询执行的内部上下文：目标数据源、SQL 及参数。
      *
-     * @param source     目标数据源
-     * @param sql        待执行 SQL
-     * @param parameters 占位符参数
+     * @param source          目标数据源
+     * @param sql             待执行 SQL
+     * @param parameters      占位符参数
+     * @param countSql        可选 COUNT SQL（语义查询不含 LIMIT）
+     * @param countParameters COUNT 参数
      */
-    private record Execution(DataSourceEntity source, String sql, List<Object> parameters) {
+    private record Execution(DataSourceEntity source, String sql, List<Object> parameters,
+                             String countSql, List<Object> countParameters) {
     }
 }

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import FontSizeSwitcher from '@/components/FontSizeSwitcher.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -55,6 +56,7 @@ const active = computed(() => {
       </div>
       <div class="top-actions">
         <ThemeSwitcher size="small" />
+        <FontSizeSwitcher size="small" />
         <LanguageSwitcher size="small" />
         <el-button plain @click="router.push('/')">{{ t('adminShell.exit') }}</el-button>
       </div>

@@ -18,6 +18,13 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepo
 @Configuration
 @ConditionalOnProperty(prefix = "omni.security.oidc", name = "enabled", havingValue = "true")
 public class OidcClientConfiguration {
+    /**
+     * 注册 OAuth2 客户端：从 Issuer 发现元数据并构建内存中的 ClientRegistration。
+     *
+     * @param properties OIDC 配置
+     * @return 客户端注册仓库
+     * @throws IllegalStateException OIDC 已启用但关键配置缺失时
+     */
     @Bean
     ClientRegistrationRepository clientRegistrationRepository(OidcProperties properties) {
         if (!properties.isConfigured()) {
@@ -35,11 +42,23 @@ public class OidcClientConfiguration {
         return new InMemoryClientRegistrationRepository(registration);
     }
 
+    /**
+     * 提供进程内 OAuth2 已授权客户端存储服务。
+     *
+     * @param repository 客户端注册仓库
+     * @return 已授权客户端服务
+     */
     @Bean
     OAuth2AuthorizedClientService authorizedClientService(ClientRegistrationRepository repository) {
         return new InMemoryOAuth2AuthorizedClientService(repository);
     }
 
+    /**
+     * 将已授权客户端与当前认证主体绑定的仓库实现。
+     *
+     * @param clientService 已授权客户端服务
+     * @return 已授权客户端仓库
+     */
     @Bean
     OAuth2AuthorizedClientRepository authorizedClientRepository(OAuth2AuthorizedClientService clientService) {
         return new AuthenticatedPrincipalOAuth2AuthorizedClientRepository(clientService);

@@ -31,6 +31,7 @@ spring:
       password: ${REDIS_PASSWORD:123456}
       timeout: 2s
       connect-timeout: 2s
+      database: ${REDIS_DATABASE:0}
   quartz:
     job-store-type: jdbc
     jdbc:
@@ -91,6 +92,7 @@ logging:
 
 omni:
   observability:
+    # Prometheus 刮取令牌；空则 /actuator/prometheus 返回 404
     metrics-token: ${OMNI_METRICS_TOKEN:}
   security:
     jwt-secret: ${JWT_SECRET:}
@@ -98,24 +100,28 @@ omni:
     initial-admin-password: ${ADMIN_INITIAL_PASSWORD:}
     # 可信反向代理 CIDR/IP（逗号分隔）；空则忽略 X-Forwarded-For / X-Real-IP
     trusted-proxies: ${TRUSTED_PROXIES:}
+    # 登录 / 公开链接 / 嵌入 API 的每 IP 每分钟限额（Redis 优先，失败降级本机）
     rate-limit:
       enabled: ${RATE_LIMIT_ENABLED:true}
       auth-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:30}
       public-per-minute: ${RATE_LIMIT_PUBLIC_PER_MINUTE:120}
       embed-per-minute: ${RATE_LIMIT_EMBED_PER_MINUTE:180}
+    # 企业 OIDC SSO；enabled=false 或不配齐 issuer/client 时不注册 OAuth2 客户端
     oidc:
       enabled: ${OIDC_ENABLED:false}
       issuer-uri: ${OIDC_ISSUER_URI:}
       client-id: ${OIDC_CLIENT_ID:}
       client-secret: ${OIDC_CLIENT_SECRET:}
       client-name: ${OIDC_CLIENT_NAME:企业登录}
+      # JIT 建号默认角色编码；不可为 ADMIN
       default-role-code: ${OIDC_DEFAULT_ROLE_CODE:USER}
+      # 回调后前端兑换页；空则由 subscription.frontend-url + /login/oidc/callback 推导
       frontend-redirect-uri: ${OIDC_FRONTEND_REDIRECT_URI:}
   crypto:
     master-key: ${CREDENTIAL_MASTER_KEY:}
   query:
     timeout-seconds: ${QUERY_TIMEOUT_SECONDS:30}
-    max-rows: ${QUERY_MAX_ROWS:1000}
+    max-rows: ${QUERY_MAX_ROWS:50000}
     # 仪表盘按波次并行；用户并发宜大于单看板卡片数，避免互相挤占
     per-user-concurrency: ${QUERY_USER_CONCURRENCY:16}
     per-source-concurrency: ${QUERY_SOURCE_CONCURRENCY:8}

@@ -921,9 +921,16 @@ onBeforeUnmount(() => {
   padding: 10px;
   overflow: hidden;
   border: 2px solid transparent;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .grid-stack-item-content.selected { border-color: var(--el-color-primary); }
-.card-head { height: 32px; display: flex; align-items: center; justify-content: space-between; }
+.card-head { height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
+.grid-stack-item-content :deep(.chart-preview) {
+  flex: 1;
+  min-height: 0;
+}
 .side-panel h4 { margin: 0 0 8px; }
 .side-panel .mt { margin-top: 16px; }
 @media (max-width: 1100px) {

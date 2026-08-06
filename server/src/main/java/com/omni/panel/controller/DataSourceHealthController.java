@@ -16,6 +16,11 @@ import com.omni.panel.service.DataSourceHealthService;
 public class DataSourceHealthController {
     private final DataSourceHealthService service;
 
+    /**
+     * 注入数据源健康监控业务服务。
+     *
+     * @param service 数据源健康服务
+     */
     public DataSourceHealthController(DataSourceHealthService service) {
         this.service = service;
     }

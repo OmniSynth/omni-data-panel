@@ -103,6 +103,7 @@ openssl rand -base64 32
 - [ ] （若启用）订阅任务在多实例下不重复发送；调度页可创建元数据同步任务
 - [ ] 故意输错密码多次，观察鉴权限流是否返回 429（多副本时配额在 Redis 合计）
 - [ ] （若启用）Prometheus 刮取带 `OMNI_METRICS_TOKEN` 成功；系统日志可按 `requestId` 检索
+- [ ] 匿名访问 `GET /api/public/site` 与 `GET /api/auth/oidc/status` 返回 **200 JSON**（若空 body 403，多为服务端镜像未更新或安全链未生效，需重建并重启 `server`）
 
 ## 8. 相关文档
 

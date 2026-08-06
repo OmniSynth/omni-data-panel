@@ -24,7 +24,7 @@ public record QueryRequest(
         List<Long> metricIds,
         FilterNode filter,
         List<SortItem> sorts,
-        @Min(1) @Max(1000) Integer limit
+        @Min(1) @Max(50000) Integer limit
 ) {
     /**
      * 过滤条件节点；包含子节点时表示逻辑组合，否则表示字段条件。

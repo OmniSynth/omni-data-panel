@@ -53,6 +53,7 @@ onMounted(load)
         :type="question.chartType"
         :result="question.result"
         :option="chartOption(question.configJson)"
+        :fill="false"
       />
     </el-card>
   </div>

@@ -10,6 +10,7 @@ import router from './router'
 import i18n, { elementLocale } from './i18n'
 import { useUserStore } from './stores/user'
 import { useThemeStore } from './stores/theme'
+import { useFontSizeStore } from './stores/fontSize'
 
 const permission: Directive<HTMLElement, string> = {
   mounted(element, binding) {
@@ -25,4 +26,5 @@ const app = createApp(App)
   .directive('permission', permission)
 
 useThemeStore()
+useFontSizeStore()
 app.mount('#app')

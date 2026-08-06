@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import FontSizeSwitcher from '@/components/FontSizeSwitcher.vue'
 import { authApi } from '@/api'
 import { minLengthRule, requiredRule, validateForm } from '@/form/rules'
 
@@ -76,6 +77,7 @@ onMounted(load)
   <div class="setup">
     <div class="lang-pos">
       <ThemeSwitcher />
+      <FontSizeSwitcher />
       <LanguageSwitcher />
     </div>
     <el-card v-loading="loading" class="setup-card" shadow="never">

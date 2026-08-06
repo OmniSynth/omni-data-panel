@@ -33,6 +33,17 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
     private final OidcProperties oidcProperties;
     private final SubscriptionProperties subscriptionProperties;
 
+    /**
+     * 注入用户映射、JWT、会话、兑换码、审计与配置依赖。
+     *
+     * @param provisioningService      OIDC 用户映射服务
+     * @param jwtService               JWT 服务
+     * @param sessionRegistry          会话注册表
+     * @param exchangeCodeService      一次性兑换码服务
+     * @param loginAuditService        登录审计服务
+     * @param oidcProperties           OIDC 配置
+     * @param subscriptionProperties   订阅/前端 URL 配置
+     */
     public OidcLoginSuccessHandler(OidcUserProvisioningService provisioningService, JwtService jwtService,
                                    UserSessionRegistry sessionRegistry, OidcExchangeCodeService exchangeCodeService,
                                    LoginAuditService loginAuditService, OidcProperties oidcProperties,
@@ -46,6 +57,14 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
         this.subscriptionProperties = subscriptionProperties;
     }
 
+    /**
+     * OIDC 认证成功后映射本地用户、签发 JWT，并以兑换码重定向前端回调页。
+     *
+     * @param request        HTTP 请求
+     * @param response       HTTP 响应
+     * @param authentication 认证结果
+     * @throws IOException 重定向失败时
+     */
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException {
@@ -68,6 +87,12 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
         }
     }
 
+    /**
+     * 构造带兑换码的前端 OIDC 回调 URL。
+     *
+     * @param code 一次性兑换码
+     * @return 前端回调完整 URL
+     */
     private String frontendCallback(String code) {
         return UriComponentsBuilder.fromUriString(resolveFrontendRedirect())
                 .replaceQuery(null)
@@ -77,6 +102,13 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
                 .toUriString();
     }
 
+    /**
+     * 将错误信息作为查询参数重定向到前端 OIDC 回调页。
+     *
+     * @param response HTTP 响应
+     * @param message  错误信息
+     * @throws IOException 重定向失败时
+     */
     private void redirectFailure(HttpServletResponse response, String message) throws IOException {
         String target = UriComponentsBuilder.fromUriString(resolveFrontendRedirect())
                 .replaceQuery(null)
@@ -87,6 +119,11 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
         response.sendRedirect(target);
     }
 
+    /**
+     * 解析前端 OIDC 回调页 URL：优先使用配置项，否则由 frontend-url 推导。
+     *
+     * @return 前端回调页完整 URL
+     */
     private String resolveFrontendRedirect() {
         String configured = oidcProperties.frontendRedirectUri();
         if (configured != null && !configured.isBlank()) {

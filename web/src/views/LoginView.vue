@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { authApi, publicApi } from '@/api'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import FontSizeSwitcher from '@/components/FontSizeSwitcher.vue'
 import { requiredRule, validateForm } from '@/form/rules'
 import { applyDocumentTitle } from '@/siteBranding'
 import { useUserStore } from '@/stores/user'
@@ -153,6 +154,7 @@ function backToPassword() {
     <section class="panel">
       <div class="panel-tools">
         <ThemeSwitcher />
+        <FontSizeSwitcher />
         <LanguageSwitcher />
       </div>
       <div class="panel-card">

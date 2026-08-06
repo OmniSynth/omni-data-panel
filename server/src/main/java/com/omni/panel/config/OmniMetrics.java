@@ -14,6 +14,9 @@ import org.springframework.stereotype.Component;
 public class OmniMetrics {
     private final MeterRegistry registry;
 
+    /**
+     * @param registry Micrometer 指标注册表
+     */
     public OmniMetrics(MeterRegistry registry) {
         this.registry = registry;
     }
@@ -56,6 +59,12 @@ public class OmniMetrics {
                 .record(Duration.ofMillis(Math.max(0L, System.currentTimeMillis() - startedAtMs)));
     }
 
+    /**
+     * 将标签值规范为小写；空白或 null 映射为 {@code unknown}。
+     *
+     * @param value 原始标签值
+     * @return 规范化后的标签值
+     */
     private static String normalize(String value) {
         if (value == null || value.isBlank()) {
             return "unknown";

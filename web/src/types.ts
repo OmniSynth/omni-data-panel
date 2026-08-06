@@ -217,6 +217,10 @@ export interface QuerySnapshot {
 export interface QueryResult {
   columns: string[]
   rows: RecordData[]
+  /** 真实命中行数；缺省时前端回退为 rows.length */
+  total?: number
+  /** 明细是否因 max-rows 触顶截断 */
+  truncated?: boolean
 }
 
 export interface PageResult<T> {

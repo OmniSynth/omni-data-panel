@@ -19,6 +19,11 @@ import com.omni.panel.mapper.QueryAuditMapper;
 public class QueryAuditService {
     private final QueryAuditMapper mapper;
 
+    /**
+     * 注入查询审计数据访问。
+     *
+     * @param mapper 查询审计持久化
+     */
     public QueryAuditService(QueryAuditMapper mapper) {
         this.mapper = mapper;
     }

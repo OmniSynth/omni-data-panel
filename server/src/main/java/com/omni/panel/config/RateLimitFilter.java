@@ -33,6 +33,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimiter limiter;
     private final OmniMetrics omniMetrics;
 
+    /**
+     * @param properties   限流开关与各桶配额
+     * @param objectMapper 429 响应 JSON 序列化
+     * @param omniMetrics  限流指标
+     * @param limiter        限流器实现
+     */
     public RateLimitFilter(RateLimitProperties properties, ObjectMapper objectMapper, OmniMetrics omniMetrics,
                            RateLimiter limiter) {
         this.properties = properties;
@@ -41,6 +47,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         this.limiter = limiter;
     }
 
+    /**
+     * 对受保护路径按客户端 IP 限流；超限时返回 429 JSON。
+     *
+     * @param request  HTTP 请求
+     * @param response HTTP 响应
+     * @param chain    过滤器链
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
@@ -71,6 +84,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
+    /**
+     * 根据请求 URI 解析限流桶名。
+     *
+     * @param uri 请求路径
+     * @return auth / public / embed；不受限路径为 null
+     */
     private String resolveBucket(String uri) {
         if (uri == null) {
             return null;
@@ -89,6 +108,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return null;
     }
 
+    /**
+     * 返回指定桶的每分钟配额。
+     *
+     * @param bucket 桶名
+     * @return 每分钟允许的最大请求数
+     */
     private int limitFor(String bucket) {
         return switch (bucket) {
             case "auth" -> properties.authPerMinute();

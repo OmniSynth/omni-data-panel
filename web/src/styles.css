@@ -26,6 +26,7 @@
   --omni-font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --omni-title-size: 22px;
   --omni-body-size: 14px;
+  --omni-font-scale: 1;
 
   /* Element Plus 主色对齐品牌青蓝 */
   --el-color-primary: #509ee3;
@@ -72,6 +73,44 @@ html.dark {
 
   color-scheme: dark;
 }
+
+/* 全局字号档位：同步正文/标题与 Element Plus 组件字号 */
+html[data-font-size='small'] {
+  --omni-font-scale: 0.925;
+  --omni-body-size: 13px;
+  --omni-title-size: 20px;
+  --el-font-size-extra-large: 18px;
+  --el-font-size-large: 16px;
+  --el-font-size-medium: 14px;
+  --el-font-size-base: 13px;
+  --el-font-size-small: 12px;
+  --el-font-size-extra-small: 11px;
+}
+
+html[data-font-size='medium'] {
+  --omni-font-scale: 1;
+  --omni-body-size: 14px;
+  --omni-title-size: 22px;
+  --el-font-size-extra-large: 20px;
+  --el-font-size-large: 18px;
+  --el-font-size-medium: 16px;
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-extra-small: 12px;
+}
+
+html[data-font-size='large'] {
+  --omni-font-scale: 1.15;
+  --omni-body-size: 16px;
+  --omni-title-size: 26px;
+  --el-font-size-extra-large: 22px;
+  --el-font-size-large: 20px;
+  --el-font-size-medium: 18px;
+  --el-font-size-base: 16px;
+  --el-font-size-small: 14px;
+  --el-font-size-extra-small: 13px;
+}
+
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -111,7 +150,7 @@ body {
 .muted {
   color: var(--omni-muted);
   margin: var(--omni-space-1) 0 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--omni-font-scale));
 }
 
 /* SQL 联想弹层（常挂到 body，需全局样式兜底） */

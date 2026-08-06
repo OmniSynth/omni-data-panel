@@ -29,7 +29,12 @@ class RateLimitSecurityContractTest {
                 "disable",
                 "contentTypeOptions",
                 "STRICT_ORIGIN_WHEN_CROSS_ORIGIN",
-                "permissionsPolicy");
+                "permissionsPolicy",
+                "AntPathRequestMatcher",
+                "DispatcherType.ERROR",
+                "/api/public/**",
+                "/api/auth/oidc/status",
+                "FilterRegistrationBean");
 
         String filter = Files.readString(
                 Path.of("src/main/java/com/omni/panel/config/RateLimitFilter.java"), StandardCharsets.UTF_8);

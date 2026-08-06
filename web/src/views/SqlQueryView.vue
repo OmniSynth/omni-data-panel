@@ -23,8 +23,9 @@ import { resolveSqlDialect } from '@/sql/dialects'
 import { QUERY_RESULT_DISPLAY_LIMIT } from '@/query/limits'
 import { formatDuration } from '@/query/duration'
 import { alignNamedParameters, alignSqlParameters, extractNamedPlaceholders } from '@/sql/parameters'
-import { chartTypeOptions, mergeChartConfig, type ChartEncoding } from '@/dashboard/config'
+import { chartTypeOptions, mergeChartConfig, type ChartEncoding, type TableStyle } from '@/dashboard/config'
 import ChartEncodingForm from '@/components/ChartEncodingForm.vue'
+import TableStyleForm from '@/components/TableStyleForm.vue'
 
 const { t } = useI18n()
 const userStore = useUserStore()
@@ -52,6 +53,7 @@ const questionName = ref(typeof route.query.name === 'string' ? route.query.name
 const chartType = ref('table')
 const chartEncoding = ref<ChartEncoding>({})
 const chartDrillPath = ref<string[]>([])
+const chartTableStyle = ref<TableStyle>({})
 const saving = ref(false)
 const task = ref<QuerySnapshot>()
 const result = ref<QueryResult>()
@@ -70,7 +72,7 @@ const editorPlaceholder = computed(() => t('sql.editorPlaceholder'))
 const schemaTableCount = computed(() => countCompletionTables(completionPayload.value))
 const editorDefaultSchema = computed(() =>
   inferDefaultSchema(completionPayload.value, currentSource.value?.defaultDatabase))
-const resultCount = computed(() => Math.min(result.value?.rows.length || 0, QUERY_RESULT_DISPLAY_LIMIT))
+const resultCount = computed(() => result.value?.rows.length || 0)
 const selectedCollectionName = computed(() => {
   if (collectionId.value === undefined) return ''
   return collections.value.find((item) => String(item.id) === String(collectionId.value))?.name || ''
@@ -258,7 +260,7 @@ async function saveQuestion() {
       namedParameters: buildNamedPayload(),
     }),
     chartType: chartType.value || 'table',
-    configJson: mergeChartConfig({}, chartEncoding.value, chartDrillPath.value),
+    configJson: mergeChartConfig({}, chartEncoding.value, chartDrillPath.value, chartTableStyle.value),
     dataSourceId: sourceId.value,
   }
   saving.value = true
@@ -505,9 +507,6 @@ onBeforeUnmount(() => {
             <p class="section-meta">
               {{ t('sql.showRows', { n: resultCount }) }}
               <template v-if="elapsedText"> · {{ t('sql.duration') }} {{ elapsedText }}</template>
-              <template v-if="result.rows.length > QUERY_RESULT_DISPLAY_LIMIT">
-                {{ t('sql.truncatedTo', { n: QUERY_RESULT_DISPLAY_LIMIT }) }}
-              </template>
             </p>
           </div>
           <div class="result-actions">
@@ -516,7 +515,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <QueryResultTable :result="result" :max-height="420" />
+        <QueryResultTable :result="result" :table-style="chartTableStyle" :max-height="420" />
         <div v-if="canSave" class="encoding-block">
           <el-select v-model="chartType" style="width:150px;margin-right:8px">
             <el-option
@@ -526,6 +525,11 @@ onBeforeUnmount(() => {
               :value="option.value"
             />
           </el-select>
+          <TableStyleForm
+            v-if="chartType === 'table'"
+            v-model="chartTableStyle"
+            :columns="result.columns"
+          />
           <ChartEncodingForm
             v-model="chartEncoding"
             v-model:drill-path="chartDrillPath"
@@ -537,7 +541,7 @@ onBeforeUnmount(() => {
           v-if="chartType !== 'table'"
           :result="result"
           :type="chartType"
-          :option="JSON.parse(mergeChartConfig({}, chartEncoding, chartDrillPath))"
+          :option="JSON.parse(mergeChartConfig({}, chartEncoding, chartDrillPath, chartTableStyle))"
         />
       </section>
     </template>

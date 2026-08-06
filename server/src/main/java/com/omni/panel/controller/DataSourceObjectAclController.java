@@ -25,6 +25,11 @@ import com.omni.panel.service.DataSourceObjectAclService;
 public class DataSourceObjectAclController {
     private final DataSourceObjectAclService service;
 
+    /**
+     * 注入数据源对象 ACL 业务服务。
+     *
+     * @param service 数据源对象 ACL 服务
+     */
     public DataSourceObjectAclController(DataSourceObjectAclService service) {
         this.service = service;
     }

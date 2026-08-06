@@ -12,6 +12,9 @@ import com.omni.panel.common.BusinessException;
  * 保留裸 {@code ?}；与命名混用时按从左到右分别消费 map / list。
  */
 public final class NamedSqlExpander {
+    /**
+     * 工具类，禁止实例化。
+     */
     private NamedSqlExpander() {
     }
 
@@ -220,12 +223,24 @@ public final class NamedSqlExpander {
         return List.copyOf(names);
     }
 
+    /**
+     * 判断字符是否可作为 SQL 命名参数标识符的首字符。
+     *
+     * @param ch 待检查字符
+     * @return 字母或下划线时为 true
+     */
     private static boolean isIdentStart(char ch) {
         return (ch >= 'A' && ch <= 'Z')
                 || (ch >= 'a' && ch <= 'z')
                 || ch == '_';
     }
 
+    /**
+     * 判断字符是否可作为 SQL 命名参数标识符的后续字符。
+     *
+     * @param ch 待检查字符
+     * @return 首字符合法或数字时为 true
+     */
     private static boolean isIdentPart(char ch) {
         return isIdentStart(ch) || (ch >= '0' && ch <= '9');
     }
