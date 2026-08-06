@@ -1,0 +1,19 @@
+.git
+.idea
+**/.DS_Store
+
+**/node_modules
+**/dist
+**/target
+**/coverage
+**/.vite
+
+# 本地环境与密钥，不进镜像构建上下文
+deploy/.env
+**/.env
+!**/.env.example
+
+# 测试与脚本产物（运行时镜像不需要）
+web/test-results
+web/playwright-report
+web/blob-report

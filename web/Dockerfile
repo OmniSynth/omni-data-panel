@@ -1,14 +1,16 @@
-FROM node:22-alpine AS build
+# 与 CI 一致使用 glibc，避免 alpine/musl 下 esbuild 等可选原生依赖安装失败
+FROM node:22-bookworm-slim AS build
 
 WORKDIR /workspace/web
 
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 
-COPY web/index.html web/tsconfig.json web/vite.config.ts ./
-COPY web/src src
+COPY web/ ./
 # 帮助页以 ?raw 引入 docs/*.md，构建时还需复制 docs/assets 截图
 COPY docs /workspace/docs
+
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
