@@ -409,7 +409,11 @@ JobStore 为 JDBC 集群；多实例共享触发器。
 | [README.md](../README.md) | 产品总览、部署、API 索引 |
 | [production.md](production.md) | 生产密钥、探针、可信代理、加固清单 |
 | [oidc-sso.md](oidc-sso.md) | 企业 OIDC 对接 |
+| 文档 | 说明 |
+|------|------|
 | [embed-integration.md](embed-integration.md) | 业务系统签名嵌入 |
+| [CHANGELOG.md](../CHANGELOG.md) | 版本变更 |
+| [SECURITY.md](../SECURITY.md) | 安全披露 |
 | [observability.md](observability.md) | Prometheus、requestId、告警 |
 | [api-log-dashboard-guide.md](api-log-dashboard-guide.md) | `sys_api_log` 实战截图 |
 

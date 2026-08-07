@@ -1,8 +1,13 @@
 # Omni Data Panel
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![CI](https://github.com/OmniSynth/omni-data-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/OmniSynth/omni-data-panel/actions/workflows/ci.yml)
+
 **自建、可控、不按席位收费的数据分析平台。**
 
 付费 BI 往往把「看数」锁在授权席位、封闭插件和厂商托管里：方言受限、嵌入受限、权限模型不透明，成本随人数与数据源线性膨胀。Omni Data Panel 把分析能力交还给团队——源码可控、部署自有、连接你已有的数仓与业务库，用开放架构覆盖从取数到分享的完整链路。
+
+**License:** [Apache License 2.0](LICENSE) · Copyright © 2025–2026 OmniSynth
 
 ### 定位与非目标
 
@@ -52,6 +57,9 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 | [docs/production.md](docs/production.md) | 生产密钥、探针、可信代理与加固清单 |
 | [docs/observability.md](docs/observability.md) | Prometheus 指标、requestId、告警示例 |
 | [deploy/README.md](deploy/README.md) | Compose / Release 一键部署 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南 |
+| [SECURITY.md](SECURITY.md) | 安全漏洞披露 |
 
 应用内 **帮助**（`/help`）与上表 `docs/*.md` **同源**渲染，改文档即更新页面。
 
@@ -307,3 +315,9 @@ npm run test:e2e
 4. **权限可解释**：功能权限 + 资源 ACL + 行/列策略 + SQL 门禁，层层可审计。
 
 付费 BI 卖的是封闭与席位；Omni Data Panel 交付的是**可拥有的分析基础设施**。
+
+## 许可证
+
+本项目以 [Apache License 2.0](LICENSE) 发布（SPDX: `Apache-2.0`）。见 [NOTICE](NOTICE)。
+
+欢迎贡献：请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。安全问题请按 [SECURITY.md](SECURITY.md) 私下报告。

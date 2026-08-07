@@ -129,5 +129,6 @@ WHERE version = '17' AND checksum = -1046568936;
 - OIDC SSO：[oidc-sso.md](oidc-sso.md)
 - 签名嵌入：[embed-integration.md](embed-integration.md)
 - 使用手册（含订阅 / 管理端调度·设置）：[user-guide.md](user-guide.md)
+- 变更与安全：[CHANGELOG.md](../CHANGELOG.md)、[SECURITY.md](../SECURITY.md)
 
 应用内 **帮助**（`/help`）与上述 `docs/*.md` 同源渲染。
