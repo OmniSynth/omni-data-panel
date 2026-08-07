@@ -240,8 +240,8 @@ public class DashboardController {
     /**
      * 带参数的仪表盘渲染请求。
      *
-     * @param forceRefresh     是否强制刷新查询缓存
-     * @param parameterValues  仪表盘参数取值映射
+     * @param forceRefresh    是否强制刷新查询缓存
+     * @param parameterValues 仪表盘参数取值映射
      */
     public record RenderRequest(Boolean forceRefresh, java.util.Map<String, Object> parameterValues) {
     }

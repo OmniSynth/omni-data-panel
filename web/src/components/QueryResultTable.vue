@@ -78,8 +78,8 @@ function linkHref(value: unknown) {
   return resolveLinkHref(value)
 }
 
-/** 单元格内联样式 */
-function cellStyle(column: string) {
+/** 单元格内文本样式（颜色/对齐） */
+function cellTextStyle(column: string) {
   const style = columnStyleOf(props.tableStyle, column)
   return {
     color: style.color || undefined,
@@ -87,8 +87,8 @@ function cellStyle(column: string) {
   }
 }
 
-/** 行背景（条件色优先于斑马纹视觉） */
-function rowStyle({ row }: { row: RecordData }) {
+/** 单元格背景：写在 td 上，才能盖过斑马纹 */
+function tableCellStyle({ row }: { row: RecordData }) {
   const background = resolveRowBackground(row, props.tableStyle)
   return background ? { background } : undefined
 }
@@ -120,7 +120,7 @@ onBeforeUnmount(() => {
       :max-height="tableMaxHeight"
       :stripe="stripe"
       :empty-text="t('resultTable.empty')"
-      :row-style="rowStyle"
+      :cell-style="tableCellStyle"
     >
       <el-table-column
         v-for="column in columns"
@@ -134,14 +134,14 @@ onBeforeUnmount(() => {
         <template #default="{ row }">
           <a
             v-if="isLinkColumn(column) && linkHref(row[column])"
-            class="cell cell-link"
+            class="cell-text cell-link"
             :href="linkHref(row[column])!"
-            :style="cellStyle(column)"
+            :style="cellTextStyle(column)"
             target="_blank"
             rel="noopener noreferrer"
             @click.stop
           >{{ cellText(column, row[column]) }}</a>
-          <span v-else class="cell" :style="cellStyle(column)">{{ cellText(column, row[column]) }}</span>
+          <span v-else class="cell-text" :style="cellTextStyle(column)">{{ cellText(column, row[column]) }}</span>
         </template>
       </el-table-column>
     </el-table>
@@ -184,7 +184,17 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .meta { color: #6b7280; font-size: calc(13px * var(--omni-font-scale)); }
-.cell { display: inline-block; max-width: 100%; }
+.result-table :deep(.el-table .cell) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cell-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cell-link {
   color: var(--el-color-primary);
   text-decoration: none;

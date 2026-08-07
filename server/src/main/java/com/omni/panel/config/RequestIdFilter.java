@@ -62,7 +62,9 @@ public class RequestIdFilter extends OncePerRequestFilter {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
-    /** 当前 MDC 中的 requestId，可能为 null。 */
+    /**
+     * 当前 MDC 中的 requestId，可能为 null。
+     */
     public static String current() {
         return MDC.get(MDC_KEY);
     }

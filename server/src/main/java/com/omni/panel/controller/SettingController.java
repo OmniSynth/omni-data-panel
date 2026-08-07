@@ -26,8 +26,8 @@ public class SettingController {
     /**
      * 注入系统设置与邮件服务。
      *
-     * @param service      系统设置服务
-     * @param mailService  系统邮件服务
+     * @param service     系统设置服务
+     * @param mailService 系统邮件服务
      */
     public SettingController(SettingService service, SystemMailService mailService) {
         this.service = service;

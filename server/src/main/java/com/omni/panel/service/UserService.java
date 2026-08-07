@@ -36,11 +36,11 @@ public class UserService {
     /**
      * 注入用户持久化、密码哈希、邮件与凭据令牌依赖。
      *
-     * @param userMapper               用户持久化
-     * @param passwordEncoder          密码哈希
-     * @param mailService              系统邮件
-     * @param tokenService             凭据令牌
-     * @param subscriptionProperties   订阅配置（前端链接基址）
+     * @param userMapper             用户持久化
+     * @param passwordEncoder        密码哈希
+     * @param mailService            系统邮件
+     * @param tokenService           凭据令牌
+     * @param subscriptionProperties 订阅配置（前端链接基址）
      */
     public UserService(UserMapper userMapper, PasswordEncoder passwordEncoder, SystemMailService mailService,
                        UserCredentialTokenService tokenService, SubscriptionProperties subscriptionProperties) {

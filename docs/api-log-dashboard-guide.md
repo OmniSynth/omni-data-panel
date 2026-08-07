@@ -178,5 +178,6 @@ npx playwright test tests/capture-api-log-guide.spec.ts
 ## 9. 相关文档
 
 - 通用操作步骤：[user-guide.md](user-guide.md)
+- 签名嵌入（业务系统 iframe + 锁定参数）：[embed-integration.md](embed-integration.md)
 - 产品总览：[README.md](../README.md)
 - 应用内帮助：侧栏 **帮助**（`/help`），本页对应「接口日志实战」标签

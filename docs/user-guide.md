@@ -37,6 +37,9 @@ flowchart LR
 | 新建模型 / 指标 | `dataset:create` |
 | 新建仪表盘 | `dashboard:create` |
 | 原生 SQL | `query:raw` |
+| 导出查询结果 / 仪表盘 | `export:execute` |
+| 配置仪表盘邮件订阅 | `subscription:manage`（侧栏「订阅」或仪表盘查看页） |
+| 查看导出日志 | 管理员（管理后台 → 导出日志） |
 | 维护数据源连接 | 管理员 |
 
 ---
@@ -323,9 +326,9 @@ flowchart TD
 
 ---
 
-## 10. 管理端：设置、订阅与调度
+## 10. 管理端：设置与调度；产品端：订阅
 
-需管理员或具备对应权限（如 `schedule:manage`）。
+设置、调度需管理员；邮件订阅需 `subscription:manage`（管理员可在角色中授权给数分）。系统调度另需 `schedule:manage`。
 
 ### 10.1 通用设置（`/admin/settings`）
 
@@ -335,14 +338,15 @@ flowchart TD
 | 允许嵌入 | `embed.enabled`；关闭后无法签发/解析嵌入令牌 |
 | 嵌入域名白名单 | `embed.allowed-origins`；每行一个 Origin（如 `https://app.example.com`）。**空则仅允许同源嵌套**。Compose 须同步 `EMBED_ALLOWED_ORIGINS`（空格分隔）并重启 web |
 | 查询缓存 | 站点级开关与 TTL |
+| 允许清空日志 | `logs.clear.enabled`；关闭后无法清空系统日志，也无法清理查询/登录/模型审计 |
 | 同时登录设备数 | `auth.session.max-concurrent`；`0` 表示不限制 |
 | 邮件 SMTP | 订阅与系统邮件依赖；可测试发送 |
 
 可信代理 `TRUSTED_PROXIES` **不在管理端配置**，写在部署环境变量中（见 [production.md](production.md)）：仅当直连 IP 属于可信 CIDR 时才采信 `X-Forwarded-For`。
 
-### 10.2 订阅（`/admin/subscriptions`）
+### 10.2 订阅（`/subscriptions`）
 
-按 Cron 向站内用户邮箱推送仪表盘（可选 PDF）。需配置 SMTP。可启停、编辑收件人、立即发送。
+按 Cron 向站内用户邮箱推送仪表盘（默认附带 PDF）。需配置 SMTP，且对目标仪表盘有 **READ**。入口：侧栏「订阅」，或仪表盘查看页「订阅」。非管理员仅管理自己创建的订阅；管理员可查看全部。管理后台仍保留 `/admin/subscriptions` 入口。
 
 ### 10.3 调度（`/admin/schedules`）
 
@@ -362,12 +366,20 @@ JobStore 为 JDBC 集群；多实例共享触发器。
 
 | 能力 | 入口 | 要点 |
 |------|------|------|
-| 公开链接 | 仪表盘 / 图表分享 | 可撤销；适合对外只读；不过期直至删除 |
-| 签名嵌入 | 业务系统服务端代签 | 短期 JWT（约 1h）；开启「允许嵌入」并配置域名白名单；见 [embed-integration.md](embed-integration.md) |
-| 邮件订阅 | 管理后台 → 系统 → 订阅 | 见 §10.2 |
+| 公开链接 | 仪表盘 / 图表分享 | 可撤销；可选有效期（永不过期 / 1 / 7 / 30 / 90 天）；适合对外只读 |
+| 签名嵌入 | 业务系统服务端代签 | 短期 JWT（约 1h）；签发时可写入仪表盘**锁定参数**；开启「允许嵌入」并配置域名白名单；见 [embed-integration.md](embed-integration.md) |
+| 邮件订阅 | 侧栏「订阅」或仪表盘查看页（`subscription:manage`） | 见 §10.2 |
 | 通用调度 | 管理后台 → 系统 → 调度 | 见 §10.3 |
 
-嵌入与公开视图使用参数**默认值**，访客不能像登录态查看页那样改参重刷。
+**参数行为**
+
+| 场景 | 参数来源 | 访客能否改参 |
+|------|----------|--------------|
+| 登录态查看 / 编辑 | 默认值 + 用户交互 / 点击写参 | 能（有权限时） |
+| 签名嵌入 | JWT `parameters` 覆盖默认值 | 不能 |
+| 公开链接 / 打印页 | 仅配置默认值 | 不能 |
+
+锁定参数的 key 必须是仪表盘已声明的参数 id；业务侧须把这些参数绑到卡片查询过滤上，才能形成行级隔离。图表（QUESTION）嵌入本轮不支持锁定参数。
 
 ---
 

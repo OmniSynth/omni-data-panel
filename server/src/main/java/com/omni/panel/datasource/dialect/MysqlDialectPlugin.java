@@ -35,31 +35,41 @@ public class MysqlDialectPlugin extends DialectPlugin {
     private static final List<Pattern> FORBIDDEN = List.of(
             Pattern.compile("(?s).*\\block\\s+in\\s+share\\s+mode\\b.*"));
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String code() {
         return CODE;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String label() {
         return "MySQL";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int defaultPort() {
         return 3306;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         return jdbcUrl != null && jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql:");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -75,7 +85,9 @@ public class MysqlDialectPlugin extends DialectPlugin {
         return url.toString();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -91,7 +103,9 @@ public class MysqlDialectPlugin extends DialectPlugin {
         return new ParsedJdbcUrl(host, port, database);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || !jdbcUrl.matches("(?i)^jdbc:mysql://[^;\\s]+$")) {
@@ -99,13 +113,17 @@ public class MysqlDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void configurePool(HikariConfig config, DataSourceEntity source) {
         config.setConnectionInitSql("SET SESSION TRANSACTION READ ONLY");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void prepareConnection(Connection connection, DataSourceEntity source) throws SQLException {
         String defaultDatabase = source.getDefaultDatabase();
@@ -114,7 +132,9 @@ public class MysqlDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
             throws SQLException {
@@ -127,13 +147,17 @@ public class MysqlDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void useNamespace(Connection connection, String namespace) throws SQLException {
         connection.setCatalog(namespace);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<String> listNamespaces(Connection connection, DatabaseMetaData metadata) throws SQLException {
         Set<String> catalogs = new LinkedHashSet<>();
@@ -151,13 +175,17 @@ public class MysqlDialectPlugin extends DialectPlugin {
         return List.copyOf(catalogs);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Set<String> systemNamespaces() {
         return SYSTEM_NAMESPACES;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
             throws SQLException {
@@ -178,7 +206,9 @@ public class MysqlDialectPlugin extends DialectPlugin {
         return tables;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
             throws SQLException {
@@ -216,13 +246,17 @@ public class MysqlDialectPlugin extends DialectPlugin {
         return columns;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public char identifierQuote() {
         return '`';
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<Pattern> forbiddenSqlPatterns() {
         return FORBIDDEN;

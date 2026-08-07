@@ -36,13 +36,13 @@ public class OidcLoginSuccessHandler implements AuthenticationSuccessHandler {
     /**
      * 注入用户映射、JWT、会话、兑换码、审计与配置依赖。
      *
-     * @param provisioningService      OIDC 用户映射服务
-     * @param jwtService               JWT 服务
-     * @param sessionRegistry          会话注册表
-     * @param exchangeCodeService      一次性兑换码服务
-     * @param loginAuditService        登录审计服务
-     * @param oidcProperties           OIDC 配置
-     * @param subscriptionProperties   订阅/前端 URL 配置
+     * @param provisioningService    OIDC 用户映射服务
+     * @param jwtService             JWT 服务
+     * @param sessionRegistry        会话注册表
+     * @param exchangeCodeService    一次性兑换码服务
+     * @param loginAuditService      登录审计服务
+     * @param oidcProperties         OIDC 配置
+     * @param subscriptionProperties 订阅/前端 URL 配置
      */
     public OidcLoginSuccessHandler(OidcUserProvisioningService provisioningService, JwtService jwtService,
                                    UserSessionRegistry sessionRegistry, OidcExchangeCodeService exchangeCodeService,

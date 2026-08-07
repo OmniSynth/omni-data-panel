@@ -139,11 +139,11 @@ public class SqlObjectAccessGuard {
     /**
      * 校验 SELECT 列表中的列引用是否命中列级 deny。
      *
-     * @param plain                解析后的 SELECT 主体
-     * @param defaultSchema        默认模式
-     * @param aliasToTableKey      表别名到表键映射
-     * @param referencedTableKeys  SQL 引用的表键集合
-     * @param denies               有效拒绝集
+     * @param plain               解析后的 SELECT 主体
+     * @param defaultSchema       默认模式
+     * @param aliasToTableKey     表别名到表键映射
+     * @param referencedTableKeys SQL 引用的表键集合
+     * @param denies              有效拒绝集
      */
     private void validateSelectColumns(PlainSelect plain, String defaultSchema,
                                        Map<String, String> aliasToTableKey,
@@ -228,9 +228,9 @@ public class SqlObjectAccessGuard {
     /**
      * 将单个 FROM/JOIN 项的表名与别名注册到映射表。
      *
-     * @param fromItem          FROM 项
-     * @param defaultSchema     默认模式
-     * @param aliasToTableKey   别名到表键映射
+     * @param fromItem        FROM 项
+     * @param defaultSchema   默认模式
+     * @param aliasToTableKey 别名到表键映射
      */
     private void registerFromItem(FromItem fromItem, String defaultSchema, Map<String, String> aliasToTableKey) {
         if (!(fromItem instanceof Table table)) {
@@ -248,9 +248,9 @@ public class SqlObjectAccessGuard {
     /**
      * 解析表引用对应的表键，优先通过别名映射查找。
      *
-     * @param table             表引用
-     * @param defaultSchema     默认模式
-     * @param aliasToTableKey   别名到表键映射
+     * @param table           表引用
+     * @param defaultSchema   默认模式
+     * @param aliasToTableKey 别名到表键映射
      * @return 表键，无法解析时返回 null
      */
     private String resolveTableKey(Table table, String defaultSchema, Map<String, String> aliasToTableKey) {
@@ -366,7 +366,9 @@ public class SqlObjectAccessGuard {
         return qn.schema() + "." + qn.name();
     }
 
-    /** schema 与表名的限定名对。 */
+    /**
+     * schema 与表名的限定名对。
+     */
     private record QualifiedName(String schema, String name) {
     }
 }

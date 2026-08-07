@@ -8,7 +8,7 @@
 
 | 能力 | 页面地址 | 有效期 | 撤销 | 适用场景 |
 |------|----------|--------|------|----------|
-| 公开链接 | `/public/dashboard/{token}` | 不过期 | 可在 UI 中撤销 | 对外临时分享 |
+| 公开链接 | `/public/dashboard/{token}` | 可选（默认永不过期；也可选 1/7/30/90 天） | 可在 UI 中撤销；到期自动失效 | 对外临时分享 |
 | **签名嵌入** | `/embed/dashboard/{jwt}` | **固定 1 小时** | 过期即失效；可关全局开关 | **内嵌业务系统（推荐）** |
 
 签名嵌入的安全模型：
@@ -16,7 +16,7 @@
 1. 业务系统**服务端**用具备资源写权限的账号登录 Omni，拿到用户 JWT。
 2. 用户打开业务页时，业务后端调用签发接口，获得短期 embed JWT。
 3. 业务页用 iframe 加载 `/embed/dashboard/{embedJwt}`；前端页面内部再请求 `/api/embed/...` 拉取只读渲染结果。
-4. 渲染以**资源所有者**身份执行，参数仅使用仪表盘配置中的**默认值**（不支持访客交互改参）。
+4. 渲染以**资源所有者**身份执行。仪表盘参数优先使用签发时写入 JWT 的**锁定参数**，其余沿用配置**默认值**；访客不可交互改参。
 
 ```text
 业务浏览器
@@ -26,6 +26,7 @@
 业务后端 ──POST /api/auth/login──────────────► Omni（缓存用户 JWT，勿下发浏览器）
     │
     │  POST /api/embed/tokens  Authorization: Bearer <用户JWT>
+    │  body 可含 parameters（锁定过滤）
     ▼
 Omni 返回 embed JWT（1h）
     │
@@ -33,7 +34,7 @@ Omni 返回 embed JWT（1h）
 业务页 iframe.src = https://{omni}/embed/dashboard/{embedJwt}
     │
     ▼
-嵌入页 GET /api/embed/dashboards/{embedJwt} → 只读图表结果
+嵌入页 GET /api/embed/dashboards/{embedJwt} → 只读图表结果（已应用锁定参数）
 ```
 
 ## 2. 前置条件
@@ -122,7 +123,11 @@ EMBED_ALLOWED_ORIGINS=https://app.example.com https://portal.example.com:8443
 ```json
 {
   "resourceType": "DASHBOARD",
-  "resourceId": 123
+  "resourceId": 123,
+  "parameters": {
+    "dept_id": "华东",
+    "region": "上海"
+  }
 }
 ```
 
@@ -130,6 +135,7 @@ EMBED_ALLOWED_ORIGINS=https://app.example.com https://portal.example.com:8443
 |------|------|------|
 | `resourceType` | string | `DASHBOARD` 或 `QUESTION`（图表） |
 | `resourceId` | number | 仪表盘或图表主键 |
+| `parameters` | object | **可选**。仅 `DASHBOARD`：按仪表盘已声明参数 id 锁定过滤值；未知 key 返回 400；最多 32 项。`QUESTION` 携带时返回 400 |
 
 成功响应 `data`：
 
@@ -141,9 +147,10 @@ EMBED_ALLOWED_ORIGINS=https://app.example.com https://portal.example.com:8443
 
 令牌特性：
 
-- HMAC 签名，声明含 `typ=embed`、`resourceType`、`resourceId`
+- HMAC 签名，声明含 `typ=embed`、`resourceType`、`resourceId`；若签发时传入则另含 `parameters`
 - **有效期固定 1 小时**
 - 受 `embed.enabled` 控制；关闭后无法签发或解析
+- 嵌入渲染：默认值 ← JWT `parameters` 覆盖；访客无法通过 URL/请求覆盖
 
 ### 3.3 嵌入页面与数据接口（浏览器侧，匿名）
 
@@ -154,7 +161,7 @@ EMBED_ALLOWED_ORIGINS=https://app.example.com https://portal.example.com:8443
 | 仪表盘数据 | `GET /api/embed/dashboards/{embedJwt}` |
 | 图表数据 | `GET /api/embed/questions/{embedJwt}` |
 
-业务系统一般只需拼 **页面 URL** 给 iframe；数据接口由嵌入页自行调用。
+业务系统一般只需拼 **页面 URL** 给 iframe；数据接口由嵌入页自行调用。仪表盘数据响应中的 `parameterValues` 为服务端实际合并后的参数（默认值 + JWT 锁定），嵌入页参数条只读展示该值。
 
 ## 4. 对接示例
 
@@ -171,7 +178,7 @@ USER_JWT="<完成挑战登录后的 accessToken>"
 EMBED_JWT=$(curl -s -X POST "$OMNI_BASE/api/embed/tokens" \
   -H "Authorization: Bearer $USER_JWT" \
   -H 'Content-Type: application/json' \
-  -d '{"resourceType":"DASHBOARD","resourceId":123}' \
+  -d '{"resourceType":"DASHBOARD","resourceId":123,"parameters":{"dept_id":"华东"}}' \
   | jq -r '.data.token')
 
 echo "$OMNI_BASE/embed/dashboard/$EMBED_JWT"
@@ -181,10 +188,10 @@ echo "$OMNI_BASE/embed/dashboard/$EMBED_JWT"
 
 ```java
 // 伪代码：登录 token 由服务端缓存；页面接口按需签发 embed URL
-public String buildDashboardEmbedUrl(long dashboardId) {
+public String buildDashboardEmbedUrl(long dashboardId, Map<String, Object> lockedParams) {
     String userJwt = omniAuthClient.ensureAccessToken(); // 服务端缓存，401 时重登
     String embedJwt = omniHttp.post("/api/embed/tokens", userJwt,
-            Map.of("resourceType", "DASHBOARD", "resourceId", dashboardId));
+            Map.of("resourceType", "DASHBOARD", "resourceId", dashboardId, "parameters", lockedParams));
     return omniBaseUrl + "/embed/dashboard/" + embedJwt;
 }
 ```
@@ -218,17 +225,17 @@ public String buildDashboardEmbedUrl(long dashboardId) {
 
 ### 当前产品限制（对接前请确认可接受）
 
-- 嵌入视图为**所有者默认参数**下的只读结果，**不能**按业务用户传入部门、租户等锁定参数做行级隔离。
-- 无嵌入域名白名单；获知 URL 的第三方页面也可 iframe（在 token 有效期内）。
-- embed JWT 泄露后，在过期前可访问与所有者相同的默认视图。
+- 嵌入视图为只读；参数由签发时 JWT 锁定（或仪表盘默认值），**访客不能**交互改参。
+- 锁定参数只能约束仪表盘**已声明**的参数；行级安全仍依赖查询/策略把这些参数绑进过滤条件。
+- embed JWT 泄露后，在过期前可访问签发时锁定的同一视图（含锁定参数）。
 - 嵌入令牌与登录 JWT 共用签名密钥（靠 `typ` / `subject` 区分用途）。
 - 嵌入页仍可能提供导出等只读能力，分享面大于「纯数据 API」。
 
 ### 禁止
 
-- 将 `/public/dashboard/...` 公开链接作为内网业务系统的正式嵌入方案（不过期、可转发）。
+- 将 `/public/dashboard/...` 公开链接作为内网业务系统的正式嵌入方案（默认可长期有效、可转发）。
 - 在浏览器 JS 中保存服务账号密码，或用前端直接调用 `POST /api/embed/tokens`。
-- 把 embed JWT 当作「当前登录用户身份」——它只绑定资源 ID，不做访客鉴权。
+- 把 embed JWT 当作「当前登录用户身份」——它只绑定资源 ID（及可选锁定参数），不做访客鉴权。
 
 ## 6. 公开链接何时使用
 
@@ -246,19 +253,20 @@ public String buildDashboardEmbedUrl(long dashboardId) {
 | `429` | 触发 IP 限流 | 降低轮询/重试频率；检查代理是否透传真实客户端 IP |
 | 「仪表盘/图表不存在」或无权限 | `resourceId` 错误，或账号无 WRITE | 核对资源 ID；为服务账号授权 |
 | 「嵌入仅支持 DASHBOARD 或 QUESTION」 | `resourceType` 拼写错误 | 使用大写 `DASHBOARD` / `QUESTION` |
+| 「锁定参数不存在」 | `parameters` 含未声明 id | 与仪表盘参数 id 对齐 |
+| 「图表嵌入不支持锁定参数」 | QUESTION 携带了 `parameters` | 去掉 parameters，或改用 DASHBOARD |
 | iframe 空白或被拒嵌 | 基址错误、混合内容、白名单未含业务 Origin / 未同步 `EMBED_ALLOWED_ORIGINS`、网络不通 | 管理端配置白名单并重启 web；使用 HTTPS 同源策略；检查控制台 CSP 报错 |
-| 嵌入后参数无法改 | 产品设计如此 | 公开/嵌入仅默认参数；登录态渲染才支持交互传参 |
+| 嵌入后参数无法改 | 产品设计如此 | 锁定/默认值在签发与配置侧决定；登录态渲染才支持交互传参 |
 
 ## 8. 后续增强（尚未提供）
 
 以下能力当前**未实现**，若业务强依赖需单独排期：
 
-- JWT 内锁定参数（按部门/业务线过滤）
 - 独立 embed 签名密钥与可配置 TTL
 - 嵌入签发 UI / iframe 片段一键复制
 - SSO / 业务用户会话桥接
 
-已提供：`embed.enabled`、嵌入域名白名单（`embed.allowed-origins` + `EMBED_ALLOWED_ORIGINS`）、CSP `frame-ancestors`、Redis 优先 IP 限流与 `TRUSTED_PROXIES`。
+已提供：`embed.enabled`、嵌入域名白名单（`embed.allowed-origins` + `EMBED_ALLOWED_ORIGINS`）、CSP `frame-ancestors`、Redis 优先 IP 限流与 `TRUSTED_PROXIES`、**JWT 锁定参数**（仪表盘）。
 
 ---
 

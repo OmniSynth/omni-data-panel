@@ -28,8 +28,8 @@ public class DataPolicyService {
      * 注入数据策略维护所需依赖。
      *
      * @param datasetService 模型服务
-     * @param mapper           策略持久化
-     * @param objectMapper     JSON 解析
+     * @param mapper         策略持久化
+     * @param objectMapper   JSON 解析
      */
     public DataPolicyService(DatasetService datasetService, DataPolicyMapper mapper, ObjectMapper objectMapper) {
         this.datasetService = datasetService;

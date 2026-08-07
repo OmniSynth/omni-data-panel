@@ -6,6 +6,7 @@ import { useRoute } from 'vue-router'
 import { embedApi, publicApi } from '@/api'
 import type { DashboardRender, DashboardRenderCard } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
+import DashboardCardShell from '@/components/DashboardCardShell.vue'
 import DashboardParameterBar from '@/components/DashboardParameterBar.vue'
 import { useFullscreen } from '@/composables/useFullscreen'
 import {
@@ -15,6 +16,7 @@ import {
   parseLayoutJson,
 } from '@/dashboard/config'
 import { exportDashboardPdf, exportDashboardPng } from '@/dashboard/exportDashboard'
+import { DASHBOARD_SKELETON_LAYOUTS, skeletonLayoutStyle } from '@/dashboard/skeletonLayouts'
 
 const props = defineProps<{ mode: 'public' | 'embed' | 'print' }>()
 const { t } = useI18n()
@@ -45,6 +47,8 @@ const tabSections = computed(() => {
     cards: filterCardsByTab(dashboard.value!.cards, tab.id, tabs.value),
   }))
 })
+const showPageSkeleton = computed(() => loading.value && !dashboard.value && !exporting.value)
+const cardsLoading = computed(() => loading.value && !!dashboard.value && !exporting.value)
 
 function markPrintReady() {
   if (!isPrint.value) return
@@ -97,7 +101,11 @@ async function load() {
       dashboard.value = await embedApi.dashboard(token.value)
     }
     syncActiveTab()
-    parameterValues.value = defaultParameterValues(parameters.value)
+    if (dashboard.value?.parameterValues && typeof dashboard.value.parameterValues === 'object') {
+      parameterValues.value = { ...dashboard.value.parameterValues }
+    } else {
+      parameterValues.value = defaultParameterValues(parameters.value)
+    }
     if (isPrint.value) {
       await nextTick()
       // 等待图表首屏绘制完成后再通知无头浏览器截取
@@ -137,7 +145,7 @@ onBeforeUnmount(clearPrintReady)
 <template>
   <div
     ref="root"
-    v-loading="loading || exporting"
+    v-loading="exporting"
     class="page standalone"
     :class="{ print: isPrint }"
     :element-loading-text="exporting ? t('dashboard.exporting') : undefined"
@@ -167,25 +175,35 @@ onBeforeUnmount(clearPrintReady)
     />
     <el-empty v-if="!loading && dashboard && !dashboard.cards.length" :description="t('dashboard.noCards')" />
 
-    <template v-if="flattenTabs && tabs.length && dashboard?.cards.length">
+    <div v-if="showPageSkeleton" class="dashboard-grid">
+      <DashboardCardShell
+        v-for="(layout, index) in DASHBOARD_SKELETON_LAYOUTS"
+        :key="`skel-${index}`"
+        class="dashboard-card"
+        :style="skeletonLayoutStyle(layout)"
+        loading
+      />
+    </div>
+
+    <template v-else-if="flattenTabs && tabs.length && dashboard?.cards.length">
       <section v-for="section in tabSections" :key="section.tab.id" class="tab-section">
         <h2 class="tab-section-title">{{ section.tab.name }}</h2>
         <div v-if="section.cards.length" class="dashboard-grid">
-          <el-card
+          <DashboardCardShell
             v-for="card in section.cards"
             :key="card.cardId"
             class="dashboard-card"
             :style="layoutStyle(card.layoutJson)"
+            :title="card.title"
+            :error="card.error"
+            :loading="cardsLoading"
           >
-            <template #header><strong>{{ card.title }}</strong></template>
-            <el-alert v-if="card.error" :title="card.error" type="error" :closable="false" show-icon />
             <ChartPreview
-              v-else
               :type="card.chartType"
               :result="card.result"
               :option="chartOption(card.configJson)"
             />
-          </el-card>
+          </DashboardCardShell>
         </div>
       </section>
     </template>
@@ -204,32 +222,33 @@ onBeforeUnmount(clearPrintReady)
         :description="t('dashboard.noCardsInTab')"
       />
       <div v-if="visibleCards.length" class="dashboard-grid">
-        <el-card
+        <DashboardCardShell
           v-for="card in visibleCards"
           :key="card.cardId"
           class="dashboard-card"
           :style="layoutStyle(card.layoutJson)"
+          :title="card.title"
+          :error="card.error"
+          :loading="cardsLoading"
         >
-          <template #header><strong>{{ card.title }}</strong></template>
-          <el-alert v-if="card.error" :title="card.error" type="error" :closable="false" show-icon />
           <ChartPreview
-            v-else
             :type="card.chartType"
             :result="card.result"
             :option="chartOption(card.configJson)"
           />
-        </el-card>
+        </DashboardCardShell>
       </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.standalone { min-height: 100vh; background: var(--omni-bg, #f5f6f8); }
+.standalone { min-height: 100vh; background: var(--omni-bg); }
 .standalone.print {
   min-height: auto;
   background: #fff;
   padding: 16px 20px;
+  color-scheme: light;
 }
 .standalone:fullscreen,
 .standalone:-webkit-full-screen {
@@ -238,7 +257,7 @@ onBeforeUnmount(clearPrintReady)
   height: 100%;
   overflow: auto;
   padding: 16px 24px;
-  background: var(--omni-bg, #f5f6f8);
+  background: var(--omni-bg);
 }
 .standalone.exporting .no-export { display: none !important; }
 .page-header {
@@ -268,17 +287,15 @@ onBeforeUnmount(clearPrintReady)
   font-size: 16px;
   font-weight: 600;
   line-height: 24px;
+  color: var(--omni-text);
 }
-.dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 90px; gap: 16px; }
-.dashboard-card { display: flex; flex-direction: column; overflow: hidden; height: 100%; }
-.dashboard-card :deep(.el-card__body) {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: 90px;
+  gap: 16px;
 }
-.dashboard-card :deep(.el-card__body > *) { flex: 1; min-height: 0; }
+.dashboard-card { min-width: 0; min-height: 0; }
 @media (max-width: 900px) {
   .dashboard-card { grid-column: 1 / -1 !important; }
 }

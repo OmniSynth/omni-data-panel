@@ -335,6 +335,7 @@ async function saveQuestion() {
 }
 
 async function createExport(format: 'CSV' | 'XLSX') {
+  if (!userStore.hasPermission('export:execute')) return ElMessage.warning(t('common.noExportPermission'))
   if (!task.value || task.value.status !== 'SUCCEEDED') return
   try {
     const blob = await exportApi.download(task.value.queryId, format)
@@ -489,7 +490,7 @@ watch(sourceId, async (value) => {
               <template v-if="elapsedText"> · {{ t('workbench.duration') }} {{ elapsedText }}</template>
               ）
         </strong>
-        <div>
+        <div v-if="userStore.hasPermission('export:execute')">
           <el-button @click="createExport('CSV')">{{ t('sql.exportCsv') }}</el-button>
           <el-button @click="createExport('XLSX')">{{ t('sql.exportXlsx') }}</el-button>
         </div>

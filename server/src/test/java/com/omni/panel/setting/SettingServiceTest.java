@@ -42,10 +42,29 @@ class SettingServiceTest {
     }
 
     @Test
+    void 缺省允许清空日志() {
+        assertThat(service.logsClearEnabled()).isTrue();
+    }
+
+    @Test
+    void 关闭清空日志后require抛出403() {
+        SettingEntity stored = new SettingEntity();
+        stored.setSettingKey("logs.clear.enabled");
+        stored.setSettingValue("false");
+        when(mapper.selectById("logs.clear.enabled")).thenReturn(stored);
+
+        assertThat(service.logsClearEnabled()).isFalse();
+        assertThatThrownBy(service::requireLogsClearEnabled)
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("禁止清空日志");
+    }
+
+    @Test
     void 列表在库缺失时返回默认值且不暴露密码() {
         Map<String, String> values = service.list();
         assertThat(values).containsEntry("cache.query.enabled", "false")
                 .containsEntry("cache.query.ttl-seconds", "300")
+                .containsEntry("logs.clear.enabled", "true")
                 .containsEntry("embed.allowed-origins", "")
                 .containsEntry("mail.port", "25")
                 .containsEntry("mail.password.set", "false")

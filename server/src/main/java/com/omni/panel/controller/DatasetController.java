@@ -159,15 +159,15 @@ public class DatasetController {
     /**
      * 模型保存请求。
      *
-     * @param name           名称
-     * @param description    描述
-     * @param modelType      模型类型 TABLE 或 SQL
-     * @param dataSourceId   数据源标识
-     * @param schemaName     表模型模式名
-     * @param tableName      表模型表名
-     * @param definitionSql  SQL 模型定义语句
-     * @param collectionId   所属集合标识
-     * @param fields         字段定义列表
+     * @param name          名称
+     * @param description   描述
+     * @param modelType     模型类型 TABLE 或 SQL
+     * @param dataSourceId  数据源标识
+     * @param schemaName    表模型模式名
+     * @param tableName     表模型表名
+     * @param definitionSql SQL 模型定义语句
+     * @param collectionId  所属集合标识
+     * @param fields        字段定义列表
      */
     public record SaveRequest(@NotBlank String name, String description, String modelType,
                               @NotNull Long dataSourceId, String schemaName, String tableName,
@@ -187,18 +187,18 @@ public class DatasetController {
     /**
      * 模型详情视图。
      *
-     * @param id             模型标识
-     * @param name           名称
-     * @param description    描述
-     * @param modelType      模型类型
-     * @param dataSourceId   数据源标识
-     * @param schemaName     模式名
-     * @param tableName      表名
-     * @param definitionSql  SQL 定义
-     * @param collectionId   所属集合标识
-     * @param ownerId        所有者用户标识
-     * @param updatedAt      更新时间
-     * @param fields         字段定义列表
+     * @param id            模型标识
+     * @param name          名称
+     * @param description   描述
+     * @param modelType     模型类型
+     * @param dataSourceId  数据源标识
+     * @param schemaName    模式名
+     * @param tableName     表名
+     * @param definitionSql SQL 定义
+     * @param collectionId  所属集合标识
+     * @param ownerId       所有者用户标识
+     * @param updatedAt     更新时间
+     * @param fields        字段定义列表
      */
     public record View(@JsonSerialize(using = ToStringSerializer.class) long id,
                        String name, String description, String modelType,

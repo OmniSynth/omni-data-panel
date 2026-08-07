@@ -23,8 +23,8 @@ public class OidcAuthController {
     /**
      * 注入 OIDC 配置与兑换码服务依赖。
      *
-     * @param oidcProperties       OIDC 配置
-     * @param exchangeCodeService  一次性兑换码服务
+     * @param oidcProperties      OIDC 配置
+     * @param exchangeCodeService 一次性兑换码服务
      */
     public OidcAuthController(OidcProperties oidcProperties, OidcExchangeCodeService exchangeCodeService) {
         this.oidcProperties = oidcProperties;

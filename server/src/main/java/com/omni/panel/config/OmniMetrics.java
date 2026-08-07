@@ -39,7 +39,9 @@ public class OmniMetrics {
         registry.counter("omni.http.rate_limited", "bucket", normalize(bucket)).increment();
     }
 
-    /** 记录查询提交。 */
+    /**
+     * 记录查询提交。
+     */
     public void querySubmit() {
         registry.counter("omni.query.submit").increment();
     }

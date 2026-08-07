@@ -17,25 +17,33 @@ public class MariaDbDialectPlugin extends MysqlDialectPlugin {
     private static final Pattern URL_PATTERN = Pattern.compile(
             "(?i)^jdbc:mariadb://([^/:?]+)(?::(\\d+))?(?:/([^?;\\s]*))?.*$");
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String code() {
         return CODE;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String label() {
         return "MariaDB";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         return jdbcUrl != null && jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:mariadb:");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -51,7 +59,9 @@ public class MariaDbDialectPlugin extends MysqlDialectPlugin {
         return url.toString();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -67,7 +77,9 @@ public class MariaDbDialectPlugin extends MysqlDialectPlugin {
         return new ParsedJdbcUrl(host, port, database);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || !jdbcUrl.matches("(?i)^jdbc:mariadb://[^;\\s]+$")) {

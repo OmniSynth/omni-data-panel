@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { chartApi, publicLinkApi, queryApi } from '@/api'
-import { displayLabel } from '@/display'
+import { displayLabel, formatDateTime } from '@/display'
 import type { Chart, PublicLink, QueryResult, QuerySubmission } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
 import {
@@ -23,6 +23,14 @@ const result = ref<QueryResult>()
 const error = ref('')
 const links = ref<PublicLink[]>([])
 const sharing = ref(false)
+const expiresInDays = ref<0 | 1 | 7 | 30 | 90>(0)
+const expireOptions: { value: 0 | 1 | 7 | 30 | 90; labelKey: string }[] = [
+  { value: 0, labelKey: 'dashboard.expireNever' },
+  { value: 1, labelKey: 'dashboard.expireDays' },
+  { value: 7, labelKey: 'dashboard.expireDays' },
+  { value: 30, labelKey: 'dashboard.expireDays' },
+  { value: 90, labelKey: 'dashboard.expireDays' },
+]
 const sqlParameters = ref<string[]>([])
 const namedSqlParameters = reactive<Record<string, string>>({})
 const namedParamNames = computed(() => extractNamedPlaceholders(submission.value?.sql || ''))
@@ -112,7 +120,11 @@ async function loadLinks() {
 async function createLink() {
   sharing.value = true
   try {
-    const link = await publicLinkApi.create({ resourceType: 'QUESTION', resourceId: chartId.value })
+    const link = await publicLinkApi.create({
+      resourceType: 'QUESTION',
+      resourceId: chartId.value,
+      expiresInDays: expiresInDays.value === 0 ? null : expiresInDays.value,
+    })
     links.value = [link, ...links.value.filter((item) => item.token !== link.token)]
     ElMessage.success(t('chart.linkCreated'))
   } catch (err) {
@@ -120,6 +132,18 @@ async function createLink() {
   } finally {
     sharing.value = false
   }
+}
+
+function isExpired(link: PublicLink) {
+  if (!link.expiresAt) return false
+  const ts = Date.parse(link.expiresAt)
+  return Number.isFinite(ts) && ts <= Date.now()
+}
+
+function expireLabel(link: PublicLink) {
+  if (!link.expiresAt) return t('dashboard.expireNever')
+  if (isExpired(link)) return t('dashboard.expired')
+  return t('dashboard.expiresAt', { time: formatDateTime(link.expiresAt) })
 }
 
 async function revokeLink(link: PublicLink) {
@@ -151,6 +175,14 @@ onMounted(load)
       </div>
       <div class="toolbar" style="margin:0">
         <el-button type="primary" @click="router.push({ path: '/query', query: { questionId: chartId } })">{{ t('chart.edit') }}</el-button>
+        <el-select v-model="expiresInDays" style="width: 140px">
+          <el-option
+            v-for="opt in expireOptions"
+            :key="opt.value"
+            :label="opt.value === 0 ? t(opt.labelKey) : t(opt.labelKey, { n: opt.value })"
+            :value="opt.value"
+          />
+        </el-select>
         <el-button :loading="sharing" plain @click="createLink">{{ t('chart.publicShare') }}</el-button>
       </div>
     </div>
@@ -179,7 +211,10 @@ onMounted(load)
     <el-card v-if="activeLinks.length" class="mt">
       <div class="card-title">{{ t('chart.publicLinks') }}</div>
       <div v-for="link in activeLinks" :key="link.token" class="link-row">
-        <a :href="publicUrl(link.token)" target="_blank" rel="noreferrer">{{ publicUrl(link.token) }}</a>
+        <div class="link-main">
+          <a :href="publicUrl(link.token)" target="_blank" rel="noreferrer">{{ publicUrl(link.token) }}</a>
+          <span class="expire-meta" :class="{ expired: isExpired(link) }">{{ expireLabel(link) }}</span>
+        </div>
         <el-button link type="danger" @click="revokeLink(link)">{{ t('chart.revoke') }}</el-button>
       </div>
     </el-card>
@@ -191,7 +226,10 @@ onMounted(load)
 .mt { margin-top: 12px; }
 .param-title { font-weight: 600; margin-bottom: 8px; }
 .param-row { margin-bottom: 8px; }
-.link-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.link-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.link-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.expire-meta { font-size: 12px; color: var(--el-text-color-secondary); }
+.expire-meta.expired { color: var(--el-color-danger); }
 .card-title { font-weight: 600; margin-bottom: 8px; }
 .muted { color: var(--el-text-color-secondary); margin: 4px 0 0; }
 </style>

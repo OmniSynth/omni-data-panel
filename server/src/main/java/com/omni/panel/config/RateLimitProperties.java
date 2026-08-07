@@ -28,7 +28,9 @@ public record RateLimitProperties(Boolean enabled, Integer authPerMinute, Intege
         }
     }
 
-    /** 是否启用限流（缺省视为开启）。 */
+    /**
+     * 是否启用限流（缺省视为开启）。
+     */
     public boolean isEnabled() {
         return Boolean.TRUE.equals(enabled);
     }

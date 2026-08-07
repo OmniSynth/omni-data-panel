@@ -3,13 +3,14 @@ import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import AuditCleanupActions from '@/components/AuditCleanupActions.vue'
-import { loginAuditApi } from '@/api'
+import { loginAuditApi, settingsApi } from '@/api'
 import { formatDateTime } from '@/display'
 import type { LoginAudit } from '@/types'
 
 const { t } = useI18n()
 const loading = ref(false)
 const cleaning = ref(false)
+const logsClearEnabled = ref(true)
 const rows = ref<LoginAudit[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -71,14 +72,17 @@ async function onCleanup(payload: { mode: 'ALL' | 'BEFORE_DAYS' | 'BEFORE_DATE';
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  logsClearEnabled.value = await settingsApi.logsClearEnabled()
+  await load()
+})
 </script>
 
 <template>
   <div class="page">
     <div class="page-header">
       <h1 class="page-title">{{ t('loginAudit.title') }}</h1>
-      <AuditCleanupActions :cleaning="cleaning" @cleanup="onCleanup" />
+      <AuditCleanupActions v-if="logsClearEnabled" :cleaning="cleaning" @cleanup="onCleanup" />
     </div>
 
     <div class="toolbar filters">

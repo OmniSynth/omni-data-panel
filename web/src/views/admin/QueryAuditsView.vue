@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import AuditCleanupActions from '@/components/AuditCleanupActions.vue'
-import { dataSourceApi, queryAuditApi, userApi } from '@/api'
+import { dataSourceApi, queryAuditApi, settingsApi, userApi } from '@/api'
 import { displayLabel, formatDateTime } from '@/display'
 import { formatDuration } from '@/query/duration'
 import type { AdminUser, DataSource, Id, QueryAudit, QueryAuditPreview } from '@/types'
@@ -19,6 +19,7 @@ const sources = ref<DataSource[]>([])
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const cleaning = ref(false)
+const logsClearEnabled = ref(true)
 const detail = ref<QueryAudit>()
 const preview = ref<QueryAuditPreview | null>(null)
 
@@ -141,6 +142,7 @@ async function onCleanup(payload: { mode: 'ALL' | 'BEFORE_DAYS' | 'BEFORE_DATE';
 }
 
 onMounted(async () => {
+  logsClearEnabled.value = await settingsApi.logsClearEnabled()
   await loadMeta()
   await load()
 })
@@ -150,7 +152,7 @@ onMounted(async () => {
   <div class="page">
     <div class="page-header">
       <h1 class="page-title">{{ t('queryAudit.title') }}</h1>
-      <AuditCleanupActions :cleaning="cleaning" @cleanup="onCleanup" />
+      <AuditCleanupActions v-if="logsClearEnabled" :cleaning="cleaning" @cleanup="onCleanup" />
     </div>
 
     <div class="toolbar filters">

@@ -2,6 +2,7 @@ package com.omni.panel.controller;
 
 import java.nio.charset.StandardCharsets;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.core.io.InputStreamResource;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.omni.panel.common.ApiResponse;
+import com.omni.panel.common.ClientRequestInfo;
 import com.omni.panel.entity.ExportTaskEntity;
 import com.omni.panel.service.ExportService;
 
@@ -31,8 +33,6 @@ public class ExportController {
 
     /**
      * 注入导出业务服务。
-     *
-     * @param service 导出服务
      */
     public ExportController(ExportService service) {
         this.service = service;
@@ -40,16 +40,13 @@ public class ExportController {
 
     /**
      * 将已成功查询的结果同步生成并作为附件返回。
-     *
-     * @param queryId 查询标识
-     * @param format  导出格式，支持 CSV 或 XLSX
-     * @return 包含完整导出内容的附件响应
      */
     @GetMapping("/queries/{queryId}")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('export:execute')")
     public ResponseEntity<byte[]> synchronous(@PathVariable String queryId,
-                                              @RequestParam(defaultValue = "CSV") String format) {
-        byte[] content = service.synchronous(queryId, format);
+                                              @RequestParam(defaultValue = "CSV") String format,
+                                              HttpServletRequest request) {
+        byte[] content = service.synchronous(queryId, format, ClientRequestInfo.from(request));
         String extension = format.toLowerCase();
         MediaType mediaType = "xlsx".equals(extension)
                 ? MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -62,35 +59,29 @@ public class ExportController {
 
     /**
      * 提交基于请求体的异步导出任务。
-     *
-     * @param request 异步导出参数
-     * @return 新建任务的标识
      */
     @PostMapping
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('export:execute')")
-    public ApiResponse<TaskResult> submit(@Valid @RequestBody ExportRequest request) {
-        return ApiResponse.ok(new TaskResult(service.asynchronous(request.queryId(), request.format())));
+    public ApiResponse<TaskResult> submit(@Valid @RequestBody ExportRequest requestBody,
+                                          HttpServletRequest request) {
+        return ApiResponse.ok(new TaskResult(
+                service.asynchronous(requestBody.queryId(), requestBody.format(), ClientRequestInfo.from(request))));
     }
 
     /**
      * 为指定查询提交异步导出任务。
-     *
-     * @param queryId 查询标识
-     * @param format  导出格式，支持 CSV 或 XLSX
-     * @return 新建任务的标识
      */
     @PostMapping("/queries/{queryId}/async")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('export:execute')")
     public ApiResponse<TaskResult> asynchronous(@PathVariable String queryId,
-                                                @RequestParam(defaultValue = "XLSX") String format) {
-        return ApiResponse.ok(new TaskResult(service.asynchronous(queryId, format)));
+                                                @RequestParam(defaultValue = "XLSX") String format,
+                                                HttpServletRequest request) {
+        return ApiResponse.ok(new TaskResult(
+                service.asynchronous(queryId, format, ClientRequestInfo.from(request))));
     }
 
     /**
      * 查询本人创建或管理员可见的异步导出任务状态。
-     *
-     * @param taskId 导出任务标识
-     * @return 导出任务详情
      */
     @GetMapping("/{taskId}")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('export:execute')")
@@ -100,9 +91,6 @@ public class ExportController {
 
     /**
      * 下载本人创建或管理员可见且已成功完成的异步导出文件。
-     *
-     * @param taskId 导出任务标识
-     * @return 流式附件响应；响应消费结束时由 Web 层关闭对象流
      */
     @GetMapping("/{taskId}/download")
     @PreAuthorize("hasRole('ADMIN') or hasAuthority('export:execute')")
@@ -120,17 +108,12 @@ public class ExportController {
 
     /**
      * 异步导出提交请求。
-     *
-     * @param queryId 查询标识
-     * @param format  导出格式，支持 CSV 或 XLSX
      */
     public record ExportRequest(@NotBlank String queryId, @NotBlank String format) {
     }
 
     /**
      * 异步导出提交结果。
-     *
-     * @param taskId 新建的导出任务标识
      */
     public record TaskResult(String taskId) {
     }

@@ -77,17 +77,36 @@ export function columnStyleOf(style: TableStyle | null | undefined, column: stri
 function cellText(value: unknown): string {
   if (value == null) return ''
   if (typeof value === 'boolean') return value ? 'true' : 'false'
-  return String(value)
+  return String(value).trim()
+}
+
+/** 将布尔语义值规范为 true/false；无法识别则返回 null */
+function asBoolToken(value: unknown): 'true' | 'false' | null {
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'number') {
+    if (value === 1) return 'true'
+    if (value === 0) return 'false'
+    return null
+  }
+  const text = String(value ?? '').trim().toLowerCase()
+  if (['1', 'true', 'yes', 'y', '是'].includes(text)) return 'true'
+  if (['0', 'false', 'no', 'n', '否'].includes(text)) return 'false'
+  return null
 }
 
 /** 判断行是否命中单条规则 */
 export function matchRowRule(row: Record<string, unknown>, rule: TableRowRule): boolean {
-  const raw = cellText(row[rule.field])
-  const expected = rule.value ?? ''
+  const rawValue = row[rule.field]
+  const raw = cellText(rawValue)
+  const expected = (rule.value ?? '').trim()
+  const rawBool = asBoolToken(rawValue)
+  const expectedBool = asBoolToken(expected)
   switch (rule.op) {
     case 'EQ':
+      if (rawBool && expectedBool) return rawBool === expectedBool
       return raw === expected || raw.toLowerCase() === expected.toLowerCase()
     case 'NE':
+      if (rawBool && expectedBool) return rawBool !== expectedBool
       return raw !== expected && raw.toLowerCase() !== expected.toLowerCase()
     case 'LIKE':
       return raw.toLowerCase().includes(expected.toLowerCase())

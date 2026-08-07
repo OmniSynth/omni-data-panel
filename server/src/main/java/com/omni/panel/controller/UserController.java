@@ -32,8 +32,8 @@ public class UserController {
     /**
      * 注入用户与双因子认证服务。
      *
-     * @param service      用户服务
-     * @param totpService  双因子认证服务
+     * @param service     用户服务
+     * @param totpService 双因子认证服务
      */
     public UserController(UserService service, TotpService totpService) {
         this.service = service;

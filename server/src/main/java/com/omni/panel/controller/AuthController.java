@@ -51,15 +51,15 @@ public class AuthController {
     /**
      * 构造认证控制器并注入依赖。
      *
-     * @param userMapper             用户数据访问
-     * @param passwordEncoder        密码哈希校验
-     * @param jwtService             JWT 签发与校验
-     * @param loginAuditService      登录审计
-     * @param userService            用户业务服务
-     * @param totpService            双因子认证
-     * @param loginChallengeService  登录挑战与签名校验
-     * @param sessionRegistry        会话注册表
-     * @param omniMetrics            业务指标
+     * @param userMapper            用户数据访问
+     * @param passwordEncoder       密码哈希校验
+     * @param jwtService            JWT 签发与校验
+     * @param loginAuditService     登录审计
+     * @param userService           用户业务服务
+     * @param totpService           双因子认证
+     * @param loginChallengeService 登录挑战与签名校验
+     * @param sessionRegistry       会话注册表
+     * @param omniMetrics           业务指标
      */
     public AuthController(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtService jwtService,
                           LoginAuditService loginAuditService, UserService userService, TotpService totpService,

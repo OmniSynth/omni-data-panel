@@ -35,15 +35,15 @@ public class SystemMailService {
     /**
      * 注入系统发信所需依赖与环境变量回退配置。
      *
-     * @param settingService           系统设置（SMTP）
-     * @param crypto                   凭证加解密
-     * @param subscriptionProperties   订阅相关配置（环境发件人）
-     * @param envHost                  环境 SMTP 主机
-     * @param envPort                  环境 SMTP 端口
-     * @param envUsername              环境 SMTP 用户名
-     * @param envPassword              环境 SMTP 密码
-     * @param envAuth                  环境 SMTP 是否认证
-     * @param envStartTls              环境 SMTP 是否 STARTTLS
+     * @param settingService         系统设置（SMTP）
+     * @param crypto                 凭证加解密
+     * @param subscriptionProperties 订阅相关配置（环境发件人）
+     * @param envHost                环境 SMTP 主机
+     * @param envPort                环境 SMTP 端口
+     * @param envUsername            环境 SMTP 用户名
+     * @param envPassword            环境 SMTP 密码
+     * @param envAuth                环境 SMTP 是否认证
+     * @param envStartTls            环境 SMTP 是否 STARTTLS
      */
     public SystemMailService(SettingService settingService, CredentialCrypto crypto,
                              SubscriptionProperties subscriptionProperties,

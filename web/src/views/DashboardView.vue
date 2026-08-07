@@ -4,8 +4,9 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { dashboardApi, publicLinkApi } from '@/api'
-import type { DashboardRender, DashboardRenderCard, PublicLink } from '@/types'
+import type { DashboardRender, DashboardRenderCard, PublicLink, PublicLinkExpireDays } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
+import DashboardCardShell from '@/components/DashboardCardShell.vue'
 import DashboardParameterBar from '@/components/DashboardParameterBar.vue'
 import PublicShareDialog from '@/components/PublicShareDialog.vue'
 import { useFullscreen } from '@/composables/useFullscreen'
@@ -18,11 +19,14 @@ import {
   parseLayoutJson,
 } from '@/dashboard/config'
 import { exportDashboardPdf, exportDashboardPng } from '@/dashboard/exportDashboard'
+import { DASHBOARD_SKELETON_LAYOUTS, skeletonLayoutStyle } from '@/dashboard/skeletonLayouts'
 import { copyText } from '@/utils/clipboard'
+import { useUserStore } from '@/stores/user'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const root = ref<HTMLElement>()
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(root)
 const dashboard = ref<DashboardRender>()
@@ -36,6 +40,8 @@ const linksLoading = ref(false)
 const creatingLink = ref(false)
 const canEdit = computed(() =>
   !!dashboard.value && ['ADMIN', 'OWNER', 'WRITE'].includes(dashboard.value.accessLevel))
+const canExport = computed(() => userStore.hasPermission('export:execute'))
+const canSubscribe = computed(() => userStore.hasPermission('subscription:manage'))
 const dashboardConfig = computed(() => parseDashboardConfig(dashboard.value?.configJson))
 const tabs = computed(() => dashboardConfig.value.tabs || [])
 const parameters = computed(() => dashboardConfig.value.parameters || [])
@@ -51,6 +57,9 @@ const tabSections = computed(() => {
     cards: filterCardsByTab(dashboard.value!.cards, tab.id, tabs.value),
   }))
 })
+/** 首屏无数据时用骨架网格；刷新时在各卡片内展示骨架 */
+const showPageSkeleton = computed(() => loading.value && !dashboard.value && !exporting.value)
+const cardsLoading = computed(() => loading.value && !!dashboard.value && !exporting.value)
 let loadVersion = 0
 let mounted = true
 
@@ -104,7 +113,11 @@ async function load(forceRefresh = false) {
     dashboard.value = data
     syncActiveTab()
     if (!Object.keys(parameterValues.value).length) {
-      parameterValues.value = defaultParameterValues(parameters.value)
+      if (data.parameterValues && typeof data.parameterValues === 'object') {
+        parameterValues.value = { ...data.parameterValues }
+      } else {
+        parameterValues.value = defaultParameterValues(parameters.value)
+      }
     }
   } catch (error) {
     if (!mounted || version !== loadVersion) return
@@ -154,13 +167,14 @@ async function openShareDialog() {
   await loadLinks()
 }
 
-async function createPublicLink() {
+async function createPublicLink(expiresInDays: PublicLinkExpireDays = null) {
   if (creatingLink.value) return
   creatingLink.value = true
   try {
     const link = await publicLinkApi.create({
       resourceType: 'DASHBOARD',
       resourceId: dashboardId(),
+      expiresInDays,
     })
     links.value = [link, ...links.value.filter((item) => item.token !== link.token)]
     const url = publicUrl(link.token)
@@ -197,6 +211,7 @@ async function revokeLink(link: PublicLink) {
 }
 
 async function onExport(command: string) {
+  if (!canExport.value) return ElMessage.warning(t('common.noExportPermission'))
   if (exporting.value || loading.value) return
   if (!root.value || !dashboard.value?.cards.length) {
     ElMessage.warning(t('dashboard.exportEmpty'))
@@ -233,18 +248,23 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="root"
-    v-loading="loading || exporting"
+    v-loading="exporting"
     class="page dashboard-view"
     :element-loading-text="exporting ? t('dashboard.exporting') : undefined"
   >
     <div class="page-header no-export">
       <h1 class="page-title">{{ dashboard?.name || t('dashboard.title') }}</h1>
       <div class="header-actions">
-        <el-button text @click="load(true)">{{ t('dashboard.refresh') }}</el-button>
+        <el-button text :loading="loading" @click="load(true)">{{ t('dashboard.refresh') }}</el-button>
         <el-button text @click="toggleFullscreen">
           {{ isFullscreen ? t('dashboard.exitFullscreen') : t('dashboard.fullscreen') }}
         </el-button>
-        <el-dropdown trigger="click" :disabled="exporting || loading" @command="onExport">
+        <el-dropdown
+          v-if="canExport"
+          trigger="click"
+          :disabled="exporting || loading"
+          @command="onExport"
+        >
           <el-button text :loading="exporting">{{ t('dashboard.export') }}</el-button>
           <template #dropdown>
             <el-dropdown-menu>
@@ -253,6 +273,13 @@ onBeforeUnmount(() => {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <el-button
+          v-if="!isFullscreen && canSubscribe"
+          text
+          @click="router.push({ path: '/subscriptions', query: { dashboardId: dashboardId(), create: '1' } })"
+        >
+          {{ t('dashboard.subscribe') }}
+        </el-button>
         <el-button
           v-if="!isFullscreen && canEdit"
           text
@@ -277,26 +304,35 @@ onBeforeUnmount(() => {
     />
     <el-empty v-if="!loading && dashboard && !dashboard.cards.length" :description="t('dashboard.noCards')" />
 
+    <div v-if="showPageSkeleton" class="dashboard-grid">
+      <DashboardCardShell
+        v-for="(layout, index) in DASHBOARD_SKELETON_LAYOUTS"
+        :key="`skel-${index}`"
+        class="dashboard-card"
+        :style="skeletonLayoutStyle(layout)"
+        loading
+      />
+    </div>
+
     <!-- 导出时扁平展示全部页签 -->
-    <template v-if="exporting && tabs.length && dashboard?.cards.length">
+    <template v-else-if="exporting && tabs.length && dashboard?.cards.length">
       <section v-for="section in tabSections" :key="section.tab.id" class="tab-section">
         <h2 class="tab-section-title">{{ section.tab.name }}</h2>
         <div v-if="section.cards.length" class="dashboard-grid">
-          <el-card
+          <DashboardCardShell
             v-for="card in section.cards"
             :key="card.cardId"
             class="dashboard-card"
             :style="layoutStyle(card.layoutJson)"
+            :title="card.title"
+            :error="card.error"
           >
-            <template #header><strong>{{ card.title }}</strong></template>
-            <el-alert v-if="card.error" :title="card.error" type="error" :closable="false" show-icon />
             <ChartPreview
-              v-else
               :type="card.chartType"
               :result="card.result"
               :option="chartOption(card.configJson)"
             />
-          </el-card>
+          </DashboardCardShell>
         </div>
       </section>
     </template>
@@ -315,23 +351,25 @@ onBeforeUnmount(() => {
         :description="t('dashboard.noCardsInTab')"
       />
       <div v-if="visibleCards.length" class="dashboard-grid">
-        <el-card
+        <DashboardCardShell
           v-for="card in visibleCards"
           :key="card.cardId"
           class="dashboard-card"
           :style="layoutStyle(card.layoutJson)"
+          :title="card.title"
+          :error="card.error"
+          :loading="cardsLoading"
+          show-refresh
+          @refresh="load(true)"
         >
-          <template #header><strong>{{ card.title }}</strong></template>
-          <el-alert v-if="card.error" :title="card.error" type="error" :closable="false" show-icon />
           <ChartPreview
-            v-else
             :type="card.chartType"
             :result="card.result"
             :option="chartOption(card.configJson)"
             :interactive="!!parseClickAction(card.clickActionJson)?.enabled"
             @click="onCardClick(String(card.cardId), $event.label)"
           />
-        </el-card>
+        </DashboardCardShell>
       </div>
     </template>
 
@@ -361,7 +399,7 @@ onBeforeUnmount(() => {
   height: 100%;
   overflow: auto;
   padding: 16px 24px;
-  background: var(--omni-bg, #f5f6f8);
+  background: var(--omni-bg);
 }
 .dashboard-view.exporting .no-export { display: none !important; }
 .page-header {
@@ -391,17 +429,15 @@ onBeforeUnmount(() => {
   font-size: 16px;
   font-weight: 600;
   line-height: 24px;
+  color: var(--omni-text);
 }
-.dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 90px; gap: 16px; }
-.dashboard-card { display: flex; flex-direction: column; overflow: hidden; height: 100%; }
-.dashboard-card :deep(.el-card__body) {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: 90px;
+  gap: 16px;
 }
-.dashboard-card :deep(.el-card__body > *) { flex: 1; min-height: 0; }
+.dashboard-card { min-width: 0; min-height: 0; }
 @media (max-width: 900px) {
   .dashboard-card { grid-column: 1 / -1 !important; }
 }

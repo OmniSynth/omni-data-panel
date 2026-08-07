@@ -45,9 +45,9 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 
 | 文档 | 说明 |
 |---|---|
-| [docs/user-guide.md](docs/user-guide.md) | 使用手册：模型 / 图表 / 仪表盘 / **管理端设置·订阅·调度** |
+| [docs/user-guide.md](docs/user-guide.md) | 使用手册：模型 / 图表 / 仪表盘 / 订阅 / **管理端设置·调度** |
 | [docs/api-log-dashboard-guide.md](docs/api-log-dashboard-guide.md) | 实战：`sys_api_log` 看板（含截图） |
-| [docs/embed-integration.md](docs/embed-integration.md) | 业务系统签名嵌入（含域名白名单） |
+| [docs/embed-integration.md](docs/embed-integration.md) | 业务系统签名嵌入（域名白名单、JWT 锁定参数） |
 | [docs/oidc-sso.md](docs/oidc-sso.md) | 企业 OIDC SSO |
 | [docs/production.md](docs/production.md) | 生产密钥、探针、可信代理与加固清单 |
 | [docs/observability.md](docs/observability.md) | Prometheus 指标、requestId、告警示例 |
@@ -104,38 +104,38 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 
 | 方式 | 适用场景 | 要点 |
 |---|---|---|
-| 公开链接 | 对外只读分享 | 可撤销；永久直至删除 |
-| 签名嵌入 | 嵌进业务系统 | 短期 JWT（约 1h）、开启 `embed.enabled`、配置嵌入域名白名单、**服务端代签** |
+| 公开链接 | 对外只读分享 | 可撤销；可选有效期（默认永不过期） |
+| 签名嵌入 | 嵌进业务系统 | 短期 JWT（约 1h）、开启 `embed.enabled`、配置嵌入域名白名单、**服务端代签**；签发时可写入仪表盘**锁定参数** |
 | 打印页 | 订阅邮件 PDF | Playwright 无头打开 `/print/dashboard/{token}` |
 
-仪表盘安全渲染（`/api/dashboards/{id}/render`）：以图表所有者权限执行已保存查询，只返回展示配置与结果，不向只读用户暴露查询 JSON、模型或数据源细节。公开 / 嵌入侧使用参数默认值。
+仪表盘安全渲染（`/api/dashboards/{id}/render`）：以图表所有者权限执行已保存查询，只返回展示配置与结果（含实际合并后的 `parameterValues`），不向只读用户暴露查询 JSON、模型或数据源细节。公开链接使用参数默认值；签名嵌入优先应用 JWT 锁定参数，其余用默认值——访客均不可改参。
 
 完整对接步骤见 [业务系统安全嵌入说明](docs/embed-integration.md)。
 
 ### 调度与订阅
 
-- **订阅（产品 UI）**：管理端按 Cron 将仪表盘邮件推送给站内用户；可手动触发；可选附带 PDF（`SUBSCRIPTION_PDF_ENABLED`）。
+- **订阅（产品 UI）**：侧栏「订阅」（`/subscriptions`，需 `subscription:manage`）按 Cron 将仪表盘邮件推送给站内用户；可手动触发；可选附带 PDF（`SUBSCRIPTION_PDF_ENABLED`）。
 - **通用调度（产品 UI）**：管理端「调度」页（`/admin/schedules`，需 `schedule:manage`）管理 Quartz 任务：元数据同步、仪表盘后台刷新、按已有订阅发送；JobStore 为 JDBC（主库 `QRTZ_*`）并开启集群。
 - **邮件**：管理端配置 SMTP 并测试发送；亦可使用环境变量 `MAIL_*`。
 
 ### 权限与安全
 
 - **多角色 RBAC**：功能权限取启用角色并集；内置 `ADMIN` 受保护（不可编辑 / 禁用 / 删除 / 普通接口分配）。
-- **功能权限示例**：`data-source:manage`、`dataset:manage`、`dashboard:manage`、`query:execute`、`query:raw`、`schedule:manage`、`export:execute`。
+- **功能权限示例**：`data-source:manage`、`dataset:manage`、`dashboard:manage`、`query:execute`、`query:raw`、`schedule:manage`、`subscription:manage`、`export:execute`。
 - **资源 ACL**：集合 / 仪表盘 / 图表 / 模型 / 指标 / 数据源等按角色授予 `READ` / `WRITE`（取最高；`WRITE` 含 `READ`）。数据源角色仅 `READ`；连接维护仅 `ADMIN`。集合权限可继承；个人集合不可共享。
 - **登录 hardening**：HMAC 登录挑战、JWT、可选 TOTP 双因素与备份码、并发会话上限（`auth.session.max-concurrent`）。
 - **企业 SSO（OIDC）**：可选对接 IdP（`OIDC_*`）；保留本地密码登录；首次登录可 JIT 建号并赋予默认 `USER` 角色。详见 [docs/oidc-sso.md](docs/oidc-sso.md)。
 - **限流与响应头**：登录 / 公开 / 嵌入按 IP 限流（Redis 优先，`omni.security.rate-limit.*`）；`TRUSTED_PROXIES` 控制是否信任 `X-Forwarded-For`；响应带 `X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`、CSP `frame-ancestors`。
-- **审计**：登录、查询（含详情）、模型变更、系统日志；支持清理。连接池健康页便于运维排障。
+- **审计**：登录、查询（含详情）、模型变更、**导出**、系统日志；支持清理。连接池健康页便于运维排障。
 
 ### 管理控制台（`/admin`）
 
 | 分组 | 能力 |
 |---|---|
-| 系统 | 站点名称、嵌入开关与域名白名单、查询缓存、会话上限、SMTP；**订阅**、**调度** |
+| 系统 | 站点名称、嵌入开关与域名白名单、查询缓存、会话上限、SMTP；**订阅**（亦见产品端 `/subscriptions`）、**调度** |
 | 人员 | 用户多角色、启停、密码重置、激活邮件、MFA 重置；角色与权限目录 |
 | 数据源 | 连接维护、连接池健康、对象 ACL / 角色授权 |
-| 审计 | 查询 / 登录 / 系统日志 / 模型审计 |
+| 审计 | 查询 / 登录 / 系统日志 / 模型审计 / **导出审计** |
 
 通用设置键：`site.name`、`embed.enabled`、`embed.allowed-origins`、`cache.query.enabled`、`cache.query.ttl-seconds`、`auth.session.max-concurrent`、`mail.*`。
 
@@ -166,9 +166,10 @@ Browser → nginx / Vue SPA → /api → Spring Boot
 | 模型 | `/api/datasets`、字段 DISTINCT、行/字段策略 |
 | 查询 | `/api/queries` |
 | 可视化 | `/api/charts`、`/dashboards`、`/dashboards/{id}/render` |
-| 导出 / 调度 | `/api/exports`、`/schedules`、`/subscriptions` |
+| 导出 / 调度 / 订阅 | `/api/exports`、`/schedules`、`/subscriptions` |
+| 审计 | `/api/query-audits`、`/login-audits`、`/system-logs`、`/dataset-audits`、`/export-audits` |
 | 授权 | `/api/resources/{type}/{id}/permissions` |
-| 分享 | `/api/public-links`、`/public/**`、`/embed/**` |
+| 分享 | `/api/public-links`、`/public/**`、`/embed/**`（签发 `POST /embed/tokens` 可带 `parameters`） |
 | 设置 | `/api/settings` |
 
 ## 快速开始

@@ -335,6 +335,26 @@ export interface DatasetAudit {
   createdAt?: string
 }
 
+export interface ExportAudit {
+  id: Id
+  userId?: Id | null
+  username?: string | null
+  displayName?: string | null
+  queryId?: string | null
+  dataSourceId?: Id | null
+  dataSourceName?: string | null
+  format: string
+  mode: string
+  status: string
+  rowCount?: number | null
+  byteSize?: number | null
+  taskId?: string | null
+  clientIp?: string | null
+  userAgent?: string | null
+  errorMessage?: string | null
+  createdAt?: string
+}
+
 export interface Chart {
   id: Id
   name: string
@@ -456,6 +476,8 @@ export interface DashboardRender {
   name: string
   configJson: string
   accessLevel: 'ADMIN' | 'OWNER' | 'WRITE' | 'READ'
+  /** 服务端实际用于查询的合并参数（默认值 + 登录覆盖 / 嵌入锁定） */
+  parameterValues?: Record<string, unknown>
   cards: DashboardRenderCard[]
 }
 
@@ -561,7 +583,12 @@ export interface PublicLink {
   enabled: boolean
   createdBy?: Id
   createdAt?: string
+  /** 过期时间；空表示永不过期 */
+  expiresAt?: string | null
 }
+
+/** 公开链接有效天数预设；0 / null 表示永不过期 */
+export type PublicLinkExpireDays = 0 | 1 | 7 | 30 | 90 | null
 
 export interface PublicQuestion {
   id: Id
@@ -580,6 +607,7 @@ export interface SiteSettings {
   'ui.sql.tips-collapsed-default'?: string | boolean
   'cache.query.enabled'?: string | boolean
   'cache.query.ttl-seconds'?: string | number
+  'logs.clear.enabled'?: string | boolean
   'auth.session.max-concurrent'?: string | number
   'mail.host'?: string
   'mail.port'?: string | number

@@ -122,13 +122,17 @@ public class DashboardPdfService {
         }
     }
 
-    /** 容器销毁时关闭 Playwright 与浏览器资源。 */
+    /**
+     * 容器销毁时关闭 Playwright 与浏览器资源。
+     */
     @PreDestroy
     public void destroy() {
         closeQuietly();
     }
 
-    /** 静默关闭浏览器与 Playwright，忽略关闭异常。 */
+    /**
+     * 静默关闭浏览器与 Playwright，忽略关闭异常。
+     */
     private void closeQuietly() {
         Browser browser = browserRef.getAndSet(null);
         if (browser != null) {

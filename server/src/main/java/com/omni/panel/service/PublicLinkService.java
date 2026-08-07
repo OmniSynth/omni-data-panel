@@ -23,6 +23,7 @@ import com.omni.panel.mapper.PublicLinkMapper;
 @Service
 public class PublicLinkService {
     private static final Set<String> TYPES = Set.of("DASHBOARD", "QUESTION");
+    private static final Set<Integer> EXPIRE_DAYS = Set.of(1, 7, 30, 90);
     private final PublicLinkMapper mapper;
     private final DashboardMapper dashboardMapper;
     private final ChartMapper chartMapper;
@@ -62,21 +63,24 @@ public class PublicLinkService {
     /**
      * 创建公开链接。
      *
-     * @param resourceType 资源类型 DASHBOARD|QUESTION
-     * @param resourceId   资源标识
+     * @param resourceType  资源类型 DASHBOARD|QUESTION
+     * @param resourceId    资源标识
+     * @param expiresInDays 有效天数；空表示永不过期，仅支持 1/7/30/90
      * @return 已创建链接
      */
     @Transactional
-    public PublicLinkEntity create(String resourceType, long resourceId) {
+    public PublicLinkEntity create(String resourceType, long resourceId, Integer expiresInDays) {
         String type = normalize(resourceType);
         requireResourceWritable(type, resourceId);
+        LocalDateTime now = LocalDateTime.now();
         PublicLinkEntity link = new PublicLinkEntity();
         link.setResourceType(type);
         link.setResourceId(resourceId);
         link.setToken(UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "").substring(0, 16));
         link.setEnabled(true);
         link.setCreatedBy(AuthenticatedUser.current().id());
-        link.setCreatedAt(LocalDateTime.now());
+        link.setCreatedAt(now);
+        link.setExpiresAt(resolveExpiresAt(now, expiresInDays));
         mapper.insert(link);
         return link;
     }
@@ -103,10 +107,37 @@ public class PublicLinkService {
     public PublicLinkEntity getByToken(String token) {
         PublicLinkEntity link = mapper.selectOne(Wrappers.<PublicLinkEntity>lambdaQuery()
                 .eq(PublicLinkEntity::getToken, token));
-        if (link == null || !Boolean.TRUE.equals(link.getEnabled())) {
+        if (link == null || !Boolean.TRUE.equals(link.getEnabled()) || isExpired(link)) {
             throw new BusinessException(404, "公开链接不存在或已失效");
         }
         return link;
+    }
+
+    /**
+     * 将有效天数解析为过期时间。
+     *
+     * @param now           当前时间
+     * @param expiresInDays 有效天数；空表示永不过期
+     * @return 过期时间，永不过期时为 {@code null}
+     */
+    private static LocalDateTime resolveExpiresAt(LocalDateTime now, Integer expiresInDays) {
+        if (expiresInDays == null || expiresInDays == 0) {
+            return null;
+        }
+        if (!EXPIRE_DAYS.contains(expiresInDays)) {
+            throw new BusinessException("有效期仅支持 1/7/30/90 天或永不过期");
+        }
+        return now.plusDays(expiresInDays);
+    }
+
+    /**
+     * 判断公开链接是否已过期。
+     *
+     * @param link 公开链接
+     * @return 已过期时返回 {@code true}
+     */
+    private static boolean isExpired(PublicLinkEntity link) {
+        return link.getExpiresAt() != null && !link.getExpiresAt().isAfter(LocalDateTime.now());
     }
 
     /**

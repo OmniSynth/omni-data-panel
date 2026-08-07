@@ -42,31 +42,41 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
             Pattern.compile("(?s).*\\blo_export\\s*\\(.*")
     );
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String code() {
         return CODE;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String label() {
         return "PostgreSQL";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int defaultPort() {
         return 5432;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         return jdbcUrl != null && jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql:");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -81,7 +91,9 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return "jdbc:postgresql://" + normalizedHost + ':' + port + '/' + database;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -97,7 +109,9 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return new ParsedJdbcUrl(host, port, database);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         ParsedJdbcUrl parsed = parseJdbcUrl(jdbcUrl);
@@ -109,13 +123,17 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void configurePool(HikariConfig config, DataSourceEntity source) {
         config.setConnectionInitSql("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void prepareConnection(Connection connection, DataSourceEntity source) throws SQLException {
         // 库名已在 URL 中；默认搜索路径保留 public，跨 schema 用 schema.table
@@ -124,7 +142,9 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
             throws SQLException {
@@ -139,31 +159,41 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         connection.setSchema("public");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void useNamespace(Connection connection, String namespace) throws SQLException {
         connection.setSchema(namespace);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean defaultDatabaseIsNamespace() {
         return false;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String metaCatalog(String namespace) {
         return null;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String metaSchema(String namespace) {
         return namespace;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<String> listNamespaces(Connection connection, DatabaseMetaData metadata) throws SQLException {
         Set<String> schemas = new LinkedHashSet<>();
@@ -178,13 +208,17 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return List.copyOf(schemas);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Set<String> systemNamespaces() {
         return SYSTEM_NAMESPACES;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
             throws SQLException {
@@ -209,7 +243,9 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return tables;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
             throws SQLException {
@@ -250,19 +286,25 @@ public class PostgresqlDialectPlugin extends DialectPlugin {
         return columns;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public char identifierQuote() {
         return '"';
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String quoteIdentifier(String value) {
         return '"' + value.replace("\"", "\"\"") + '"';
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<Pattern> forbiddenSqlPatterns() {
         return FORBIDDEN;

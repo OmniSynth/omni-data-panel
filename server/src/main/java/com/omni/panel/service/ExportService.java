@@ -21,11 +21,13 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.springframework.stereotype.Service;
 import com.omni.panel.common.BusinessException;
+import com.omni.panel.common.ClientRequestInfo;
 import com.omni.panel.config.AuthenticatedUser;
 import com.omni.panel.entity.ExportTaskEntity;
 import com.omni.panel.export.MinioProperties;
 import com.omni.panel.mapper.ExportTaskMapper;
 import com.omni.panel.query.JdbcQueryExecutor;
+import com.omni.panel.query.QueryStateStore;
 
 /**
  * 将成功查询结果导出为 CSV 或 XLSX，支持同步内存生成和基于 MinIO 的异步任务。
@@ -34,52 +36,74 @@ import com.omni.panel.query.JdbcQueryExecutor;
 public class ExportService {
     private final QueryService queryService;
     private final ExportTaskMapper mapper;
+    private final ExportAuditService exportAuditService;
     private final MinioProperties properties;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     /**
-     * 注入查询、导出任务持久化与 MinIO 配置。
-     *
-     * @param queryService 查询服务
-     * @param mapper       导出任务数据访问
-     * @param properties   MinIO 连接配置
+     * 注入查询、导出任务持久化、导出审计与 MinIO 配置。
      */
-    public ExportService(QueryService queryService, ExportTaskMapper mapper, MinioProperties properties) {
+    public ExportService(QueryService queryService,
+                         ExportTaskMapper mapper,
+                         ExportAuditService exportAuditService,
+                         MinioProperties properties) {
         this.queryService = queryService;
         this.mapper = mapper;
+        this.exportAuditService = exportAuditService;
         this.properties = properties;
     }
 
     /**
      * 在当前请求内生成完整导出内容。
-     * 仅接受当前用户可访问且已成功并保留结果的查询；格式非法或生成失败时抛出业务异常。
-     *
-     * @param queryId 查询标识
-     * @param format  导出格式，支持 CSV 或 XLSX，不区分大小写
-     * @return 完整导出文件字节
      */
-    public byte[] synchronous(String queryId, String format) {
-        var snapshot = queryService.get(queryId);
+    public byte[] synchronous(String queryId, String format, ClientRequestInfo.Info client) {
+        QueryStateStore.QuerySnapshot snapshot = queryService.get(queryId);
         if (!"SUCCEEDED".equals(snapshot.status()) || snapshot.result() == null) {
             throw new BusinessException("仅成功查询可以导出");
         }
-        return generate(snapshot.result(), normalize(format));
+        String normalized = normalize(format);
+        Long userId = AuthenticatedUser.current().id();
+        Integer rowCount = snapshot.result().rows() == null ? 0 : snapshot.result().rows().size();
+        try {
+            byte[] content = generate(snapshot.result(), normalized);
+            exportAuditService.record(
+                    userId,
+                    queryId,
+                    snapshot.sourceId(),
+                    normalized,
+                    "SYNC",
+                    "SUCCEEDED",
+                    rowCount,
+                    (long) content.length,
+                    null,
+                    client,
+                    null);
+            return content;
+        } catch (RuntimeException ex) {
+            exportAuditService.record(
+                    userId,
+                    queryId,
+                    snapshot.sourceId(),
+                    normalized,
+                    "SYNC",
+                    "FAILED",
+                    rowCount,
+                    null,
+                    null,
+                    client,
+                    ex.getMessage());
+            throw ex;
+        }
     }
 
     /**
      * 创建异步导出任务并交由虚拟线程生成文件、上传 MinIO。
-     * 调用时会校验 MinIO 配置及查询成功状态，任务所有者固定为当前用户；提交后立即返回，
-     * 后台失败会将任务标记为 {@code FAILED} 并记录错误信息。
-     *
-     * @param queryId 查询标识
-     * @param format  导出格式，支持 CSV 或 XLSX，不区分大小写
-     * @return 新建的导出任务标识
      */
-    public String asynchronous(String queryId, String format) {
+    public String asynchronous(String queryId, String format, ClientRequestInfo.Info client) {
         if (!properties.configured()) {
             throw new BusinessException(503, "MinIO 未配置，无法执行异步导出");
         }
-        var snapshot = queryService.get(queryId);
+        QueryStateStore.QuerySnapshot snapshot = queryService.get(queryId);
         if (!"SUCCEEDED".equals(snapshot.status()) || snapshot.result() == null) {
             throw new BusinessException("仅成功查询可以导出");
         }
@@ -91,16 +115,15 @@ public class ExportService {
         task.setFormat(normalized);
         task.setStatus("QUEUED");
         mapper.insert(task);
-        executor.submit(() -> upload(task, snapshot.result()));
+        long sourceId = snapshot.sourceId();
+        long ownerId = task.getOwnerId();
+        Integer rowCount = snapshot.result().rows() == null ? 0 : snapshot.result().rows().size();
+        executor.submit(() -> upload(task, snapshot.result(), ownerId, sourceId, rowCount, client));
         return task.getId();
     }
 
     /**
      * 查询导出任务，并执行所有者边界校验。
-     * 仅任务所有者或管理员可访问，不存在与越权分别以 404、403 业务异常失败。
-     *
-     * @param taskId 导出任务标识
-     * @return 可访问的导出任务
      */
     public ExportTaskEntity get(String taskId) {
         ExportTaskEntity task = mapper.selectById(taskId);
@@ -114,10 +137,6 @@ public class ExportService {
 
     /**
      * 打开已成功导出文件的 MinIO 对象流。
-     * 读取前复用任务所有者校验，并拒绝未完成任务或未配置 MinIO 的请求；返回流的关闭责任由响应消费方承担。
-     *
-     * @param taskId 导出任务标识
-     * @return 包含对象流、下载文件名和格式的下载描述
      */
     public Download download(String taskId) {
         ExportTaskEntity task = get(taskId);
@@ -138,51 +157,64 @@ public class ExportService {
     }
 
     /**
-     * 在后台推进任务状态，生成文件并上传 MinIO；任何异常都收敛为失败状态并持久化错误信息。
-     *
-     * @param task   异步导出任务
-     * @param result 提交任务时取得的查询结果
+     * 在后台推进任务状态，生成文件并上传 MinIO；完成后写入导出审计。
      */
-    private void upload(ExportTaskEntity task, JdbcQueryExecutor.QueryResult result) {
+    private void upload(ExportTaskEntity task,
+                        JdbcQueryExecutor.QueryResult result,
+                        long ownerId,
+                        long sourceId,
+                        Integer rowCount,
+                        ClientRequestInfo.Info client) {
         task.setStatus("RUNNING");
         mapper.updateById(task);
         try {
             byte[] content = generate(result, task.getFormat());
             String objectName = "exports/" + task.getId() + "." + task.getFormat().toLowerCase(Locale.ROOT);
-            MinioClient client = client();
-            if (!client.bucketExists(BucketExistsArgs.builder().bucket(properties.bucket()).build())) {
-                client.makeBucket(MakeBucketArgs.builder().bucket(properties.bucket()).build());
+            MinioClient minio = client();
+            if (!minio.bucketExists(BucketExistsArgs.builder().bucket(properties.bucket()).build())) {
+                minio.makeBucket(MakeBucketArgs.builder().bucket(properties.bucket()).build());
             }
-            client.putObject(PutObjectArgs.builder().bucket(properties.bucket()).object(objectName)
+            minio.putObject(PutObjectArgs.builder().bucket(properties.bucket()).object(objectName)
                     .stream(new ByteArrayInputStream(content), content.length, -1)
                     .contentType("CSV".equals(task.getFormat()) ? "text/csv" :
                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").build());
             task.setObjectName(objectName);
             task.setStatus("SUCCEEDED");
+            exportAuditService.record(
+                    ownerId,
+                    task.getQueryId(),
+                    sourceId,
+                    task.getFormat(),
+                    "ASYNC",
+                    "SUCCEEDED",
+                    rowCount,
+                    (long) content.length,
+                    task.getId(),
+                    client,
+                    null);
         } catch (Exception exception) {
             task.setStatus("FAILED");
             task.setErrorMessage("MinIO 异步导出失败：" + exception.getMessage());
+            exportAuditService.record(
+                    ownerId,
+                    task.getQueryId(),
+                    sourceId,
+                    task.getFormat(),
+                    "ASYNC",
+                    "FAILED",
+                    rowCount,
+                    null,
+                    task.getId(),
+                    client,
+                    task.getErrorMessage());
         }
         mapper.updateById(task);
     }
 
-    /**
-     * 按格式将查询结果序列化为导出文件字节。
-     *
-     * @param result 查询结果
-     * @param format 导出格式，CSV 或 XLSX
-     * @return 完整文件内容
-     */
     private byte[] generate(JdbcQueryExecutor.QueryResult result, String format) {
         return "CSV".equals(format) ? csv(result) : xlsx(result);
     }
 
-    /**
-     * 将查询结果编码为带 BOM 的 UTF-8 CSV 字节流。
-     *
-     * @param result 查询结果
-     * @return CSV 文件字节
-     */
     private byte[] csv(JdbcQueryExecutor.QueryResult result) {
         StringBuilder csv = new StringBuilder("\uFEFF");
         appendCsvRow(csv, result.columns());
@@ -190,12 +222,6 @@ public class ExportService {
         return csv.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    /**
-     * 向 CSV 缓冲区追加一行，字段值按 RFC 4180 规则转义。
-     *
-     * @param csv    目标缓冲区
-     * @param values 行内字段值
-     */
     private void appendCsvRow(StringBuilder csv, List<?> values) {
         for (int index = 0; index < values.size(); index++) {
             if (index > 0) csv.append(',');
@@ -205,12 +231,6 @@ public class ExportService {
         csv.append("\r\n");
     }
 
-    /**
-     * 将查询结果写入流式 XLSX 工作簿并返回字节数组。
-     *
-     * @param result 查询结果
-     * @return XLSX 文件字节
-     */
     private byte[] xlsx(JdbcQueryExecutor.QueryResult result) {
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(100);
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
@@ -227,12 +247,6 @@ public class ExportService {
         }
     }
 
-    /**
-     * 将值列表写入 Excel 行，null 转为空字符串。
-     *
-     * @param row    目标行
-     * @param values 单元格值
-     */
     private void writeRow(Row row, List<?> values) {
         for (int index = 0; index < values.size(); index++) {
             Object value = values.get(index);
@@ -240,33 +254,15 @@ public class ExportService {
         }
     }
 
-    /**
-     * 按列顺序从行映射中提取字段值。
-     *
-     * @param columns 列名顺序
-     * @param row     单行数据映射
-     * @return 与列顺序对齐的值列表
-     */
     private List<Object> values(List<String> columns, Map<String, Object> row) {
         return columns.stream().map(row::get).toList();
     }
 
-    /**
-     * 根据当前配置构建 MinIO 客户端。
-     *
-     * @return 已配置端点与凭据的客户端实例
-     */
     private MinioClient client() {
         return MinioClient.builder().endpoint(properties.endpoint())
                 .credentials(properties.accessKey(), properties.secretKey()).build();
     }
 
-    /**
-     * 规范化导出格式并校验是否受支持。
-     *
-     * @param format 原始格式字符串
-     * @return 大写的 CSV 或 XLSX
-     */
     private String normalize(String format) {
         String normalized = format == null ? "" : format.toUpperCase(Locale.ROOT);
         if (!List.of("CSV", "XLSX").contains(normalized)) {
@@ -275,9 +271,6 @@ public class ExportService {
         return normalized;
     }
 
-    /**
-     * 关闭异步导出执行器，并等待已提交任务按执行器语义结束。
-     */
     @PreDestroy
     public void close() {
         executor.close();
@@ -285,10 +278,6 @@ public class ExportService {
 
     /**
      * 可流式返回的导出文件描述。
-     *
-     * @param stream   MinIO 对象输入流，由消费方关闭
-     * @param filename 建议下载文件名
-     * @param format   导出格式
      */
     public record Download(java.io.InputStream stream, String filename, String format) {
     }

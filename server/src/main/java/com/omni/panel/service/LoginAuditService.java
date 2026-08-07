@@ -19,12 +19,15 @@ import com.omni.panel.mapper.LoginAuditMapper;
 @Service
 public class LoginAuditService {
     private final LoginAuditMapper mapper;
+    private final SettingService settingService;
 
     /**
-     * @param mapper 登录审计持久化
+     * @param mapper         登录审计持久化
+     * @param settingService 系统设置
      */
-    public LoginAuditService(LoginAuditMapper mapper) {
+    public LoginAuditService(LoginAuditMapper mapper, SettingService settingService) {
         this.mapper = mapper;
+        this.settingService = settingService;
     }
 
     /**
@@ -81,6 +84,7 @@ public class LoginAuditService {
     @Transactional
     public int cleanup(AuditCleanupRequest request) {
         requireAdmin();
+        settingService.requireLogsClearEnabled();
         LocalDateTime before = AuditCleanupSupport.resolveBefore(request);
         return before == null ? mapper.deleteAll() : mapper.deleteBefore(before);
     }

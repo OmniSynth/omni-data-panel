@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router'
 import { dashboardApi, publicLinkApi } from '@/api'
 import { displayLabel } from '@/display'
 import { useUserStore } from '@/stores/user'
-import type { Dashboard, Id, PublicLink } from '@/types'
+import type { Dashboard, Id, PublicLink, PublicLinkExpireDays } from '@/types'
 import PublicShareDialog from '@/components/PublicShareDialog.vue'
 import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
 import { copyText } from '@/utils/clipboard'
@@ -97,13 +97,14 @@ async function openPublicLinks(dashboard: Dashboard) {
   await loadLinks()
 }
 
-async function createPublicLink() {
+async function createPublicLink(expiresInDays: PublicLinkExpireDays = null) {
   if (!linksDashboard.value || creatingLink.value) return
   creatingLink.value = true
   try {
     const link = await publicLinkApi.create({
       resourceType: 'DASHBOARD',
       resourceId: linksDashboard.value.id,
+      expiresInDays,
     })
     links.value = [link, ...links.value.filter((item) => item.token !== link.token)]
     const url = publicUrl(link.token)

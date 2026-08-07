@@ -32,25 +32,33 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
     private static final Pattern URL_PATTERN = Pattern.compile(
             "(?i)^jdbc:(?:clickhouse|ch)://([^/:?]+)(?::(\\d+))?(?:/([^?;\\s]*))?.*$");
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String code() {
         return CODE;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String label() {
         return "ClickHouse";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int defaultPort() {
         return 8123;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null) {
@@ -60,7 +68,9 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return lower.startsWith("jdbc:clickhouse:") || lower.startsWith("jdbc:ch:");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -79,7 +89,9 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return url.toString();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -95,7 +107,9 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return new ParsedJdbcUrl(host, port, database);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         if (parseJdbcUrl(jdbcUrl) == null
@@ -105,14 +119,18 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void configurePool(HikariConfig config, DataSourceEntity source) {
         config.setConnectionInitSql("SET readonly=1");
         config.setConnectionTestQuery("SELECT 1");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void prepareConnection(Connection connection, DataSourceEntity source) throws SQLException {
         String database = source.getDefaultDatabase();
@@ -121,7 +139,9 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
             throws SQLException {
@@ -134,13 +154,17 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void useNamespace(Connection connection, String namespace) throws SQLException {
         connection.setCatalog(namespace);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<String> listNamespaces(Connection connection, DatabaseMetaData metadata) throws SQLException {
         Set<String> catalogs = new LinkedHashSet<>();
@@ -158,13 +182,17 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return List.copyOf(catalogs);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Set<String> systemNamespaces() {
         return SYSTEM_NAMESPACES;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
             throws SQLException {
@@ -186,7 +214,9 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return tables;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
             throws SQLException {
@@ -217,7 +247,9 @@ public class ClickHouseDialectPlugin extends DialectPlugin {
         return columns;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public char identifierQuote() {
         return '`';

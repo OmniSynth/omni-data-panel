@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { datasetApi } from '@/api'
 import type { DashboardParameter, DashboardParameterOption } from '@/types'
@@ -92,115 +92,207 @@ watch(
 
 <template>
   <div v-if="parameters.length" class="param-bar">
-    <div class="param-fields">
-      <div v-for="parameter in parameters" :key="parameter.id" class="param-item">
-        <label>{{ parameter.label || parameter.id }}</label>
-        <el-input
-          v-if="parameter.type === 'text'"
-          :model-value="String(modelValue[parameter.id] ?? '')"
-          :disabled="readonly"
-          clearable
-          @update:model-value="setValue(parameter.id, $event)"
-        />
-        <el-input-number
-          v-else-if="parameter.type === 'number'"
-          :model-value="Number(modelValue[parameter.id] ?? 0)"
-          :disabled="readonly"
-          controls-position="right"
-          @update:model-value="setValue(parameter.id, $event)"
-        />
-        <el-date-picker
-          v-else-if="parameter.type === 'date'"
-          :model-value="(modelValue[parameter.id] as string) || ''"
-          type="date"
-          value-format="YYYY-MM-DD"
-          :disabled="readonly"
-          @update:model-value="setValue(parameter.id, $event)"
-        />
-        <el-date-picker
-          v-else-if="parameter.type === 'date-range'"
-          :model-value="rangeValue(parameter.id)"
-          type="daterange"
-          value-format="YYYY-MM-DD"
-          :disabled="readonly"
-          :start-placeholder="t('common.start')"
-          :end-placeholder="t('common.end')"
-          @update:model-value="setRange(parameter.id, $event as [string, string] | null)"
-        />
-        <el-select
-          v-else-if="parameter.type === 'select'"
-          :model-value="modelValue[parameter.id]"
-          :disabled="readonly"
-          :loading="!!loadingOptions[parameter.id]"
-          clearable
-          filterable
-          style="width:180px"
-          @update:model-value="setValue(parameter.id, $event)"
-        >
-          <el-option
-            v-for="option in resolvedOptions(parameter)"
-            :key="String(option.value)"
-            :label="option.label"
-            :value="option.value"
+    <div class="param-main">
+      <div class="param-title">{{ t('chart.queryParams') }}</div>
+      <div class="param-fields">
+        <div v-for="parameter in parameters" :key="parameter.id" class="param-item">
+          <label>{{ parameter.label || parameter.id }}</label>
+          <el-input
+            v-if="parameter.type === 'text'"
+            class="ctrl text"
+            size="default"
+            :model-value="String(modelValue[parameter.id] ?? '')"
+            :disabled="readonly"
+            clearable
+            @update:model-value="setValue(parameter.id, $event)"
           />
-        </el-select>
-        <el-select
-          v-else-if="parameter.type === 'multi-select'"
-          :model-value="(modelValue[parameter.id] as unknown[]) || []"
-          :disabled="readonly"
-          :loading="!!loadingOptions[parameter.id]"
-          multiple
-          clearable
-          filterable
-          collapse-tags
-          style="width:220px"
-          @update:model-value="setValue(parameter.id, $event)"
-        >
-          <el-option
-            v-for="option in resolvedOptions(parameter)"
-            :key="String(option.value)"
-            :label="option.label"
-            :value="option.value"
+          <el-input-number
+            v-else-if="parameter.type === 'number'"
+            class="ctrl number"
+            size="default"
+            :model-value="Number(modelValue[parameter.id] ?? 0)"
+            :disabled="readonly"
+            controls-position="right"
+            @update:model-value="setValue(parameter.id, $event)"
           />
-        </el-select>
-        <el-input
-          v-else
-          :model-value="String(modelValue[parameter.id] ?? '')"
-          :disabled="readonly"
-          @update:model-value="setValue(parameter.id, $event)"
-        />
+          <el-date-picker
+            v-else-if="parameter.type === 'date'"
+            class="ctrl date"
+            size="default"
+            :model-value="(modelValue[parameter.id] as string) || ''"
+            type="date"
+            value-format="YYYY-MM-DD"
+            :disabled="readonly"
+            @update:model-value="setValue(parameter.id, $event)"
+          />
+          <el-date-picker
+            v-else-if="parameter.type === 'date-range'"
+            class="ctrl range"
+            size="default"
+            :model-value="rangeValue(parameter.id)"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            :disabled="readonly"
+            :start-placeholder="t('common.start')"
+            :end-placeholder="t('common.end')"
+            @update:model-value="setRange(parameter.id, $event as [string, string] | null)"
+          />
+          <el-select
+            v-else-if="parameter.type === 'select'"
+            class="ctrl select"
+            size="default"
+            :model-value="modelValue[parameter.id]"
+            :disabled="readonly"
+            :loading="!!loadingOptions[parameter.id]"
+            clearable
+            filterable
+            @update:model-value="setValue(parameter.id, $event)"
+          >
+            <el-option
+              v-for="option in resolvedOptions(parameter)"
+              :key="String(option.value)"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-select
+            v-else-if="parameter.type === 'multi-select'"
+            class="ctrl multi"
+            size="default"
+            :model-value="(modelValue[parameter.id] as unknown[]) || []"
+            :disabled="readonly"
+            :loading="!!loadingOptions[parameter.id]"
+            multiple
+            clearable
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+            @update:model-value="setValue(parameter.id, $event)"
+          >
+            <el-option
+              v-for="option in resolvedOptions(parameter)"
+              :key="String(option.value)"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-input
+            v-else
+            class="ctrl text"
+            size="default"
+            :model-value="String(modelValue[parameter.id] ?? '')"
+            :disabled="readonly"
+            @update:model-value="setValue(parameter.id, $event)"
+          />
+        </div>
       </div>
     </div>
-    <el-button v-if="!readonly" type="primary" @click="emit('apply')">{{ t('common.apply') }}</el-button>
+    <el-button
+      v-if="!readonly"
+      class="param-apply"
+      type="primary"
+      @click="emit('apply')"
+    >
+      {{ t('chart.applyRerun') }}
+    </el-button>
   </div>
 </template>
 
 <style scoped>
 .param-bar {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 16px;
-  padding: 12px;
-  background: var(--el-fill-color-blank);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
+  padding: 12px 16px;
+  background: var(--omni-card);
+  border: 1px solid var(--omni-border);
+  border-radius: var(--omni-radius);
+  box-shadow: var(--omni-shadow);
+}
+.param-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.param-title {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--omni-muted);
+  letter-spacing: 0.02em;
 }
 .param-fields {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
   flex: 1;
+  min-width: 0;
+  align-items: center;
 }
 .param-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 140px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 8px 5px 12px;
+  background: var(--omni-surface);
+  border: 1px solid var(--omni-border);
+  border-radius: var(--omni-radius-sm);
 }
 .param-item label {
+  flex-shrink: 0;
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  font-weight: 500;
+  color: var(--omni-muted);
+  white-space: nowrap;
+}
+.param-item :deep(.el-input__wrapper),
+.param-item :deep(.el-select__wrapper) {
+  box-shadow: none !important;
+  background: transparent;
+}
+.param-item :deep(.el-input__wrapper:hover),
+.param-item :deep(.el-select__wrapper:hover),
+.param-item :deep(.el-input__wrapper.is-focus),
+.param-item :deep(.el-select__wrapper.is-focused) {
+  box-shadow: none !important;
+}
+.param-item :deep(.el-date-editor.el-input__wrapper) {
+  box-shadow: none !important;
+  background: transparent;
+  width: 100%;
+}
+.ctrl.text { width: 168px; }
+.ctrl.number { width: 140px; }
+.ctrl.date { width: 150px; }
+.ctrl.range { width: 260px; }
+.ctrl.select { width: 160px; }
+.ctrl.multi { width: 200px; }
+.param-apply {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+@media (max-width: 720px) {
+  .param-bar {
+    align-items: stretch;
+  }
+  .param-apply {
+    width: 100%;
+    margin-left: 0;
+  }
+  .ctrl.text,
+  .ctrl.number,
+  .ctrl.date,
+  .ctrl.range,
+  .ctrl.select,
+  .ctrl.multi {
+    width: min(100%, 260px);
+  }
 }
 </style>

@@ -529,15 +529,15 @@ public class DatasetService {
     /**
      * 模型保存输入。
      *
-     * @param name           名称
-     * @param description    描述
-     * @param modelType      模型类型 TABLE 或 SQL
-     * @param dataSourceId   数据源标识
-     * @param schemaName     表模型模式名
-     * @param tableName      表模型表名
-     * @param definitionSql  SQL 模型定义语句
-     * @param collectionId   所属集合标识
-     * @param fields         字段定义列表
+     * @param name          名称
+     * @param description   描述
+     * @param modelType     模型类型 TABLE 或 SQL
+     * @param dataSourceId  数据源标识
+     * @param schemaName    表模型模式名
+     * @param tableName     表模型表名
+     * @param definitionSql SQL 模型定义语句
+     * @param collectionId  所属集合标识
+     * @param fields        字段定义列表
      */
     public record SaveInput(String name, String description, String modelType, Long dataSourceId,
                             String schemaName, String tableName, String definitionSql,

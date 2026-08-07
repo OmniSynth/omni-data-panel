@@ -63,20 +63,20 @@ public class QueryService {
     /**
      * 注入查询编译、策略校验、执行器与审计依赖。
      *
-     * @param datasetService         数据集业务服务
-     * @param dataSourceService      数据源业务服务
-     * @param dataSourceMapper       数据源持久化
-     * @param dataPolicyMapper       数据策略持久化
-     * @param compiler               语义查询编译器
-     * @param sqlPolicyGuard         SQL 策略守卫
-     * @param sqlObjectAccessGuard   SQL 对象访问守卫
-     * @param executor               JDBC 查询执行器
-     * @param dialectRegistry        方言注册表
-     * @param stateStore             查询状态存储
-     * @param auditMapper            查询审计持久化
-     * @param objectMapper           JSON 序列化
-     * @param metricService          指标业务服务
-     * @param omniMetrics            业务指标
+     * @param datasetService       数据集业务服务
+     * @param dataSourceService    数据源业务服务
+     * @param dataSourceMapper     数据源持久化
+     * @param dataPolicyMapper     数据策略持久化
+     * @param compiler             语义查询编译器
+     * @param sqlPolicyGuard       SQL 策略守卫
+     * @param sqlObjectAccessGuard SQL 对象访问守卫
+     * @param executor             JDBC 查询执行器
+     * @param dialectRegistry      方言注册表
+     * @param stateStore           查询状态存储
+     * @param auditMapper          查询审计持久化
+     * @param objectMapper         JSON 序列化
+     * @param metricService        指标业务服务
+     * @param omniMetrics          业务指标
      */
     public QueryService(DatasetService datasetService, DataSourceService dataSourceService,
                         DataSourceMapper dataSourceMapper, DataPolicyMapper dataPolicyMapper,
@@ -204,12 +204,12 @@ public class QueryService {
     /**
      * 将 bi_metric 展开为可编译的虚拟指标字段，并追加到 metrics 列表。
      *
-     * @param request       语义查询请求
-     * @param datasetId     数据集标识
-     * @param fields        数据集字段列表
-     * @param denied        被拒绝访问的字段名集合
-     * @param fieldDefs     可变的编译字段定义列表
-     * @param metricNames   可变的指标名列表
+     * @param request     语义查询请求
+     * @param datasetId   数据集标识
+     * @param fields      数据集字段列表
+     * @param denied      被拒绝访问的字段名集合
+     * @param fieldDefs   可变的编译字段定义列表
+     * @param metricNames 可变的指标名列表
      */
     private void expandBusinessMetrics(QueryRequest request, long datasetId, List<DatasetFieldEntity> fields,
                                        Set<String> denied, List<QueryCompiler.FieldDefinition> fieldDefs,
@@ -421,11 +421,11 @@ public class QueryService {
     /**
      * 查询提交内容；{@code query} 为空时按原生 SQL 查询处理。
      *
-     * @param sourceId         原生 SQL 使用的数据源标识
-     * @param sql              原生 SQL 文本（可含 {@code :name} 或 {@code ?}）
-     * @param parameters       裸 {@code ?} 的顺序参数
-     * @param namedParameters  {@code :name} 命名参数；可为 {@code null}
-     * @param query            语义查询请求
+     * @param sourceId        原生 SQL 使用的数据源标识
+     * @param sql             原生 SQL 文本（可含 {@code :name} 或 {@code ?}）
+     * @param parameters      裸 {@code ?} 的顺序参数
+     * @param namedParameters {@code :name} 命名参数；可为 {@code null}
+     * @param query           语义查询请求
      */
     public record QuerySubmission(Long sourceId, String sql, List<Object> parameters,
                                   Map<String, Object> namedParameters, QueryRequest query) {

@@ -35,11 +35,11 @@ public class SubscriptionService {
     /**
      * 注入订阅持久化、权限、投递与 Quartz 调度依赖。
      *
-     * @param mapper           订阅持久化
+     * @param mapper            订阅持久化
      * @param permissionService 资源权限校验
-     * @param ownerMapper      资源所有者查询
-     * @param deliveryService  邮件投递
-     * @param scheduler        Quartz 调度器
+     * @param ownerMapper       资源所有者查询
+     * @param deliveryService   邮件投递
+     * @param scheduler         Quartz 调度器
      */
     public SubscriptionService(SubscriptionMapper mapper, PermissionService permissionService,
                                ResourceOwnerMapper ownerMapper, SubscriptionDeliveryService deliveryService,

@@ -15,7 +15,9 @@ public record ObservabilityProperties(String metricsToken) {
         }
     }
 
-    /** 是否已配置刮取令牌（端点可访问）。 */
+    /**
+     * 是否已配置刮取令牌（端点可访问）。
+     */
     public boolean metricsEnabled() {
         return metricsToken != null && !metricsToken.isBlank();
     }

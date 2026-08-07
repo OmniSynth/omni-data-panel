@@ -39,31 +39,41 @@ public class OracleDialectPlugin extends DialectPlugin {
     private static final Pattern SID_URL = Pattern.compile(
             "(?i)^jdbc:oracle:thin:@([^/:]+):(\\d+):([^?;\\s]+).*$");
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String code() {
         return CODE;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String label() {
         return "Oracle";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int defaultPort() {
         return 1521;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         return jdbcUrl != null && jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle:");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -78,7 +88,9 @@ public class OracleDialectPlugin extends DialectPlugin {
         return "jdbc:oracle:thin:@//" + normalizedHost + ':' + port + '/' + service;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -98,7 +110,9 @@ public class OracleDialectPlugin extends DialectPlugin {
         return null;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         ParsedJdbcUrl parsed = parseJdbcUrl(jdbcUrl);
@@ -107,25 +121,33 @@ public class OracleDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void configurePool(HikariConfig config, DataSourceEntity source) {
         config.setConnectionTestQuery("SELECT 1 FROM DUAL");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String healthCheckSql() {
         return "SELECT 1 FROM DUAL";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void prepareConnection(Connection connection, DataSourceEntity source) throws SQLException {
         // schema 由查询显式限定；保持连接当前用户默认 schema
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
             throws SQLException {
@@ -138,31 +160,41 @@ public class OracleDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void useNamespace(Connection connection, String namespace) throws SQLException {
         connection.setSchema(namespace);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean defaultDatabaseIsNamespace() {
         return false;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String metaCatalog(String namespace) {
         return null;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String metaSchema(String namespace) {
         return namespace;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<String> listNamespaces(Connection connection, DatabaseMetaData metadata) throws SQLException {
         Set<String> schemas = new LinkedHashSet<>();
@@ -181,13 +213,17 @@ public class OracleDialectPlugin extends DialectPlugin {
         return List.copyOf(schemas);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Set<String> systemNamespaces() {
         return SYSTEM_NAMESPACES;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
             throws SQLException {
@@ -215,7 +251,9 @@ public class OracleDialectPlugin extends DialectPlugin {
         return tables;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
             throws SQLException {
@@ -249,19 +287,25 @@ public class OracleDialectPlugin extends DialectPlugin {
         return columns;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public char identifierQuote() {
         return '"';
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String quoteIdentifier(String value) {
         return '"' + value.replace("\"", "\"\"") + '"';
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String limitPlaceholder() {
         return "FETCH FIRST ? ROWS ONLY";

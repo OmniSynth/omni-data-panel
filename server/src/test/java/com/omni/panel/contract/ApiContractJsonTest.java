@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -135,7 +136,7 @@ class ApiContractJsonTest {
         var card = new DashboardRenderService.RenderedCard(
                 2L, "销售额", "bar", "{}", "{}", "[]", null, null, null);
         JsonNode json = objectMapper.valueToTree(
-                new DashboardRenderService.RenderedDashboard(1L, "经营看板", "{}", "READ", List.of(card)));
+                new DashboardRenderService.RenderedDashboard(1L, "经营看板", "{}", "READ", Map.of(), List.of(card)));
         String serialized = json.toString();
 
         assertThat(serialized).doesNotContain(

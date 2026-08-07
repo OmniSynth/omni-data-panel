@@ -52,7 +52,7 @@ openssl rand -base64 32
 
 | 能力 | 配置 | 说明 |
 |---|---|---|
-| 签名嵌入 | 管理端 `embed.enabled` | 业务系统 iframe 嵌入前必须开启 |
+| 签名嵌入 | 管理端 `embed.enabled` | 业务系统 iframe 嵌入前必须开启；签发时可写入仪表盘锁定参数（见 [embed-integration.md](embed-integration.md)） |
 | 嵌入域名白名单 | `embed.allowed-origins` + `EMBED_ALLOWED_ORIGINS` | CSP `frame-ancestors`；Compose 环境变量须与设置一致 |
 | 查询缓存 | `cache.query.enabled` / TTL | 站点级；编辑页可强制回源 |
 | 企业 SSO | `OIDC_*` | 见 [oidc-sso.md](oidc-sso.md) |
@@ -69,7 +69,7 @@ openssl rand -base64 32
 - 可信代理：`TRUSTED_PROXIES`（CIDR）；仅当 `remoteAddr` 属于白名单时才解析 `X-Forwarded-For`（自右向左剥可信跳）；默认空 = 不信任转发头
 - 响应头：`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`、CSP `frame-ancestors`（嵌入域名白名单）
 - Quartz **JDBC 集群**（多实例共享触发器，避免重复订阅）
-- 只读 SQL 门禁、对象 ACL、资源 ACL、登录/查询/模型审计
+- 只读 SQL 门禁、对象 ACL、资源 ACL、登录/查询/模型/**导出**审计
 
 ### 运维须自行收口
 
@@ -80,9 +80,25 @@ openssl rand -base64 32
 | 管理端白名单与 nginx 环境变量不同步 | 修改 `embed.allowed-origins` 后同步更新 `EMBED_ALLOWED_ORIGINS` 并重启 web 容器 |
 | `TRUSTED_PROXIES` 过宽且 server 对公网可达 | 攻击者可直连并伪造 XFF；仅在前置代理后暴露 API，或收紧为代理 IP/CIDR |
 
+### Flyway 校验和不一致（V17）
+
+若启动报 `Migration checksum mismatch for migration version 17`，多为某环境曾执行过带注释的 `V17__user_oidc.sql`，而当前发行包为**无注释**规范 DDL（语义相同，仅校验和不同）。**不要改已发布的迁移文件来迁就某一环境。**
+
+在元库执行（将校验和对齐当前仓库/镜像）：
+
+```sql
+UPDATE flyway_schema_history
+SET checksum = -1314823887
+WHERE version = '17' AND checksum = -1046568936;
+```
+
+或在可连库的环境执行 Flyway repair（等价更新 history）。完成后重启 `server`。
+
+若本地库仍是旧校验和 `-1314823887` 而你误改回注释版，方向相反：把 `checksum` 改回与当前文件一致，或 `repair`。
+
 ## 5. 调度与订阅
 
-- **仪表盘订阅**：管理端「系统 → 订阅」配置 Cron 与收件人；产品 UI 已覆盖。
+- **仪表盘订阅**：产品端「订阅」（`/subscriptions`，需 `subscription:manage`）配置 Cron 与收件人；管理端仍保留入口。
 - **通用调度**：管理端「系统 → 调度」（`/admin/schedules`，需 `schedule:manage`）配置元数据同步、仪表盘后台刷新、按已有订阅发送；Quartz JobStore 为 JDBC 并开启集群。
 
 ## 6. 备份与演练
@@ -99,8 +115,8 @@ openssl rand -base64 32
 - [ ] 管理员可登录；默认 `admin123` 已不可用
 - [ ] 创建数据源 → 同步元数据 → 语义查询出数
 - [ ] （若启用）OIDC 登录闭环与 JIT 角色符合预期；IdP 已强制 MFA / 邮箱验证
-- [ ] （若启用）签名嵌入：管理端白名单含业务 Origin，且 `EMBED_ALLOWED_ORIGINS` 已同步；iframe 可加载
-- [ ] （若启用）订阅任务在多实例下不重复发送；调度页可创建元数据同步任务
+- [ ] （若启用）签名嵌入：管理端白名单含业务 Origin，且 `EMBED_ALLOWED_ORIGINS` 已同步；iframe 可加载；若使用锁定参数，签发时 `parameters` 与仪表盘参数 id 对齐且数据按预期过滤
+- [ ] （若启用）订阅：产品端 `/subscriptions`（`subscription:manage`）可创建；多实例下不重复发送；调度页可创建元数据同步任务
 - [ ] 故意输错密码多次，观察鉴权限流是否返回 429（多副本时配额在 Redis 合计）
 - [ ] （若启用）Prometheus 刮取带 `OMNI_METRICS_TOKEN` 成功；系统日志可按 `requestId` 检索
 - [ ] 匿名访问 `GET /api/public/site` 与 `GET /api/auth/oidc/status` 返回 **200 JSON**（若空 body 403，多为服务端镜像未更新或安全链未生效，需重建并重启 `server`）
@@ -112,6 +128,6 @@ openssl rand -base64 32
 - 可观测性：[observability.md](observability.md)
 - OIDC SSO：[oidc-sso.md](oidc-sso.md)
 - 签名嵌入：[embed-integration.md](embed-integration.md)
-- 使用手册（含管理端调度/设置）：[user-guide.md](user-guide.md)
+- 使用手册（含订阅 / 管理端调度·设置）：[user-guide.md](user-guide.md)
 
 应用内 **帮助**（`/help`）与上述 `docs/*.md` 同源渲染。

@@ -52,7 +52,9 @@ public class OidcExchangeCodeService {
         return token;
     }
 
-    /** 测试辅助：窥视码是否仍存在。 */
+    /**
+     * 测试辅助：窥视码是否仍存在。
+     */
     Optional<String> peek(String code) {
         return Optional.ofNullable(codes.getIfPresent(code));
     }

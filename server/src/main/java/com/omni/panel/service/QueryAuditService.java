@@ -18,14 +18,17 @@ import com.omni.panel.mapper.QueryAuditMapper;
 @Service
 public class QueryAuditService {
     private final QueryAuditMapper mapper;
+    private final SettingService settingService;
 
     /**
-     * 注入查询审计数据访问。
+     * 注入查询审计数据访问与系统设置。
      *
-     * @param mapper 查询审计持久化
+     * @param mapper         查询审计持久化
+     * @param settingService 系统设置
      */
-    public QueryAuditService(QueryAuditMapper mapper) {
+    public QueryAuditService(QueryAuditMapper mapper, SettingService settingService) {
         this.mapper = mapper;
+        this.settingService = settingService;
     }
 
     /**
@@ -67,6 +70,7 @@ public class QueryAuditService {
     @Transactional
     public int cleanup(AuditCleanupRequest request) {
         requireAdmin();
+        settingService.requireLogsClearEnabled();
         LocalDateTime before = AuditCleanupSupport.resolveBefore(request);
         return before == null ? mapper.deleteAll() : mapper.deleteBefore(before);
     }

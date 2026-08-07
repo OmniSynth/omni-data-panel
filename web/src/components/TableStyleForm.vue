@@ -26,11 +26,19 @@ const ALIGN_OPTIONS = ['left', 'center', 'right'] as const
 const OP_OPTIONS = ['EQ', 'NE', 'LIKE'] as const
 
 const TEXT_COLORS = [
-  '', '#111827', '#dc2626', '#16a34a', '#2563eb', '#d97706', '#7c3aed', '#6b7280',
+  '#111827', '#374151', '#6b7280', '#9ca3af',
+  '#dc2626', '#ea580c', '#d97706', '#ca8a04',
+  '#16a34a', '#059669', '#0d9488',
+  '#2563eb', '#0284c7', '#7c3aed', '#db2777',
 ]
 const ROW_BACKGROUNDS = [
-  '#fef2f2', '#fff7ed', '#fefce8', '#f0fdf4', '#eff6ff', '#f5f3ff', '#fdf2f8', '#f3f4f6',
+  '#fef2f2', '#fee2e2', '#fff7ed', '#ffedd5',
+  '#fefce8', '#fef9c3', '#f0fdf4', '#dcfce7',
+  '#ecfdf5', '#eff6ff', '#dbeafe', '#f5f3ff',
+  '#ede9fe', '#fdf2f8', '#fce7f3', '#f3f4f6',
+  '#e5e7eb', '#fef3c7', '#cffafe', '#e0e7ff',
 ]
+const DEFAULT_ROW_BACKGROUND = ROW_BACKGROUNDS[0]
 
 const columnEntries = computed(() =>
   props.columns.map((name) => ({
@@ -74,7 +82,7 @@ function addRowRule() {
   if (!field) return
   setRowRules([
     ...rowRules.value,
-    { field, op: 'EQ', value: '', background: ROW_BACKGROUNDS[0] },
+    { field, op: 'EQ', value: '', background: DEFAULT_ROW_BACKGROUND },
   ])
 }
 
@@ -143,38 +151,14 @@ function isCustomized(style: TableColumnStyle) {
               :value="align"
             />
           </el-select>
-          <el-select
-            :model-value="entry.style.color || ''"
+          <el-color-picker
             class="ctrl color"
             size="small"
-            clearable
-            :placeholder="t('tableStyle.defaultColor')"
+            :model-value="entry.style.color || undefined"
+            :predefine="TEXT_COLORS"
+            show-alpha
             @update:model-value="(v: string | null) => patchColumn(entry.name, { color: v || undefined })"
-          >
-            <template #prefix>
-              <span
-                class="swatch"
-                :style="{
-                  background: entry.style.color || 'transparent',
-                  borderColor: entry.style.color || 'var(--el-border-color)',
-                }"
-              />
-            </template>
-            <el-option
-              v-for="color in TEXT_COLORS"
-              :key="color || 'default'"
-              :label="color || t('tableStyle.defaultColor')"
-              :value="color"
-            >
-              <span class="swatch-row">
-                <span
-                  class="swatch"
-                  :style="{ background: color || 'transparent', borderColor: color || 'var(--el-border-color)' }"
-                />
-                {{ color || t('tableStyle.defaultColor') }}
-              </span>
-            </el-option>
-          </el-select>
+          />
         </div>
       </div>
     </section>
@@ -231,22 +215,14 @@ function isCustomized(style: TableColumnStyle) {
             :placeholder="t('tableStyle.ruleValue')"
             @update:model-value="(v: string) => updateRowRule(index, { value: v })"
           />
-          <el-select
-            :model-value="rule.background"
+          <el-color-picker
             class="ctrl bg"
             size="small"
-            @update:model-value="(v: string) => updateRowRule(index, { background: v })"
-          >
-            <template #prefix>
-              <span class="swatch" :style="{ background: rule.background }" />
-            </template>
-            <el-option v-for="color in ROW_BACKGROUNDS" :key="color" :label="color" :value="color">
-              <span class="swatch-row">
-                <span class="swatch" :style="{ background: color }" />
-                {{ color }}
-              </span>
-            </el-option>
-          </el-select>
+            :model-value="rule.background"
+            :predefine="ROW_BACKGROUNDS"
+            show-alpha
+            @update:model-value="(v: string | null) => updateRowRule(index, { background: v || DEFAULT_ROW_BACKGROUND })"
+          />
           <el-button class="rule-del" link type="danger" size="small" @click="removeRowRule(index)">
             {{ t('common.delete') }}
           </el-button>
@@ -320,10 +296,14 @@ function isCustomized(style: TableColumnStyle) {
 .col-head,
 .col-row {
   display: grid;
-  grid-template-columns: minmax(140px, 200px) 112px 96px 120px;
+  grid-template-columns: minmax(140px, 1fr) 112px 96px 40px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
+}
+.col-head > :last-child,
+.col-row .color {
+  justify-self: end;
 }
 .col-head {
   background: var(--omni-surface, var(--el-fill-color-light));
@@ -363,10 +343,12 @@ function isCustomized(style: TableColumnStyle) {
 .ctrl {
   width: 100%;
 }
-.color :deep(.el-select__prefix),
-.bg :deep(.el-select__prefix) {
-  display: inline-flex;
-  align-items: center;
+.ctrl.color,
+.ctrl.bg {
+  width: auto;
+}
+.ctrl.bg {
+  justify-self: start;
 }
 .rule-list {
   display: flex;
@@ -375,7 +357,7 @@ function isCustomized(style: TableColumnStyle) {
 }
 .rule-card {
   display: grid;
-  grid-template-columns: 28px minmax(120px, 1.1fr) 96px minmax(100px, 1fr) 128px auto;
+  grid-template-columns: 28px minmax(120px, 1.1fr) 96px minmax(100px, 1fr) auto auto;
   gap: 8px;
   align-items: center;
   padding: 10px;
@@ -419,19 +401,6 @@ function isCustomized(style: TableColumnStyle) {
   margin: 0 0 6px;
   font-size: 12px;
   color: var(--omni-muted, var(--el-text-color-secondary));
-}
-.swatch-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  border: 1px solid var(--el-border-color);
-  flex-shrink: 0;
-  display: inline-block;
 }
 @media (max-width: 960px) {
   .col-head { display: none; }

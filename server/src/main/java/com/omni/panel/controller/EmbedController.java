@@ -1,5 +1,8 @@
 package com.omni.panel.controller;
 
+import java.util.Map;
+import java.util.Set;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,6 +18,7 @@ import com.omni.panel.entity.ChartEntity;
 import com.omni.panel.entity.DashboardEntity;
 import com.omni.panel.mapper.ChartMapper;
 import com.omni.panel.mapper.DashboardMapper;
+import com.omni.panel.query.QueryParameterApplier;
 import com.omni.panel.service.DashboardRenderService;
 import com.omni.panel.service.EmbedTokenService;
 import com.omni.panel.service.PermissionService;
@@ -30,32 +34,35 @@ public class EmbedController {
     private final DashboardMapper dashboardMapper;
     private final ChartMapper chartMapper;
     private final PermissionService permissionService;
+    private final QueryParameterApplier parameterApplier;
 
     public EmbedController(EmbedTokenService embedTokenService, DashboardRenderService renderService,
                            DashboardMapper dashboardMapper, ChartMapper chartMapper,
-                           PermissionService permissionService) {
+                           PermissionService permissionService, QueryParameterApplier parameterApplier) {
         this.embedTokenService = embedTokenService;
         this.renderService = renderService;
         this.dashboardMapper = dashboardMapper;
         this.chartMapper = chartMapper;
         this.permissionService = permissionService;
+        this.parameterApplier = parameterApplier;
     }
 
     /**
      * 为具备写权限的资源签发短期嵌入令牌。
      *
-     * @param request 签发参数
+     * @param request 签发参数（仪表盘可附带锁定参数）
      * @return 嵌入令牌
      */
     @PostMapping("/tokens")
     public ApiResponse<TokenResponse> createToken(@Valid @RequestBody CreateTokenRequest request) {
         requireWritable(request.resourceType(), request.resourceId());
-        String token = embedTokenService.create(request.resourceType(), request.resourceId());
+        Map<String, Object> locked = resolveLockedParameters(request);
+        String token = embedTokenService.create(request.resourceType(), request.resourceId(), locked);
         return ApiResponse.ok(new TokenResponse(token));
     }
 
     /**
-     * 通过嵌入令牌渲染仪表盘。
+     * 通过嵌入令牌渲染仪表盘（应用 JWT 内锁定参数）。
      *
      * @param token 嵌入令牌
      * @return 脱敏渲染结果
@@ -66,7 +73,7 @@ public class EmbedController {
         if (!"DASHBOARD".equals(claims.resourceType())) {
             throw new BusinessException(404, "嵌入资源不存在");
         }
-        return ApiResponse.ok(renderService.renderAsOwner(claims.resourceId()));
+        return ApiResponse.ok(renderService.renderAsOwner(claims.resourceId(), claims.parameters()));
     }
 
     /**
@@ -82,6 +89,32 @@ public class EmbedController {
             throw new BusinessException(404, "嵌入资源不存在");
         }
         return ApiResponse.ok(renderService.renderQuestionAsOwner(claims.resourceId()));
+    }
+
+    /**
+     * 解析并校验锁定参数：图表嵌入不允许携带；仪表盘须为已声明参数 id。
+     *
+     * @param request 签发请求
+     * @return 规范化后的锁定参数
+     */
+    private Map<String, Object> resolveLockedParameters(CreateTokenRequest request) {
+        Map<String, Object> raw = request.parameters();
+        if (raw == null || raw.isEmpty()) {
+            return Map.of();
+        }
+        String type = request.resourceType() == null ? "" : request.resourceType().toUpperCase();
+        if ("QUESTION".equals(type)) {
+            throw new BusinessException(400, "图表嵌入不支持锁定参数");
+        }
+        if (!"DASHBOARD".equals(type)) {
+            return Map.of();
+        }
+        DashboardEntity dashboard = dashboardMapper.selectById(request.resourceId());
+        if (dashboard == null || dashboard.getDeletedAt() != null) {
+            throw new BusinessException(404, "仪表盘不存在");
+        }
+        Set<String> allowed = parameterApplier.parseParameterMetas(dashboard.getConfigJson()).keySet();
+        return embedTokenService.requireAllowedParameters(raw, allowed);
     }
 
     /**
@@ -113,8 +146,13 @@ public class EmbedController {
 
     /**
      * 嵌入令牌签发请求。
+     *
+     * @param resourceType 资源类型
+     * @param resourceId   资源标识
+     * @param parameters   可选锁定参数（仅 DASHBOARD；须为仪表盘已声明参数）
      */
-    public record CreateTokenRequest(@NotBlank String resourceType, @NotNull Long resourceId) {
+    public record CreateTokenRequest(@NotBlank String resourceType, @NotNull Long resourceId,
+                                     Map<String, Object> parameters) {
     }
 
     /**

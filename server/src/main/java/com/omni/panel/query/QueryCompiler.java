@@ -343,10 +343,10 @@ public class QueryCompiler {
     /**
      * 编译完成的参数化查询。
      *
-     * @param sql              包含占位符的 SQL 文本（明细查询，可含 LIMIT）
-     * @param parameters       按占位符顺序排列的参数
-     * @param countSql         用于真实总数的 COUNT SQL；为 null 时由执行器对明细 SQL 包装
-     * @param countParameters  COUNT 查询参数
+     * @param sql             包含占位符的 SQL 文本（明细查询，可含 LIMIT）
+     * @param parameters      按占位符顺序排列的参数
+     * @param countSql        用于真实总数的 COUNT SQL；为 null 时由执行器对明细 SQL 包装
+     * @param countParameters COUNT 查询参数
      */
     public record CompiledQuery(String sql, List<Object> parameters, String countSql, List<Object> countParameters) {
         /**

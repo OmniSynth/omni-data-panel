@@ -3,13 +3,14 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { confirmBox } from '@/i18n/dialog'
-import { systemLogApi } from '@/api'
+import { settingsApi, systemLogApi } from '@/api'
 import { formatDateTime } from '@/display'
 import type { SystemLogEntry, SystemLogMeta } from '@/types'
 
 const { t } = useI18n()
 const loading = ref(false)
 const clearing = ref(false)
+const logsClearEnabled = ref(true)
 const autoRefresh = ref(true)
 const entries = ref<SystemLogEntry[]>([])
 const meta = ref<SystemLogMeta>({ capacity: 2000, buffered: 0 })
@@ -170,6 +171,7 @@ watch(() => filters.level, () => load())
 watch(autoRefresh, startPolling)
 
 onMounted(async () => {
+  logsClearEnabled.value = await settingsApi.logsClearEnabled()
   await load()
   stickToBottom.value = true
   await nextTick()
@@ -209,7 +211,13 @@ onUnmounted(stopPolling)
       />
       <el-button :loading="loading" @click="load()">{{ t('common.refresh') }}</el-button>
       <el-button type="primary" @click="downloadLogs">{{ t('systemLog.download') }}</el-button>
-      <el-button type="danger" plain :loading="clearing" @click="clearLogs">{{ t('systemLog.clear') }}</el-button>
+      <el-button
+        v-if="logsClearEnabled"
+        type="danger"
+        plain
+        :loading="clearing"
+        @click="clearLogs"
+      >{{ t('systemLog.clear') }}</el-button>
     </div>
 
     <div ref="panelRef" v-loading="loading" class="log-panel" @scroll="onPanelScroll">

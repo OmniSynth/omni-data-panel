@@ -81,4 +81,5 @@ docker compose up --build -d
 
 - 生产加固：[docs/production.md](../docs/production.md)
 - OIDC：[docs/oidc-sso.md](../docs/oidc-sso.md)
-- 签名嵌入：[docs/embed-integration.md](../docs/embed-integration.md)
+- 签名嵌入（含 JWT 锁定参数）：[docs/embed-integration.md](../docs/embed-integration.md)
+- 使用手册 / 订阅：[docs/user-guide.md](../docs/user-guide.md)

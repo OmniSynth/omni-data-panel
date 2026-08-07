@@ -2,7 +2,7 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { t } from '@/i18n'
 import type {
   AdminUser, AuditCleanupPayload, Chart, Collection, CollectionItem, CompletionSchema, Dashboard, DashboardCard,
-  DashboardRender, DataSource, DataSourceHealthOverview, Dataset, DatasetAudit, DialectInfo, ExportTask, FieldPermissionRow,
+  DashboardRender, DataSource, DataSourceHealthOverview, Dataset, DatasetAudit, DialectInfo, ExportAudit, ExportTask, FieldPermissionRow,
   Id, LoginAudit, Metric, MetadataColumn, MetadataTable, PageResult, Permission, PublicLink, PublicQuestion,
   PublicResourceType, QueryAudit, QuerySnapshot, QuerySubmission, QuerySubmitResult, RecentItem,
   ResourceType, Role, RoleResourceGrant, RowRule, Schedule, SearchHit, SiteSettings, Subscription, SystemLogEntry,
@@ -350,6 +350,20 @@ export const datasetAuditApi = {
     request<{ deleted: number }>({ url: '/admin/dataset-audits/cleanup', method: 'POST', data }),
 }
 
+export const exportAuditApi = {
+  page: (params: {
+    keyword?: string
+    status?: string
+    format?: string
+    fromTime?: string
+    toTime?: string
+    page?: number
+    size?: number
+  }) => request<PageResult<ExportAudit>>({ url: '/admin/export-audits', params }),
+  cleanup: (data: AuditCleanupPayload) =>
+    request<{ deleted: number }>({ url: '/admin/export-audits/cleanup', method: 'POST', data }),
+}
+
 export const dataSourceHealthApi = {
   overview: () => request<DataSourceHealthOverview>({ url: '/admin/data-source-health' }),
 }
@@ -604,11 +618,15 @@ export const publicLinkApi = {
         ? params
         : { ...params, resourceId: String(params.resourceId) },
     }),
-  create: (data: { resourceType: PublicResourceType; resourceId: Id }) =>
+  create: (data: { resourceType: PublicResourceType; resourceId: Id; expiresInDays?: number | null }) =>
     request<PublicLink>({
       url: '/public-links',
       method: 'POST',
-      data: { resourceType: data.resourceType, resourceId: String(data.resourceId) },
+      data: {
+        resourceType: data.resourceType,
+        resourceId: String(data.resourceId),
+        expiresInDays: data.expiresInDays ?? undefined,
+      },
     }),
   revoke: (id: Id) => request<void>({ url: `/public-links/${String(id)}`, method: 'DELETE' }),
 }
@@ -629,4 +647,14 @@ export const settingsApi = {
   get: () => request<SiteSettings>({ url: '/settings' }),
   update: (data: SiteSettings) => request<SiteSettings>({ url: '/settings', method: 'PUT', data }),
   testMail: (to: string) => request<void>({ url: '/settings/mail/test', method: 'POST', data: { to } }),
+  /** 是否允许清空系统日志 / 清理审计；失败时默认允许（与后端缺省一致） */
+  logsClearEnabled: async () => {
+    try {
+      const settings = await request<SiteSettings>({ url: '/settings' })
+      const value = settings['logs.clear.enabled']
+      return value == null || value === '' || value === true || String(value) === 'true'
+    } catch {
+      return true
+    }
+  },
 }

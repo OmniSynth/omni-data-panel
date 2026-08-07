@@ -495,6 +495,12 @@ onMounted(loadShell)
               to="/dashboards"
               :class="{ active: route.path === '/dashboards' || route.path.startsWith('/dashboards/') }"
             >{{ t('shell.dashboards') }}</router-link>
+            <router-link
+              v-if="userStore.hasPermission('subscription:manage')"
+              class="nav-link"
+              to="/subscriptions"
+              :class="{ active: route.path.startsWith('/subscriptions') }"
+            >{{ t('shell.subscriptions') }}</router-link>
           </nav>
           <div class="nav-block">
             <div class="nav-group">{{ t('shell.collections') }}</div>

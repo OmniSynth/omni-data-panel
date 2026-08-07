@@ -35,15 +35,15 @@ public class ChartService {
     /**
      * 注入图表持久化、模型与权限相关依赖。
      *
-     * @param mapper             图表持久化
-     * @param cardMapper         仪表盘卡片持久化
-     * @param datasetService     模型访问
-     * @param dataSourceService  数据源访问
-     * @param permissionService  资源权限校验
-     * @param sqlPolicyGuard     SQL 安全策略
-     * @param dialectRegistry    SQL 方言注册表
-     * @param objectMapper       JSON 序列化
-     * @param collectionService  集合归属解析
+     * @param mapper            图表持久化
+     * @param cardMapper        仪表盘卡片持久化
+     * @param datasetService    模型访问
+     * @param dataSourceService 数据源访问
+     * @param permissionService 资源权限校验
+     * @param sqlPolicyGuard    SQL 安全策略
+     * @param dialectRegistry   SQL 方言注册表
+     * @param objectMapper      JSON 序列化
+     * @param collectionService 集合归属解析
      */
     public ChartService(ChartMapper mapper, DashboardCardMapper cardMapper, DatasetService datasetService,
                         DataSourceService dataSourceService, PermissionService permissionService,
@@ -281,14 +281,14 @@ public class ChartService {
     /**
      * 图表保存请求。
      *
-     * @param name          名称
-     * @param description   描述
-     * @param datasetId     语义查询关联的模型标识
-     * @param dataSourceId  原生 SQL 关联的数据源标识
-     * @param queryJson     查询定义 JSON
-     * @param chartType     图表类型
-     * @param configJson    图表配置 JSON
-     * @param collectionId  所属集合标识
+     * @param name         名称
+     * @param description  描述
+     * @param datasetId    语义查询关联的模型标识
+     * @param dataSourceId 原生 SQL 关联的数据源标识
+     * @param queryJson    查询定义 JSON
+     * @param chartType    图表类型
+     * @param configJson   图表配置 JSON
+     * @param collectionId 所属集合标识
      */
     public record SaveRequest(String name, String description, Long datasetId, Long dataSourceId,
                               String queryJson, String chartType, String configJson, Long collectionId) {

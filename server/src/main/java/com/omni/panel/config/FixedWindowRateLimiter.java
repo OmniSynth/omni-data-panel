@@ -14,7 +14,7 @@ public class FixedWindowRateLimiter implements RateLimiter {
     private final long windowMillis;
 
     /**
-     * @param window 窗口时长
+     * @param window  窗口时长
      * @param maxKeys 缓存键上限
      */
     public FixedWindowRateLimiter(Duration window, long maxKeys) {

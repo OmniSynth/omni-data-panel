@@ -23,7 +23,7 @@ import com.omni.panel.service.SubscriptionService;
  */
 @RestController
 @RequestMapping("/api/subscriptions")
-@PreAuthorize("hasRole('ADMIN') or hasAuthority('schedule:manage')")
+@PreAuthorize("hasRole('ADMIN') or hasAuthority('subscription:manage')")
 public class SubscriptionController {
     private final SubscriptionService service;
 
@@ -53,7 +53,7 @@ public class SubscriptionController {
      * @return 已创建的订阅
      */
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('schedule:manage')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('subscription:manage')")
     public ApiResponse<SubscriptionService.SubscriptionView> create(@Valid @RequestBody SaveRequest request) {
         return ApiResponse.ok(service.save(null, request.name(), request.dashboardId(), request.cronExpression(),
                 request.recipientUserIds(), request.enabled()));
@@ -67,7 +67,7 @@ public class SubscriptionController {
      * @return 已更新的订阅
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('schedule:manage')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('subscription:manage')")
     public ApiResponse<SubscriptionService.SubscriptionView> update(@PathVariable long id,
                                                                     @Valid @RequestBody SaveRequest request) {
         return ApiResponse.ok(service.save(id, request.name(), request.dashboardId(), request.cronExpression(),
@@ -81,7 +81,7 @@ public class SubscriptionController {
      * @return 空成功响应
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('schedule:manage')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('subscription:manage')")
     public ApiResponse<Void> delete(@PathVariable long id) {
         service.delete(id);
         return ApiResponse.ok();
@@ -94,7 +94,7 @@ public class SubscriptionController {
      * @return 空成功响应
      */
     @PostMapping("/{id}/run")
-    @PreAuthorize("hasRole('ADMIN') or hasAuthority('schedule:manage')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('subscription:manage')")
     public ApiResponse<Void> runNow(@PathVariable long id) {
         service.runNow(id);
         return ApiResponse.ok();

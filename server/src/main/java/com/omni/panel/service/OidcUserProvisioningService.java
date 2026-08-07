@@ -34,10 +34,10 @@ public class OidcUserProvisioningService {
     /**
      * 注入用户、角色持久化、密码编码与 OIDC 配置依赖。
      *
-     * @param userMapper       用户 Mapper
-     * @param roleMapper       角色 Mapper
-     * @param passwordEncoder  密码编码器
-     * @param oidcProperties   OIDC 配置
+     * @param userMapper      用户 Mapper
+     * @param roleMapper      角色 Mapper
+     * @param passwordEncoder 密码编码器
+     * @param oidcProperties  OIDC 配置
      */
     public OidcUserProvisioningService(UserMapper userMapper, RoleMapper roleMapper,
                                        PasswordEncoder passwordEncoder, OidcProperties oidcProperties) {

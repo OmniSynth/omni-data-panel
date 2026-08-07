@@ -37,7 +37,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * @param properties   限流开关与各桶配额
      * @param objectMapper 429 响应 JSON 序列化
      * @param omniMetrics  限流指标
-     * @param limiter        限流器实现
+     * @param limiter      限流器实现
      */
     public RateLimitFilter(RateLimitProperties properties, ObjectMapper objectMapper, OmniMetrics omniMetrics,
                            RateLimiter limiter) {

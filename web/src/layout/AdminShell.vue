@@ -35,6 +35,7 @@ const menuGroups = computed(() => [
       { path: '/admin/login-audits', label: t('adminShell.loginAudits') },
       { path: '/admin/system-logs', label: t('adminShell.systemLogs') },
       { path: '/admin/dataset-audits', label: t('adminShell.datasetAudits') },
+      { path: '/admin/export-audits', label: t('adminShell.exportAudits') },
     ],
   },
 ])

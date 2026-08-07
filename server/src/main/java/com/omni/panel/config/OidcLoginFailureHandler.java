@@ -26,9 +26,9 @@ public class OidcLoginFailureHandler implements AuthenticationFailureHandler {
     /**
      * 注入登录审计与 OIDC、前端 URL 配置依赖。
      *
-     * @param loginAuditService        登录审计服务
-     * @param oidcProperties           OIDC 配置
-     * @param subscriptionProperties   订阅/前端 URL 配置
+     * @param loginAuditService      登录审计服务
+     * @param oidcProperties         OIDC 配置
+     * @param subscriptionProperties 订阅/前端 URL 配置
      */
     public OidcLoginFailureHandler(LoginAuditService loginAuditService, OidcProperties oidcProperties,
                                    SubscriptionProperties subscriptionProperties) {

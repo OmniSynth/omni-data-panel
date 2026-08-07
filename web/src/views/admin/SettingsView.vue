@@ -21,6 +21,7 @@ const form = ref({
   embedAllowedOrigins: '',
   sqlTipsCollapsedDefault: false,
   queryCacheEnabled: false,
+  logsClearEnabled: true,
   queryCacheTtlSeconds: 300,
   maxConcurrentSessions: 2,
   mailHost: '',
@@ -68,6 +69,9 @@ async function load() {
       embedAllowedOrigins: String(settings['embed.allowed-origins'] || ''),
       sqlTipsCollapsedDefault: asBool(settings['ui.sql.tips-collapsed-default']),
       queryCacheEnabled: asBool(settings['cache.query.enabled']),
+      logsClearEnabled: settings['logs.clear.enabled'] == null
+        ? true
+        : asBool(settings['logs.clear.enabled']),
       queryCacheTtlSeconds: Number.isFinite(ttl) && ttl > 0 ? ttl : 300,
       maxConcurrentSessions: Number.isFinite(sessions) && sessions >= 0 ? sessions : 2,
       mailHost: String(settings['mail.host'] || ''),
@@ -95,6 +99,7 @@ function buildPayload(): SiteSettings {
     'ui.sql.tips-collapsed-default': form.value.sqlTipsCollapsedDefault ? 'true' : 'false',
     'cache.query.enabled': form.value.queryCacheEnabled ? 'true' : 'false',
     'cache.query.ttl-seconds': String(form.value.queryCacheTtlSeconds),
+    'logs.clear.enabled': form.value.logsClearEnabled ? 'true' : 'false',
     'auth.session.max-concurrent': String(form.value.maxConcurrentSessions),
     'mail.host': form.value.mailHost.trim(),
     'mail.port': String(form.value.mailPort),
@@ -181,6 +186,10 @@ onMounted(load)
         </el-form-item>
         <el-form-item :label="t('settings.queryCache')">
           <el-switch v-model="form.queryCacheEnabled" @change="markDirty" />
+        </el-form-item>
+        <el-form-item :label="t('settings.logsClearEnabled')">
+          <el-switch v-model="form.logsClearEnabled" @change="markDirty" />
+          <div class="hint">{{ t('settings.logsClearEnabledHint') }}</div>
         </el-form-item>
         <el-form-item :label="t('settings.cacheTtl')">
           <el-input-number

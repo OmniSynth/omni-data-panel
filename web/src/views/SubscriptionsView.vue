@@ -4,6 +4,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { confirmBox } from '@/i18n/dialog'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { dashboardApi, subscriptionApi, userApi } from '@/api'
 import {
   CRON_PRESET_CUSTOM,
@@ -15,6 +16,8 @@ import { requiredRule, validateForm } from '@/form/rules'
 import type { Dashboard, Id, Subscription, UserDirectoryItem } from '@/types'
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const rows = ref<Subscription[]>([])
 const dashboards = ref<Dashboard[]>([])
 const users = ref<UserDirectoryItem[]>([])
@@ -193,7 +196,25 @@ async function runNow(row: Subscription) {
   }
 }
 
-onMounted(load)
+async function applyCreateQuery() {
+  const create = route.query.create === '1' || route.query.create === 'true'
+  const rawId = route.query.dashboardId
+  const dashboardId = typeof rawId === 'string' && rawId.trim() ? rawId.trim() : undefined
+  if (!create && !dashboardId) return
+  resetForm()
+  editingId.value = undefined
+  if (dashboardId) {
+    const matched = dashboards.value.find((item) => String(item.id) === dashboardId)
+    form.dashboardId = matched?.id ?? (dashboardId as Id)
+  }
+  visible.value = true
+  await router.replace({ path: route.path, query: {} })
+}
+
+onMounted(async () => {
+  await load()
+  await applyCreateQuery()
+})
 </script>
 
 <template>

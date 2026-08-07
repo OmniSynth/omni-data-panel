@@ -41,6 +41,20 @@ curl -sS -H "Authorization: Bearer $OMNI_METRICS_TOKEN" \
 
 联查步骤：从浏览器 Network 面板或客户端日志取响应头 `X-Request-Id` → 管理端系统日志搜索该 id。
 
+## 审计落库（管理端）
+
+除 Prometheus 外，产品内审计页支持排障与合规留痕（非时序指标）：
+
+| 审计 | 管理端入口 | 说明 |
+|------|------------|------|
+| 登录 | 登录日志 | 成功 / 失败 / MFA |
+| 查询 | 查询日志 | 含详情与耗时 |
+| 模型 | 模型审计 | 数据集变更 |
+| 导出 | 导出日志 | CSV/XLSX、仪表盘 PNG/PDF 等 |
+| 系统 | 系统日志 | 可按 `requestId` 检索 |
+
+清理能力受设置 `logs.clear.enabled` 控制。
+
 ## 告警
 
 示例规则：[deploy/observability/alerts.yml](../deploy/observability/alerts.yml)

@@ -51,7 +51,7 @@ public class PublicLinkController {
      */
     @PostMapping
     public ApiResponse<PublicLinkEntity> create(@Valid @RequestBody CreateRequest request) {
-        return ApiResponse.ok(service.create(request.resourceType(), request.resourceId()));
+        return ApiResponse.ok(service.create(request.resourceType(), request.resourceId(), request.expiresInDays()));
     }
 
     /**
@@ -68,7 +68,12 @@ public class PublicLinkController {
 
     /**
      * 创建公开链接请求。
+     *
+     * @param expiresInDays 有效天数；空表示永不过期，仅支持 1/7/30/90
      */
-    public record CreateRequest(@NotBlank String resourceType, @NotNull Long resourceId) {
+    public record CreateRequest(
+            @NotBlank String resourceType,
+            @NotNull Long resourceId,
+            Integer expiresInDays) {
     }
 }

@@ -268,7 +268,9 @@ public class DataSourceObjectAclService {
      * @param configured 用户角色在该源上是否存在任意 deny 配置（含空集查询后仍可能 true 若 count&gt;0，通常与集合一致）
      */
     public record EffectiveDenies(Set<String> tables, Set<String> columns, boolean configured) {
-        /** 返回无任何拒绝规则的空实例。 */
+        /**
+         * 返回无任何拒绝规则的空实例。
+         */
         public static EffectiveDenies none() {
             return new EffectiveDenies(Set.of(), Set.of(), false);
         }
@@ -296,7 +298,9 @@ public class DataSourceObjectAclService {
             return isTableDenied(schema, table) || columns.contains(columnKey(schema, table, column));
         }
 
-        /** 拒绝集是否为空（无表且无列）。 */
+        /**
+         * 拒绝集是否为空（无表且无列）。
+         */
         public boolean isEmpty() {
             return tables.isEmpty() && columns.isEmpty();
         }

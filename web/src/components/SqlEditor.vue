@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EditorState, Compartment } from '@codemirror/state'
 import { EditorView, keymap, placeholder, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view'
@@ -12,6 +12,7 @@ import { catalogFromEditorSchema, createColumnCompletionSource } from '@/sql/col
 import type { EditorSqlSchema } from '@/sql/schema'
 import { sqlHighlightingFor } from '@/sql/highlight'
 import { useThemeStore } from '@/stores/theme'
+import { useFullscreen } from '@/composables/useFullscreen'
 
 const props = withDefaults(defineProps<{
   modelValue: string
@@ -22,17 +23,30 @@ const props = withDefaults(defineProps<{
   /** 默认库名；设置后未限定表名可直接联想该库下的表 */
   defaultSchema?: string
   placeholderText?: string
+  /** 是否显示编辑器自身全屏按钮（外层已整块全屏时可关闭） */
+  showFullscreen?: boolean
 }>(), {
   schema: () => ({}),
+  showFullscreen: true,
 })
 
 const { t } = useI18n()
 const themeStore = useThemeStore()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+const shellRef = ref<HTMLElement | null>(null)
 const host = ref<HTMLElement>()
+const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(shellRef)
 let editor: EditorView | undefined
 const language = new Compartment()
 const highlighting = new Compartment()
+
+/** 切换全屏并让 CodeMirror 重新测量高度 */
+async function onToggleFullscreen() {
+  await toggleFullscreen()
+  await nextTick()
+  editor?.requestMeasure()
+  editor?.focus()
+}
 
 const completionTheme = EditorView.theme({
   '.cm-tooltip.cm-tooltip-autocomplete': {
@@ -208,6 +222,15 @@ onMounted(() => {
           { key: 'Ctrl-Space', run: startCompletion },
           { key: 'Shift-Alt-f', run: () => formatDocument() },
           { key: 'Mod-Shift-f', run: () => formatDocument() },
+          ...(props.showFullscreen
+            ? [{
+                key: 'F10',
+                run: () => {
+                  void onToggleFullscreen()
+                  return true
+                },
+              }]
+            : []),
         ]),
         autocompletion({
           activateOnTyping: true,
@@ -253,20 +276,77 @@ watch(() => themeStore.isDark, (dark) => {
   editor.dispatch({ effects: highlighting.reconfigure(sqlHighlightingFor(dark)) })
 })
 
+watch(isFullscreen, async () => {
+  await nextTick()
+  editor?.requestMeasure()
+})
+
 onBeforeUnmount(() => editor?.destroy())
 
-defineExpose({ format: formatDocument, insertText })
+defineExpose({
+  format: formatDocument,
+  insertText,
+  requestMeasure: () => editor?.requestMeasure(),
+})
 </script>
 
-<template><div ref="host" class="sql-editor" /></template>
+<template>
+  <div
+    ref="shellRef"
+    class="sql-editor-shell"
+    :class="{ 'is-fullscreen': showFullscreen && isFullscreen }"
+  >
+    <div v-if="showFullscreen" class="sql-editor-chrome">
+      <el-button
+        class="fs-btn"
+        text
+        size="small"
+        :title="t('sqlEditor.fullscreenHint')"
+        @click="onToggleFullscreen"
+      >
+        {{ isFullscreen ? t('sqlEditor.exitFullscreen') : t('sqlEditor.fullscreen') }}
+      </el-button>
+    </div>
+    <div ref="host" class="sql-editor" />
+  </div>
+</template>
 
 <style scoped>
+.sql-editor-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  background: var(--omni-editor-bg);
+  border-radius: inherit;
+}
+.sql-editor-chrome {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+.fs-btn {
+  color: var(--omni-muted);
+  background: color-mix(in srgb, var(--omni-card) 88%, transparent);
+  border: 1px solid var(--omni-border);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.fs-btn:hover {
+  color: var(--omni-accent-strong);
+  border-color: var(--omni-accent);
+}
 .sql-editor {
+  flex: 1;
   min-height: 280px;
   background: var(--omni-editor-bg);
 }
 :deep(.cm-editor) {
   min-height: 280px;
+  height: 100%;
   font-size: 14px;
   font-family: Consolas, "Courier New", "PingFang SC", monospace;
   color: var(--omni-editor-fg);
@@ -302,5 +382,37 @@ defineExpose({ format: formatDocument, insertText })
 }
 :deep(.cm-placeholder) {
   color: var(--omni-muted);
+}
+
+.sql-editor-shell.is-fullscreen,
+.sql-editor-shell:fullscreen,
+.sql-editor-shell:-webkit-full-screen {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 12px 16px 16px;
+  background: var(--omni-bg);
+}
+.sql-editor-shell.is-fullscreen .sql-editor-chrome,
+.sql-editor-shell:fullscreen .sql-editor-chrome,
+.sql-editor-shell:-webkit-full-screen .sql-editor-chrome {
+  position: static;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.sql-editor-shell.is-fullscreen .sql-editor,
+.sql-editor-shell:fullscreen .sql-editor,
+.sql-editor-shell:-webkit-full-screen .sql-editor {
+  min-height: 0;
+  border: 1px solid var(--omni-border);
+  border-radius: var(--omni-radius-sm);
+  overflow: hidden;
+}
+.sql-editor-shell.is-fullscreen :deep(.cm-editor),
+.sql-editor-shell:fullscreen :deep(.cm-editor),
+.sql-editor-shell:-webkit-full-screen :deep(.cm-editor) {
+  min-height: 0;
+  height: 100%;
 }
 </style>

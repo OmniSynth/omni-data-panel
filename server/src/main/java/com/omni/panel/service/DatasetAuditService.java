@@ -26,14 +26,17 @@ public class DatasetAuditService {
             "CREATE", "UPDATE", "SOFT_DELETE", "RESTORE", "PURGE");
 
     private final DatasetAuditMapper mapper;
+    private final SettingService settingService;
 
     /**
-     * 注入模型审计持久化依赖。
+     * 注入模型审计持久化与系统设置。
      *
-     * @param mapper 模型审计持久化
+     * @param mapper         模型审计持久化
+     * @param settingService 系统设置
      */
-    public DatasetAuditService(DatasetAuditMapper mapper) {
+    public DatasetAuditService(DatasetAuditMapper mapper, SettingService settingService) {
         this.mapper = mapper;
+        this.settingService = settingService;
     }
 
     /**
@@ -111,11 +114,14 @@ public class DatasetAuditService {
     @Transactional
     public int cleanup(AuditCleanupRequest request) {
         requireAdmin();
+        settingService.requireLogsClearEnabled();
         LocalDateTime before = AuditCleanupSupport.resolveBefore(request);
         return before == null ? mapper.deleteAll() : mapper.deleteBefore(before);
     }
 
-    /** 要求当前用户为管理员。 */
+    /**
+     * 要求当前用户为管理员。
+     */
     private void requireAdmin() {
         if (!AuthenticatedUser.current().admin()) {
             throw new BusinessException(403, "仅管理员可管理模型日志");

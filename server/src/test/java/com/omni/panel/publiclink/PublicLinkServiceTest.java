@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
@@ -46,18 +47,63 @@ class PublicLinkServiceTest {
         dashboard.setOwnerId(2L);
         when(dashboardMapper.selectById(7L)).thenReturn(dashboard);
 
-        PublicLinkEntity link = service.create("DASHBOARD", 7L);
+        PublicLinkEntity link = service.create("DASHBOARD", 7L, null);
 
         assertThat(link.getToken()).isNotBlank();
         assertThat(link.getResourceType()).isEqualTo("DASHBOARD");
+        assertThat(link.getExpiresAt()).isNull();
         verify(mapper).insert(any(PublicLinkEntity.class));
         verify(permissionService).require("DASHBOARD", 7L, 2L, "WRITE");
+    }
+
+    @Test
+    void 创建时可设置有效天数() {
+        AuthenticatedUser user = new AuthenticatedUser(2L, "u", false, List.of());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(user, null, List.of()));
+        DashboardEntity dashboard = new DashboardEntity();
+        dashboard.setId(7L);
+        dashboard.setOwnerId(2L);
+        when(dashboardMapper.selectById(7L)).thenReturn(dashboard);
+
+        PublicLinkEntity link = service.create("DASHBOARD", 7L, 7);
+
+        assertThat(link.getExpiresAt()).isNotNull();
+        assertThat(link.getExpiresAt()).isAfter(LocalDateTime.now().plusDays(6));
+        assertThat(link.getExpiresAt()).isBefore(LocalDateTime.now().plusDays(8));
+    }
+
+    @Test
+    void 无效有效期天数被拒绝() {
+        AuthenticatedUser user = new AuthenticatedUser(2L, "u", false, List.of());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(user, null, List.of()));
+        DashboardEntity dashboard = new DashboardEntity();
+        dashboard.setId(7L);
+        dashboard.setOwnerId(2L);
+        when(dashboardMapper.selectById(7L)).thenReturn(dashboard);
+
+        assertThatThrownBy(() -> service.create("DASHBOARD", 7L, 3))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("有效期");
     }
 
     @Test
     void 禁用令牌不可访问() {
         PublicLinkEntity link = new PublicLinkEntity();
         link.setEnabled(false);
+        when(mapper.selectOne(any())).thenReturn(link);
+
+        assertThatThrownBy(() -> service.getByToken("abc"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("公开链接");
+    }
+
+    @Test
+    void 过期令牌不可访问() {
+        PublicLinkEntity link = new PublicLinkEntity();
+        link.setEnabled(true);
+        link.setExpiresAt(LocalDateTime.now().minusMinutes(1));
         when(mapper.selectOne(any())).thenReturn(link);
 
         assertThatThrownBy(() -> service.getByToken("abc"))

@@ -223,7 +223,9 @@ public class JdbcQueryExecutor {
         }
     }
 
-    /** 配置未绑定或非法时回退，避免 maxRows=0 导致结果恒为空。 */
+    /**
+     * 配置未绑定或非法时回退，避免 maxRows=0 导致结果恒为空。
+     */
     private int effectiveMaxRows() {
         return properties.maxRows() > 0 ? properties.maxRows() : 1000;
     }

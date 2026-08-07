@@ -44,6 +44,10 @@ public class PublicLinkEntity {
      * 创建时间。
      */
     private LocalDateTime createdAt;
+    /**
+     * 过期时间；为空表示永不过期。
+     */
+    private LocalDateTime expiresAt;
 
     public Long getId() {
         return id;
@@ -99,5 +103,13 @@ public class PublicLinkEntity {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(LocalDateTime expiresAt) {
+        this.expiresAt = expiresAt;
     }
 }

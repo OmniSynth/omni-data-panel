@@ -31,31 +31,41 @@ public class HiveDialectPlugin extends DialectPlugin {
     private static final Pattern URL_PATTERN = Pattern.compile(
             "(?i)^jdbc:hive2://([^/:?]+)(?::(\\d+))?(?:/([^?;\\s]*))?.*$");
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String code() {
         return CODE;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String label() {
         return "Hive";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int defaultPort() {
         return 10000;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean matchesJdbcUrl(String jdbcUrl) {
         return jdbcUrl != null && jdbcUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:hive2:");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String buildJdbcUrl(String host, int port, String defaultDatabase) {
         String normalizedHost = JdbcConnectionFields.requireHost(host);
@@ -74,7 +84,9 @@ public class HiveDialectPlugin extends DialectPlugin {
         return url.toString();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public ParsedJdbcUrl parseJdbcUrl(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
@@ -90,7 +102,9 @@ public class HiveDialectPlugin extends DialectPlugin {
         return new ParsedJdbcUrl(host, port, database);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void validateJdbcUrl(String jdbcUrl) {
         if (parseJdbcUrl(jdbcUrl) == null
@@ -100,7 +114,9 @@ public class HiveDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void configurePool(HikariConfig config, DataSourceEntity source) {
         // Hive JDBC 对 isValid 支持不稳定，强制探测 SQL
@@ -109,7 +125,9 @@ public class HiveDialectPlugin extends DialectPlugin {
         config.setMinimumIdle(0);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void prepareConnection(Connection connection, DataSourceEntity source) throws SQLException {
         String database = source.getDefaultDatabase();
@@ -118,7 +136,9 @@ public class HiveDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void restoreConnection(Connection connection, String preferredNamespace, String originalNamespace)
             throws SQLException {
@@ -130,7 +150,9 @@ public class HiveDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void useNamespace(Connection connection, String namespace) throws SQLException {
         String safe = namespace.replace("`", "").replace(";", "");
@@ -139,7 +161,9 @@ public class HiveDialectPlugin extends DialectPlugin {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<String> listNamespaces(Connection connection, DatabaseMetaData metadata) throws SQLException {
         Set<String> catalogs = new LinkedHashSet<>();
@@ -168,25 +192,33 @@ public class HiveDialectPlugin extends DialectPlugin {
         return List.copyOf(catalogs);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Set<String> systemNamespaces() {
         return SYSTEM_NAMESPACES;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String metaCatalog(String namespace) {
         return null;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String metaSchema(String namespace) {
         return namespace;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectTableInfo> listTablesFallback(Connection connection, String namespace)
             throws SQLException {
@@ -204,7 +236,9 @@ public class HiveDialectPlugin extends DialectPlugin {
         return tables;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<DialectColumnInfo> listColumnsFallback(Connection connection, String namespace, String table)
             throws SQLException {
@@ -233,7 +267,9 @@ public class HiveDialectPlugin extends DialectPlugin {
         return columns;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public char identifierQuote() {
         return '`';

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { promptBox } from '@/i18n/dialog'
@@ -10,6 +10,7 @@ import { useUserStore } from '@/stores/user'
 import type { Chart, Collection, DataSource, Id, QueryResult, QuerySnapshot, SiteSettings } from '@/types'
 import SqlEditor from '@/components/SqlEditor.vue'
 import MetadataBrowsePanel from '@/components/MetadataBrowsePanel.vue'
+import { useFullscreen } from '@/composables/useFullscreen'
 import ChartPreview from '@/components/ChartPreview.vue'
 import QueryResultTable from '@/components/QueryResultTable.vue'
 import {
@@ -42,7 +43,13 @@ const sql = ref('')
 const sqlParameters = ref<string[]>([])
 const namedSqlParameters = reactive<Record<string, string>>({})
 const namedParamNames = computed(() => extractNamedPlaceholders(sql.value))
-const sqlEditorRef = ref<{ format: () => boolean; insertText: (text: string) => boolean }>()
+const sqlEditorRef = ref<{
+  format: () => boolean
+  insertText: (text: string) => boolean
+  requestMeasure?: () => void
+}>()
+const editorPanelRef = ref<HTMLElement | null>(null)
+const { isFullscreen: editorFullscreen, toggle: toggleEditorFullscreen } = useFullscreen(editorPanelRef)
 const editorSchema = ref<EditorSqlSchema>({})
 const completionPayload = ref<CompletionSchemaPayload | null>(null)
 const schemaLoading = ref(false)
@@ -78,6 +85,7 @@ const selectedCollectionName = computed(() => {
   return collections.value.find((item) => String(item.id) === String(collectionId.value))?.name || ''
 })
 const canSave = computed(() => userStore.hasPermission('chart:create'))
+const canExport = computed(() => userStore.hasPermission('export:execute'))
 const statusType = computed(() => {
   const status = task.value?.status
   if (status === 'SUCCEEDED') return 'success'
@@ -223,6 +231,7 @@ async function cancel() {
 }
 
 async function createExport(format: 'CSV' | 'XLSX') {
+  if (!canExport.value) return ElMessage.warning(t('common.noExportPermission'))
   if (!task.value || task.value.status !== 'SUCCEEDED') return
   try {
     const blob = await exportApi.download(task.value.queryId, format)
@@ -312,6 +321,11 @@ watch(() => route.query.collectionId, (value) => {
 
 watch(() => route.query.name, (value) => {
   if (typeof value === 'string') questionName.value = value
+})
+
+watch(editorFullscreen, async () => {
+  await nextTick()
+  sqlEditorRef.value?.requestMeasure?.()
 })
 
 watch(sourceId, async (value) => {
@@ -404,7 +418,11 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="editor-panel">
+      <section
+        ref="editorPanelRef"
+        class="editor-panel"
+        :class="{ 'is-fullscreen': editorFullscreen }"
+      >
         <div class="panel-toolbar">
           <div class="source-row">
             <span class="field-label">{{ t('dataSource.title') }}</span>
@@ -435,6 +453,13 @@ onBeforeUnmount(() => {
           <div class="run-row">
             <el-tag v-if="task" :type="statusType" effect="light">{{ displayLabel(task.status) }}</el-tag>
             <span v-if="elapsedText" class="elapsed">{{ t('sql.duration') }} {{ elapsedText }}</span>
+            <el-button
+              plain
+              :title="t('sql.fullscreenHint')"
+              @click="toggleEditorFullscreen"
+            >
+              {{ editorFullscreen ? t('sql.exitFullscreen') : t('sql.fullscreen') }}
+            </el-button>
             <el-button plain :disabled="!sql.trim()" :title="t('sql.formatHint')" @click="formatSqlInEditor">
               {{ t('sql.format') }}
             </el-button>
@@ -453,6 +478,7 @@ onBeforeUnmount(() => {
               :schema="editorSchema"
               :default-schema="editorDefaultSchema"
               :placeholder-text="editorPlaceholder"
+              :show-fullscreen="false"
             />
           </div>
           <MetadataBrowsePanel
@@ -509,7 +535,7 @@ onBeforeUnmount(() => {
               <template v-if="elapsedText"> · {{ t('sql.duration') }} {{ elapsedText }}</template>
             </p>
           </div>
-          <div class="result-actions">
+          <div v-if="canExport" class="result-actions">
             <el-button @click="createExport('CSV')">{{ t('sql.exportCsv') }}</el-button>
             <el-button @click="createExport('XLSX')">{{ t('sql.exportXlsx') }}</el-button>
           </div>
@@ -688,6 +714,60 @@ code {
 .editor-row :deep(.meta-browse) {
   max-height: 100%;
   overflow: hidden;
+}
+.editor-panel.is-fullscreen,
+.editor-panel:fullscreen,
+.editor-panel:-webkit-full-screen {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: 0;
+  background: var(--omni-bg);
+  overflow: hidden;
+}
+.editor-panel.is-fullscreen .panel-toolbar,
+.editor-panel:fullscreen .panel-toolbar,
+.editor-panel:-webkit-full-screen .panel-toolbar {
+  flex-shrink: 0;
+}
+.editor-panel.is-fullscreen .editor-row,
+.editor-panel:fullscreen .editor-row,
+.editor-panel:-webkit-full-screen .editor-row {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+.editor-panel.is-fullscreen .editor-box,
+.editor-panel:fullscreen .editor-box,
+.editor-panel:-webkit-full-screen .editor-box {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.editor-panel.is-fullscreen .editor-box :deep(.sql-editor-shell),
+.editor-panel:fullscreen .editor-box :deep(.sql-editor-shell),
+.editor-panel:-webkit-full-screen .editor-box :deep(.sql-editor-shell),
+.editor-panel.is-fullscreen .editor-box :deep(.sql-editor),
+.editor-panel:fullscreen .editor-box :deep(.sql-editor),
+.editor-panel:-webkit-full-screen .editor-box :deep(.sql-editor),
+.editor-panel.is-fullscreen .editor-box :deep(.cm-editor),
+.editor-panel:fullscreen .editor-box :deep(.cm-editor),
+.editor-panel:-webkit-full-screen .editor-box :deep(.cm-editor) {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+.editor-panel.is-fullscreen .sql-params,
+.editor-panel:fullscreen .sql-params,
+.editor-panel:-webkit-full-screen .sql-params {
+  flex-shrink: 0;
+  margin-top: 12px;
+  max-height: 30%;
+  overflow: auto;
 }
 @media (max-width: 900px) {
   .editor-row {

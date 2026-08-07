@@ -29,6 +29,7 @@ public class SettingService {
     static final String EMBED_ALLOWED_ORIGINS = "embed.allowed-origins";
     static final String CACHE_QUERY_ENABLED = "cache.query.enabled";
     static final String CACHE_QUERY_TTL_SECONDS = "cache.query.ttl-seconds";
+    static final String LOGS_CLEAR_ENABLED = "logs.clear.enabled";
     static final String AUTH_SESSION_MAX_CONCURRENT = "auth.session.max-concurrent";
     static final String MAIL_HOST = "mail.host";
     static final String MAIL_PORT = "mail.port";
@@ -57,6 +58,7 @@ public class SettingService {
             "ui.sql.tips-collapsed-default",
             CACHE_QUERY_ENABLED,
             CACHE_QUERY_TTL_SECONDS,
+            LOGS_CLEAR_ENABLED,
             AUTH_SESSION_MAX_CONCURRENT,
             MAIL_HOST,
             MAIL_PORT,
@@ -70,6 +72,7 @@ public class SettingService {
             "embed.enabled",
             "ui.sql.tips-collapsed-default",
             CACHE_QUERY_ENABLED,
+            LOGS_CLEAR_ENABLED,
             MAIL_SMTP_AUTH,
             MAIL_SMTP_STARTTLS);
     private static final Map<String, String> DEFAULTS = Map.ofEntries(
@@ -79,6 +82,7 @@ public class SettingService {
             Map.entry("ui.sql.tips-collapsed-default", "false"),
             Map.entry(CACHE_QUERY_ENABLED, "false"),
             Map.entry(CACHE_QUERY_TTL_SECONDS, String.valueOf(DEFAULT_CACHE_TTL_SECONDS)),
+            Map.entry(LOGS_CLEAR_ENABLED, "true"),
             Map.entry(AUTH_SESSION_MAX_CONCURRENT, String.valueOf(DEFAULT_MAX_CONCURRENT_SESSIONS)),
             Map.entry(MAIL_HOST, ""),
             Map.entry(MAIL_PORT, String.valueOf(DEFAULT_MAIL_PORT)),
@@ -197,6 +201,25 @@ public class SettingService {
     public boolean queryCacheEnabled() {
         String value = get(CACHE_QUERY_ENABLED);
         return value != null && Boolean.parseBoolean(value);
+    }
+
+    /**
+     * 判断是否允许清空系统日志与清理审计日志。
+     *
+     * @return 允许时返回 {@code true}；缺省允许
+     */
+    public boolean logsClearEnabled() {
+        String value = get(LOGS_CLEAR_ENABLED);
+        return value == null || Boolean.parseBoolean(value);
+    }
+
+    /**
+     * 要求已开启「允许清空日志」，否则拒绝。
+     */
+    public void requireLogsClearEnabled() {
+        if (!logsClearEnabled()) {
+            throw new BusinessException(403, "当前已禁止清空日志");
+        }
     }
 
     /**

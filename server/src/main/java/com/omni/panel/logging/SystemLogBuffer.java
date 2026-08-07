@@ -16,7 +16,9 @@ public final class SystemLogBuffer {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final ArrayList<Entry> entries = new ArrayList<>(CAPACITY);
 
-    /** 单例构造，禁止外部实例化。 */
+    /**
+     * 单例构造，禁止外部实例化。
+     */
     private SystemLogBuffer() {
     }
 
@@ -49,7 +51,9 @@ public final class SystemLogBuffer {
         }
     }
 
-    /** 清空缓冲内全部日志条目。 */
+    /**
+     * 清空缓冲内全部日志条目。
+     */
     public void clear() {
         lock.writeLock().lock();
         try {

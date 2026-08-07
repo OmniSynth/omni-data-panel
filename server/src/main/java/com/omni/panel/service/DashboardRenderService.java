@@ -80,25 +80,36 @@ public class DashboardRenderService {
         Map<String, Object> values = mergeDefaults(dashboard.getConfigJson(), parameterValues);
         return new RenderedDashboard(dashboard.getId(), dashboard.getName(), dashboard.getConfigJson(),
                 permissionService.accessLevel("DASHBOARD", dashboardId),
-                executeCards(dashboardId, forceRefresh, values, dashboard.getConfigJson()));
+                values, executeCards(dashboardId, forceRefresh, values, dashboard.getConfigJson()));
     }
 
     /**
-     * 以仪表盘所有者身份渲染，供公开/嵌入匿名访问使用（仅默认参数）。
+     * 以仪表盘所有者身份渲染，供公开链接匿名访问使用（仅默认参数）。
      *
      * @param dashboardId 仪表盘标识
      * @return 脱敏渲染结果
      */
     public RenderedDashboard renderAsOwner(long dashboardId) {
+        return renderAsOwner(dashboardId, null);
+    }
+
+    /**
+     * 以仪表盘所有者身份渲染；{@code lockedParameters} 覆盖默认值（嵌入 JWT 锁定参数）。
+     *
+     * @param dashboardId      仪表盘标识
+     * @param lockedParameters 锁定参数；为空时仅用默认值
+     * @return 脱敏渲染结果
+     */
+    public RenderedDashboard renderAsOwner(long dashboardId, Map<String, Object> lockedParameters) {
         DashboardEntity dashboard = requireDashboard(dashboardId);
         var originalContext = SecurityContextHolder.getContext();
         var ownerContext = SecurityContextHolder.createEmptyContext();
         try {
             ownerContext.setAuthentication(authenticationService.load(dashboard.getOwnerId()));
             SecurityContextHolder.setContext(ownerContext);
-            Map<String, Object> values = mergeDefaults(dashboard.getConfigJson(), null);
+            Map<String, Object> values = mergeDefaults(dashboard.getConfigJson(), lockedParameters);
             return new RenderedDashboard(dashboard.getId(), dashboard.getName(), dashboard.getConfigJson(),
-                    "READ", executeCards(dashboardId, false, values, dashboard.getConfigJson()));
+                    "READ", values, executeCards(dashboardId, false, values, dashboard.getConfigJson()));
         } finally {
             SecurityContextHolder.setContext(originalContext);
         }
@@ -286,9 +297,12 @@ public class DashboardRenderService {
 
     /**
      * 不含查询定义和数据源引用的仪表盘渲染结果。
+     *
+     * @param parameterValues 实际用于查询的合并参数（默认值 + 覆盖/锁定）
      */
     public record RenderedDashboard(@JsonSerialize(using = ToStringSerializer.class) long id,
                                     String name, String configJson, String accessLevel,
+                                    Map<String, Object> parameterValues,
                                     List<RenderedCard> cards) {
     }
 

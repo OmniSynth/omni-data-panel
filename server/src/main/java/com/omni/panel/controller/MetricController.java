@@ -101,12 +101,12 @@ public class MetricController {
     /**
      * 指标保存请求。
      *
-     * @param name            名称
-     * @param description     描述
-     * @param modelId         关联模型标识
-     * @param expressionJson  表达式 JSON
-     * @param aggregation     聚合方式
-     * @param collectionId    所属集合标识
+     * @param name           名称
+     * @param description    描述
+     * @param modelId        关联模型标识
+     * @param expressionJson 表达式 JSON
+     * @param aggregation    聚合方式
+     * @param collectionId   所属集合标识
      */
     public record SaveRequest(@NotBlank String name, String description, @NotNull Long modelId,
                               @NotBlank String expressionJson, @NotBlank String aggregation,

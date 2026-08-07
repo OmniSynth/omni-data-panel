@@ -11,6 +11,17 @@ import com.omni.panel.logging.SystemLogBuffer;
  */
 @Service
 public class SystemLogService {
+    private final SettingService settingService;
+
+    /**
+     * 注入系统设置服务。
+     *
+     * @param settingService 系统设置
+     */
+    public SystemLogService(SettingService settingService) {
+        this.settingService = settingService;
+    }
+
     /**
      * 分页检索进程内系统日志（仅管理员）。
      *
@@ -39,13 +50,18 @@ public class SystemLogService {
         return new SystemLogMeta(snapshot.capacity(), snapshot.buffered());
     }
 
-    /** 清空进程内系统日志缓冲（仅管理员）。 */
+    /**
+     * 清空进程内系统日志缓冲（仅管理员，且需开启清空日志配置）。
+     */
     public void clear() {
         requireAdmin();
+        settingService.requireLogsClearEnabled();
         SystemLogBuffer.get().clear();
     }
 
-    /** 要求当前用户为管理员。 */
+    /**
+     * 要求当前用户为管理员。
+     */
     private void requireAdmin() {
         if (!AuthenticatedUser.current().admin()) {
             throw new BusinessException(403, "仅管理员可查看系统日志");

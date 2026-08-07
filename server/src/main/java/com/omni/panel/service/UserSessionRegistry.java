@@ -120,11 +120,11 @@ public class UserSessionRegistry {
     /**
      * 在本机内存中登记会话并淘汰超限条目。
      *
-     * @param userId           用户标识
-     * @param jti              令牌 jti
-     * @param score            登记时间戳（毫秒，用作键）
-     * @param max              并发上限
-     * @param expiresAtMillis  会话过期时间（毫秒，当前未用于淘汰）
+     * @param userId          用户标识
+     * @param jti             令牌 jti
+     * @param score           登记时间戳（毫秒，用作键）
+     * @param max             并发上限
+     * @param expiresAtMillis 会话过期时间（毫秒，当前未用于淘汰）
      */
     private void registerLocal(long userId, String jti, long score, int max, long expiresAtMillis) {
         ConcurrentSkipListMap<Long, String> sessions = localSessions.computeIfAbsent(

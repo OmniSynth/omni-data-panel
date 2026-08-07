@@ -113,14 +113,14 @@ public class ChartController {
     /**
      * 图表创建与更新请求。
      *
-     * @param name           名称
-     * @param description    描述
-     * @param datasetId      语义查询关联的模型标识
-     * @param dataSourceId   原生 SQL 关联的数据源标识
-     * @param queryJson      查询定义 JSON
-     * @param chartType      图表类型
-     * @param configJson     图表配置 JSON
-     * @param collectionId   所属集合标识
+     * @param name         名称
+     * @param description  描述
+     * @param datasetId    语义查询关联的模型标识
+     * @param dataSourceId 原生 SQL 关联的数据源标识
+     * @param queryJson    查询定义 JSON
+     * @param chartType    图表类型
+     * @param configJson   图表配置 JSON
+     * @param collectionId 所属集合标识
      */
     public record SaveRequest(@NotBlank String name, String description, Long datasetId, Long dataSourceId,
                               @NotBlank String queryJson, @NotBlank String chartType,
