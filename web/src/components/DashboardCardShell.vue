@@ -6,11 +6,14 @@ withDefaults(defineProps<{
   error?: string
   loading?: boolean
   showRefresh?: boolean
+  /** 按内容收高（表格卡片），避免固定网格行高撑出留白 */
+  fitContent?: boolean
 }>(), {
   title: '',
   error: '',
   loading: false,
   showRefresh: false,
+  fitContent: false,
 })
 
 defineEmits<{
@@ -21,7 +24,7 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <article class="dashboard-card-shell">
+  <article class="dashboard-card-shell" :class="{ 'is-fit-content': fitContent }">
     <header class="card-chrome">
       <h3 class="card-title" :title="title">{{ title }}</h3>
       <el-button
@@ -67,6 +70,16 @@ const { t } = useI18n()
   border: 1px solid var(--omni-border);
   border-radius: var(--omni-radius);
   box-shadow: var(--omni-shadow);
+}
+.dashboard-card-shell.is-fit-content {
+  height: auto;
+}
+.dashboard-card-shell.is-fit-content .card-body,
+.dashboard-card-shell.is-fit-content .card-content {
+  flex: 0 1 auto;
+}
+.dashboard-card-shell.is-fit-content .card-content > :deep(*) {
+  flex: 0 1 auto;
 }
 .card-chrome {
   display: flex;

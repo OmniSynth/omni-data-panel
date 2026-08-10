@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, inject, onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { confirmBox } from '@/i18n/dialog'
@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import { chartApi, collectionApi, publicLinkApi, queryApi } from '@/api'
 import { displayLabel } from '@/display'
 import { requiredRule, validateForm } from '@/form/rules'
+import { refreshShellNavKey } from '@/nav/shellNav'
 import { useUserStore } from '@/stores/user'
 import type { Chart, Collection, Id, QueryResult, QuerySubmission } from '@/types'
 import ChartPreview from '@/components/ChartPreview.vue'
@@ -18,6 +19,7 @@ import { copyText } from '@/utils/clipboard'
 
 const { t } = useI18n()
 const userStore = useUserStore()
+const refreshShellNav = inject(refreshShellNavKey, async () => {})
 const router = useRouter()
 const rows = ref<Chart[]>([])
 const collections = ref<Collection[]>([])
@@ -80,6 +82,7 @@ async function save() {
     })
     visible.value = false
     ElMessage.success(t('chart.saved'))
+    await refreshShellNav()
     await load()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('common.saveFailed'))
@@ -90,6 +93,7 @@ async function remove(id: Id) {
   try {
     await confirmBox(t('chart.moveToTrash'), t('common.deleteConfirmTitle'))
     await chartApi.remove(id)
+    await refreshShellNav()
     await load()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))

@@ -92,6 +92,33 @@ export function stringifyLayout(layout: DashboardLayout): string {
   return JSON.stringify(payload)
 }
 
+/**
+ * 仪表盘查看页网格样式。
+ * 表格卡片按内容收高，避免 layout.h 过大时卡片内大片留白；图表仍按 layout 固定占位。
+ */
+export function cardGridStyle(
+  layoutJson: string,
+  chartType?: string,
+): Record<string, string> {
+  const layout = parseLayoutJson(layoutJson)
+  const x = Math.floor(layout.x)
+  const y = Math.floor(layout.y)
+  const w = Math.min(12, Math.max(1, Math.floor(layout.w)))
+  const h = Math.max(1, Math.floor(layout.h))
+  if (chartType === 'table') {
+    return {
+      gridColumn: `${x + 1} / span ${w}`,
+      gridRow: `${y + 1} / span 1`,
+      alignSelf: 'start',
+      height: 'auto',
+    }
+  }
+  return {
+    gridColumn: `${x + 1} / span ${w}`,
+    gridRow: `${y + 1} / span ${h}`,
+  }
+}
+
 /** 卡片归属的 tabId；无 tabs 时返回 undefined；无匹配时归入首个 tab。 */
 export function resolveCardTabId(layoutJson: string | undefined, tabs: DashboardTab[]): string | undefined {
   if (!tabs.length) return undefined
@@ -264,6 +291,8 @@ export interface TableColumnStyle {
   align?: 'left' | 'center' | 'right'
   /** 单元格文字色 */
   color?: string
+  /** 固定列：横向滚动时钉在左侧或右侧 */
+  fixed?: 'left' | 'right'
 }
 
 /** 条件行背景规则（按数组顺序，首条命中生效） */
@@ -292,6 +321,7 @@ const COLUMN_FORMATS: readonly TableColumnFormat[] = [
   'auto', 'text', 'number', 'percent', 'datetime', 'boolean', 'link',
 ]
 const ALIGNS = ['left', 'center', 'right'] as const
+const COLUMN_FIXEDS = ['left', 'right'] as const
 const ROW_OPS = ['EQ', 'NE', 'LIKE'] as const
 
 /** 规范化 tableStyle，剔除非法字段 */
@@ -313,7 +343,12 @@ export function normalizeTableStyle(raw: unknown): TableStyle | undefined {
       if (typeof item.color === 'string' && item.color.trim()) {
         next.color = item.color.trim()
       }
-      if (next.format || next.align || next.color) columns[name] = next
+      if (item.fixed === true) {
+        next.fixed = 'left'
+      } else if (typeof item.fixed === 'string' && (COLUMN_FIXEDS as readonly string[]).includes(item.fixed)) {
+        next.fixed = item.fixed as TableColumnStyle['fixed']
+      }
+      if (next.format || next.align || next.color || next.fixed) columns[name] = next
     }
   }
   const rowRules: TableRowRule[] = []

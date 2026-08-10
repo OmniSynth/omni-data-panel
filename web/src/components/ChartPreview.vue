@@ -27,9 +27,19 @@ const props = defineProps<{
    * 仪表盘卡片等有固定高度时应为 true；图表详情等随内容增高时应为 false。
    */
   fill?: boolean
+  /**
+   * 非 fill 时表格 max-height（px）。
+   * 不传默认 480；传 0 表示不限制高度。
+   */
+  tableMaxHeight?: number
 }>()
 
 const tableFill = computed(() => props.fill !== false)
+const tableScrollMaxHeight = computed(() => {
+  if (tableFill.value) return undefined
+  if (props.tableMaxHeight === 0) return 0
+  return props.tableMaxHeight ?? 480
+})
 
 const tableStyle = computed<TableStyle | undefined>(() =>
   normalizeTableStyle(props.option?.tableStyle))
@@ -444,7 +454,7 @@ onBeforeUnmount(() => {
         :result="displayResult"
         :table-style="tableStyle"
         :fill="tableFill"
-        :max-height="tableFill ? undefined : 480"
+        :max-height="tableScrollMaxHeight"
       />
     </div>
     <div v-else-if="type === 'kpi'" class="kpi-box">

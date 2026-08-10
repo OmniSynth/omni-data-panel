@@ -23,6 +23,7 @@ const FORMAT_OPTIONS: TableColumnFormat[] = [
   'auto', 'text', 'number', 'percent', 'datetime', 'boolean', 'link',
 ]
 const ALIGN_OPTIONS = ['left', 'center', 'right'] as const
+const FIXED_OPTIONS = ['none', 'left', 'right'] as const
 const OP_OPTIONS = ['EQ', 'NE', 'LIKE'] as const
 
 const TEXT_COLORS = [
@@ -50,7 +51,7 @@ const rowRules = computed(() => props.modelValue.rowRules || [])
 
 const customizedCount = computed(() =>
   columnEntries.value.filter((entry) =>
-    entry.style.format || entry.style.align || entry.style.color).length)
+    entry.style.format || entry.style.align || entry.style.color || entry.style.fixed).length)
 
 /** 更新单列样式；空配置时删除该列键 */
 function patchColumn(name: string, patch: Partial<TableColumnStyle>) {
@@ -59,7 +60,8 @@ function patchColumn(name: string, patch: Partial<TableColumnStyle>) {
   if (!next.format || next.format === 'auto') delete next.format
   if (!next.align || next.align === 'left') delete next.align
   if (!next.color) delete next.color
-  if (!next.format && !next.align && !next.color) {
+  if (!next.fixed) delete next.fixed
+  if (!next.format && !next.align && !next.color && !next.fixed) {
     delete columns[name]
   } else {
     columns[name] = next
@@ -96,7 +98,18 @@ function removeRowRule(index: number) {
 }
 
 function isCustomized(style: TableColumnStyle) {
-  return !!(style.format || style.align || style.color)
+  return !!(style.format || style.align || style.color || style.fixed)
+}
+
+/** 固定列下拉值：none 表示不固定 */
+function fixedSelectValue(style: TableColumnStyle): typeof FIXED_OPTIONS[number] {
+  return style.fixed || 'none'
+}
+
+function patchFixed(name: string, value: string) {
+  patchColumn(name, {
+    fixed: value === 'left' || value === 'right' ? value : undefined,
+  })
 }
 </script>
 
@@ -116,6 +129,7 @@ function isCustomized(style: TableColumnStyle) {
           <span>{{ t('tableStyle.colName') }}</span>
           <span>{{ t('tableStyle.colFormat') }}</span>
           <span>{{ t('tableStyle.colAlign') }}</span>
+          <span>{{ t('tableStyle.colFixed') }}</span>
           <span>{{ t('tableStyle.colColor') }}</span>
         </div>
         <div
@@ -149,6 +163,19 @@ function isCustomized(style: TableColumnStyle) {
               :key="align"
               :label="t(`tableStyle.align.${align}`)"
               :value="align"
+            />
+          </el-select>
+          <el-select
+            :model-value="fixedSelectValue(entry.style)"
+            class="ctrl"
+            size="small"
+            @update:model-value="(v: string) => patchFixed(entry.name, v)"
+          >
+            <el-option
+              v-for="fixed in FIXED_OPTIONS"
+              :key="fixed"
+              :label="t(`tableStyle.fixed.${fixed}`)"
+              :value="fixed"
             />
           </el-select>
           <el-color-picker
@@ -296,7 +323,7 @@ function isCustomized(style: TableColumnStyle) {
 .col-head,
 .col-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) 112px 96px 40px;
+  grid-template-columns: minmax(120px, 1fr) 104px 88px 88px 40px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;

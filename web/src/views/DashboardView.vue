@@ -12,11 +12,11 @@ import PublicShareDialog from '@/components/PublicShareDialog.vue'
 import { useFullscreen } from '@/composables/useFullscreen'
 import {
   applyClickToParameterValues,
+  cardGridStyle,
   defaultParameterValues,
   filterCardsByTab,
   parseClickAction,
   parseDashboardConfig,
-  parseLayoutJson,
 } from '@/dashboard/config'
 import { exportDashboardPdf, exportDashboardPng } from '@/dashboard/exportDashboard'
 import { DASHBOARD_SKELETON_LAYOUTS, skeletonLayoutStyle } from '@/dashboard/skeletonLayouts'
@@ -71,16 +71,8 @@ function publicUrl(token: string) {
   return `${location.origin}/public/dashboard/${token}`
 }
 
-function layoutStyle(layoutJson: string) {
-  const layout = parseLayoutJson(layoutJson)
-  const x = Math.floor(layout.x)
-  const y = Math.floor(layout.y)
-  const w = Math.min(12, Math.max(1, Math.floor(layout.w)))
-  const h = Math.max(1, Math.floor(layout.h))
-  return {
-    gridColumn: `${x + 1} / span ${w}`,
-    gridRow: `${y + 1} / span ${h}`,
-  }
+function layoutStyle(layoutJson: string, chartType?: string) {
+  return cardGridStyle(layoutJson, chartType)
 }
 
 function syncActiveTab() {
@@ -323,14 +315,18 @@ onBeforeUnmount(() => {
             v-for="card in section.cards"
             :key="card.cardId"
             class="dashboard-card"
-            :style="layoutStyle(card.layoutJson)"
+            :class="{ 'is-table': card.chartType === 'table' }"
+            :style="layoutStyle(card.layoutJson, card.chartType)"
             :title="card.title"
             :error="card.error"
+            :fit-content="card.chartType === 'table'"
           >
             <ChartPreview
               :type="card.chartType"
               :result="card.result"
               :option="chartOption(card.configJson)"
+              :fill="card.chartType === 'table' ? false : undefined"
+              :table-max-height="card.chartType === 'table' ? 0 : undefined"
             />
           </DashboardCardShell>
         </div>
@@ -355,10 +351,12 @@ onBeforeUnmount(() => {
           v-for="card in visibleCards"
           :key="card.cardId"
           class="dashboard-card"
-          :style="layoutStyle(card.layoutJson)"
+          :class="{ 'is-table': card.chartType === 'table' }"
+          :style="layoutStyle(card.layoutJson, card.chartType)"
           :title="card.title"
           :error="card.error"
           :loading="cardsLoading"
+          :fit-content="card.chartType === 'table'"
           show-refresh
           @refresh="load(true)"
         >
@@ -366,6 +364,8 @@ onBeforeUnmount(() => {
             :type="card.chartType"
             :result="card.result"
             :option="chartOption(card.configJson)"
+            :fill="card.chartType === 'table' ? false : undefined"
+            :table-max-height="card.chartType === 'table' ? 0 : undefined"
             :interactive="!!parseClickAction(card.clickActionJson)?.enabled"
             @click="onCardClick(String(card.cardId), $event.label)"
           />
@@ -434,10 +434,11 @@ onBeforeUnmount(() => {
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-rows: 90px;
+  grid-auto-rows: minmax(90px, auto);
   gap: 16px;
 }
 .dashboard-card { min-width: 0; min-height: 0; }
+.dashboard-card.is-table { min-height: 0; }
 @media (max-width: 900px) {
   .dashboard-card { grid-column: 1 / -1 !important; }
 }

@@ -44,8 +44,10 @@ const pagedRows = computed(() => {
 const columns = computed(() => props.result?.columns || [])
 
 const tableMaxHeight = computed(() => {
-  if (!props.fill) return props.maxHeight
-  return fillMaxHeight.value
+  if (props.fill) return fillMaxHeight.value
+  // 0：不限制高度（随内容增高）
+  if (props.maxHeight === 0 || props.maxHeight === '0') return undefined
+  return props.maxHeight
 })
 
 let resizeObserver: ResizeObserver | null = null
@@ -128,6 +130,7 @@ onBeforeUnmount(() => {
         :prop="column"
         :label="column"
         :align="columnStyleOf(tableStyle, column).align || 'left'"
+        :fixed="columnStyleOf(tableStyle, column).fixed"
         min-width="140"
         show-overflow-tooltip
       >

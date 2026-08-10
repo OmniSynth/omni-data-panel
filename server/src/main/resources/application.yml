@@ -121,7 +121,7 @@ omni:
     master-key: ${CREDENTIAL_MASTER_KEY:}
   query:
     timeout-seconds: ${QUERY_TIMEOUT_SECONDS:30}
-    max-rows: ${QUERY_MAX_ROWS:50000}
+    max-rows: ${QUERY_MAX_ROWS:2000}
     # 仪表盘按波次并行；用户并发宜大于单看板卡片数，避免互相挤占
     per-user-concurrency: ${QUERY_USER_CONCURRENCY:16}
     per-source-concurrency: ${QUERY_SOURCE_CONCURRENCY:8}

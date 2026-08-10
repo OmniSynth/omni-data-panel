@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { promptBox } from '@/i18n/dialog'
 import { useRoute, useRouter } from 'vue-router'
 import { chartApi, collectionApi, dataSourceApi, datasetApi, exportApi, metricApi, queryApi } from '@/api'
 import { displayLabel } from '@/display'
+import { refreshShellNavKey } from '@/nav/shellNav'
 import { useUserStore } from '@/stores/user'
 import type { Chart, Collection, DataSource, Dataset, Id, Metric, QueryResult, QuerySnapshot, QuerySubmission, SemanticQuery } from '@/types'
 import SqlEditor from '@/components/SqlEditor.vue'
@@ -27,6 +28,7 @@ import TableStyleForm from '@/components/TableStyleForm.vue'
 
 const { t } = useI18n()
 const userStore = useUserStore()
+const refreshShellNav = inject(refreshShellNavKey, async () => {})
 const chartTypeOptionList = computed(() => chartTypeOptions())
 const route = useRoute()
 const router = useRouter()
@@ -328,6 +330,7 @@ async function saveQuestion() {
       ? await chartApi.update(questionId.value, data)
       : await chartApi.create(data)
     ElMessage.success(t('chart.saved'))
+    await refreshShellNav()
     await router.push(`/questions/${saved.id}`)
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('chart.saveFailed'))

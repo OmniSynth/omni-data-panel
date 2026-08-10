@@ -59,10 +59,20 @@ const datasets = ref<Dataset[]>([])
 const bindingDraft = ref<CardParameterBinding[]>([])
 const clickDraft = ref<CardClickAction>({ enabled: false, setParameterId: '', valueMode: 'replace' })
 const savingMeta = ref(false)
+/** 参数行稳定 key：不能绑 parameter.id，否则编辑 ID 时整行重挂导致光标丢失 */
+const parameterRowKeys = new WeakMap<object, string>()
 let grid: GridStack | undefined
 let loadVersion = 0
 let mounted = true
 
+function parameterRowKey(parameter: DashboardParameter) {
+  let key = parameterRowKeys.get(parameter)
+  if (!key) {
+    key = `param-row-${Math.random().toString(36).slice(2, 11)}`
+    parameterRowKeys.set(parameter, key)
+  }
+  return key
+}
 const selectedCard = computed(() =>
   cards.value.find((item) => String(item.id) === String(selectedCardId.value)))
 
@@ -595,7 +605,7 @@ onBeforeUnmount(() => {
         </div>
       </template>
       <el-empty v-if="!parameters.length" :description="t('dashboard.noParameters')" />
-      <div v-for="(parameter, index) in parameters" :key="parameter.id + index" class="param-block">
+      <div v-for="(parameter, index) in parameters" :key="parameterRowKey(parameter)" class="param-block">
         <div class="param-row">
           <el-input v-model="parameter.id" placeholder="ID" style="width:140px" />
           <el-input v-model="parameter.label" :placeholder="t('dashboard.label')" style="width:140px" />

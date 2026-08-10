@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { promptBox } from '@/i18n/dialog'
 import { useRoute, useRouter } from 'vue-router'
 import { chartApi, collectionApi, dataSourceApi, exportApi, queryApi, settingsApi } from '@/api'
 import { displayLabel } from '@/display'
+import { refreshShellNavKey } from '@/nav/shellNav'
 import { useUserStore } from '@/stores/user'
 import type { Chart, Collection, DataSource, Id, QueryResult, QuerySnapshot, SiteSettings } from '@/types'
 import SqlEditor from '@/components/SqlEditor.vue'
@@ -24,12 +25,14 @@ import { resolveSqlDialect } from '@/sql/dialects'
 import { QUERY_RESULT_DISPLAY_LIMIT } from '@/query/limits'
 import { formatDuration } from '@/query/duration'
 import { alignNamedParameters, alignSqlParameters, extractNamedPlaceholders } from '@/sql/parameters'
+import { convertMetabaseSql } from '@/sql/metabaseConvert'
 import { chartTypeOptions, mergeChartConfig, type ChartEncoding, type TableStyle } from '@/dashboard/config'
 import ChartEncodingForm from '@/components/ChartEncodingForm.vue'
 import TableStyleForm from '@/components/TableStyleForm.vue'
 
 const { t } = useI18n()
 const userStore = useUserStore()
+const refreshShellNav = inject(refreshShellNavKey, async () => {})
 const chartTypeOptionList = computed(() => chartTypeOptions())
 const route = useRoute()
 const router = useRouter()
@@ -276,6 +279,7 @@ async function saveQuestion() {
   try {
     const created = await chartApi.create(data)
     ElMessage.success(t('sql.savedTo', { name: selectedCollectionName.value || collectionId.value }))
+    await refreshShellNav()
     await router.push(`/questions/${created.id}`)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('common.saveFailed'))
@@ -294,6 +298,37 @@ function onEditorKeydown(event: KeyboardEvent) {
 function formatSqlInEditor() {
   if (!sqlEditorRef.value?.format()) {
     ElMessage.warning(t('sqlEditor.formatFailed'))
+  }
+}
+
+/** 将编辑器中的 Metabase 模板语法转为 Omni :name */
+function convertMetabaseInEditor() {
+  if (!sql.value.trim()) {
+    ElMessage.warning(t('sql.needSql'))
+    return
+  }
+  const result = convertMetabaseSql(sql.value)
+  if (!result.changed) {
+    if (result.warnings.length) {
+      const detail = result.warnings.slice(0, 3).join(' · ')
+      ElMessage.warning(t('sql.convertMetabaseWarnings', { detail }))
+    } else {
+      ElMessage.info(t('sql.convertMetabaseNone'))
+    }
+    return
+  }
+  sql.value = result.sql
+  for (const [name, value] of Object.entries(result.defaults)) {
+    const current = namedSqlParameters[name]
+    if (current === undefined || current === '') {
+      namedSqlParameters[name] = value
+    }
+  }
+  ElMessage.success(t('sql.convertMetabaseDone'))
+  if (result.warnings.length) {
+    const detail = result.warnings.slice(0, 3).join(' · ')
+    const more = result.warnings.length > 3 ? ` (+${result.warnings.length - 3})` : ''
+    ElMessage.warning(t('sql.convertMetabaseWarnings', { detail: detail + more }))
   }
 }
 
@@ -462,6 +497,14 @@ onBeforeUnmount(() => {
             </el-button>
             <el-button plain :disabled="!sql.trim()" :title="t('sql.formatHint')" @click="formatSqlInEditor">
               {{ t('sql.format') }}
+            </el-button>
+            <el-button
+              plain
+              :disabled="!sql.trim()"
+              :title="t('sql.convertMetabaseHint')"
+              @click="convertMetabaseInEditor"
+            >
+              {{ t('sql.convertMetabase') }}
             </el-button>
             <el-button type="primary" :loading="running" :disabled="!sourceId" @click="run">{{ t('sql.execute') }}</el-button>
             <el-button v-if="running" type="danger" plain @click="cancel">{{ t('common.cancel') }}</el-button>
@@ -698,10 +741,21 @@ code {
 .editor-box {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--omni-border);
   border-radius: 8px;
   overflow: hidden;
   background: var(--omni-editor-bg);
+}
+.editor-box :deep(.sql-editor-shell),
+.editor-box :deep(.sql-editor),
+.editor-box :deep(.cm-editor) {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
 }
 .editor-row {
   display: flex;
@@ -773,6 +827,10 @@ code {
   .editor-row {
     flex-direction: column;
     max-height: none;
+  }
+  .editor-box {
+    height: min(50vh, 420px);
+    max-height: min(50vh, 420px);
   }
   .editor-row :deep(.meta-browse) {
     width: 100%;

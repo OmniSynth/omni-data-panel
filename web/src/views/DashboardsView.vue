@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, inject, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirmBox, promptBox } from '@/i18n/dialog'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { dashboardApi, publicLinkApi } from '@/api'
 import { displayLabel } from '@/display'
+import { refreshShellNavKey } from '@/nav/shellNav'
 import { useUserStore } from '@/stores/user'
 import type { Dashboard, Id, PublicLink, PublicLinkExpireDays } from '@/types'
 import PublicShareDialog from '@/components/PublicShareDialog.vue'
@@ -15,6 +16,7 @@ import { copyText } from '@/utils/clipboard'
 const { t } = useI18n()
 const router = useRouter()
 const userStore = useUserStore()
+const refreshShellNav = inject(refreshShellNavKey, async () => {})
 const rows = ref<Dashboard[]>([])
 const cardCounts = ref<Record<string, number>>({})
 const loading = ref(false)
@@ -58,6 +60,7 @@ async function create() {
       inputErrorMessage: t('common.nameRequired'),
     })
     const dashboard = await dashboardApi.create({ name: value, configJson: '{}' })
+    await refreshShellNav()
     await router.push(`/dashboards/${dashboard.id}/edit`)
   } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.createFailed')) }
 }
@@ -66,6 +69,7 @@ async function remove(id: Id) {
   try {
     await confirmBox(t('dashboard.deleteConfirm'), t('common.deleteConfirmTitle'))
     await dashboardApi.remove(id)
+    await refreshShellNav()
     await load()
   }
   catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed')) }
