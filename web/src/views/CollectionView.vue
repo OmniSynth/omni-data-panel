@@ -38,6 +38,20 @@ function flatten(nodes: Collection[], acc: Collection[] = []): Collection[] {
 
 const flatCollections = computed(() => flatten(tree.value))
 const isPersonalRoot = computed(() => collection.value?.personalOwnerId != null)
+
+/** 与侧栏一致：仪表盘 → 图表 → 模型 → 指标 */
+const TYPE_ORDER: ResourceType[] = ['DASHBOARD', 'QUESTION', 'MODEL', 'METRIC']
+const sortedItems = computed(() => {
+  const rank = (type: ResourceType) => {
+    const index = TYPE_ORDER.indexOf(type)
+    return index >= 0 ? index : TYPE_ORDER.length
+  }
+  return [...items.value].sort((a, b) => {
+    const byType = rank(a.type) - rank(b.type)
+    if (byType !== 0) return byType
+    return a.name.localeCompare(b.name, 'zh')
+  })
+})
 const canShare = computed(() => {
   if (!collection.value || isPersonalRoot.value) return false
   return userStore.isAdmin || String(collection.value.ownerId) === String(userStore.user?.id)
@@ -184,7 +198,7 @@ onMounted(load)
         >{{ t('collection.deleteCollection') }}</el-button>
       </div>
     </div>
-    <el-table :data="items" :empty-text="t('collection.empty')">
+    <el-table :data="sortedItems" :empty-text="t('collection.empty')">
       <el-table-column prop="name" :label="t('common.name')" min-width="200">
         <template #default="{ row }">
           <el-button link type="primary" @click="openItem(row)">{{ row.name }}</el-button>

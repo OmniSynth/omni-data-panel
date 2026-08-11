@@ -1182,6 +1182,12 @@ const enUS = {
     drillPathHint: 'Left to right is hierarchy; needs at least two levels',
     bar: 'Bar',
     line: 'Line',
+    axisLeft: 'Left axis',
+    axisRight: 'Right axis',
+    formatNumber: 'Number',
+    formatPercent: 'Percent',
+    showLabels: 'Show data labels',
+    showLabelsHint: 'Label bars and line points; percent series append %',
   },
   drill: {
     all: 'All',

@@ -1182,6 +1182,12 @@ const zhCN = {
     drillPathHint: '从左到右为层级，至少两级；点击类目可下钻',
     bar: '柱',
     line: '线',
+    axisLeft: '左轴',
+    axisRight: '右轴',
+    formatNumber: '数字',
+    formatPercent: '百分比',
+    showLabels: '显示数据标签',
+    showLabelsHint: '在柱顶与折点标注数值；百分比系列自动带 %',
   },
   drill: {
     all: '全部',

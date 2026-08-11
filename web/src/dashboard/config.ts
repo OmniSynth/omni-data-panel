@@ -320,7 +320,14 @@ export function chartTypeOptions() {
 export interface ChartEncoding {
   category?: string
   value?: string | string[]
+  /** 组合图：各数值列的柱/线 */
   seriesTypes?: Record<string, 'bar' | 'line'>
+  /** 组合图：各数值列 Y 轴，0=左轴 1=右轴 */
+  seriesAxes?: Record<string, 0 | 1>
+  /** 组合图：各数值列展示格式 */
+  seriesFormats?: Record<string, 'number' | 'percent'>
+  /** 是否在柱顶/折点显示数值标签 */
+  showLabels?: boolean
   /** 地图经度列 */
   lng?: string
   /** 地图纬度列 */
@@ -459,7 +466,10 @@ export function mergeChartConfig(
     || encoding.value
     || encoding.lng
     || encoding.lat
+    || encoding.showLabels
     || (encoding.seriesTypes && Object.keys(encoding.seriesTypes).length)
+    || (encoding.seriesAxes && Object.keys(encoding.seriesAxes).length)
+    || (encoding.seriesFormats && Object.keys(encoding.seriesFormats).length)
   ))
   if (hasEncoding && encoding) {
     next.encoding = encoding

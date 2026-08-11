@@ -17,9 +17,12 @@ import net.sf.jsqlparser.statement.select.AllColumns;
 import net.sf.jsqlparser.statement.select.AllTableColumns;
 import net.sf.jsqlparser.statement.select.FromItem;
 import net.sf.jsqlparser.statement.select.Join;
+import net.sf.jsqlparser.statement.select.ParenthesedSelect;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectItem;
+import net.sf.jsqlparser.statement.select.SetOperationList;
+import net.sf.jsqlparser.statement.select.WithItem;
 import net.sf.jsqlparser.util.TablesNamesFinder;
 import org.springframework.stereotype.Component;
 import com.omni.panel.common.BusinessException;
@@ -120,8 +123,56 @@ public class SqlObjectAccessGuard {
             }
         }
 
-        collectAliases(select.getPlainSelect(), defaultSchema, aliasToTableKey);
-        validateSelectColumns(select.getPlainSelect(), defaultSchema, aliasToTableKey, referencedTableKeys, denies);
+        // UNION / WITH / 括号查询都不是单一 PlainSelect，需递归校验列权限
+        validateSelectTree(select, defaultSchema, aliasToTableKey, referencedTableKeys, denies);
+    }
+
+    /**
+     * 递归校验 SELECT 树（含 WITH、UNION、括号子查询）中的列引用。
+     *
+     * @param select              当前 SELECT 节点
+     * @param defaultSchema       默认模式
+     * @param aliasToTableKey     外层别名映射（子查询使用副本，避免互相污染）
+     * @param referencedTableKeys 全语句引用的表键
+     * @param denies              有效拒绝集
+     */
+    private void validateSelectTree(Select select, String defaultSchema,
+                                    Map<String, String> aliasToTableKey,
+                                    Set<String> referencedTableKeys,
+                                    EffectiveDenies denies) {
+        if (select == null) {
+            return;
+        }
+        List<? extends WithItem<?>> withItems = select.getWithItemsList();
+        if (withItems != null) {
+            for (WithItem<?> item : withItems) {
+                if (item != null && item.getSelect() != null) {
+                    validateSelectTree(item.getSelect(), defaultSchema, new HashMap<>(),
+                            referencedTableKeys, denies);
+                }
+            }
+        }
+        if (select instanceof PlainSelect plain) {
+            Map<String, String> localAliases = new HashMap<>(aliasToTableKey);
+            collectAliases(plain, defaultSchema, localAliases);
+            validateSelectColumns(plain, defaultSchema, localAliases, referencedTableKeys, denies);
+            return;
+        }
+        if (select instanceof SetOperationList setOp) {
+            List<Select> parts = setOp.getSelects();
+            if (parts == null) {
+                return;
+            }
+            for (Select part : parts) {
+                validateSelectTree(part, defaultSchema, new HashMap<>(aliasToTableKey),
+                        referencedTableKeys, denies);
+            }
+            return;
+        }
+        if (select instanceof ParenthesedSelect nested) {
+            validateSelectTree(nested.getSelect(), defaultSchema, new HashMap<>(aliasToTableKey),
+                    referencedTableKeys, denies);
+        }
     }
 
     /**

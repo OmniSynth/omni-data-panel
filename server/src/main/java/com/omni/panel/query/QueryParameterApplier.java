@@ -316,13 +316,11 @@ public class QueryParameterApplier {
                 }
                 continue;
             }
-            if (value instanceof Collection<?> || (value != null && value.getClass().isArray())) {
-                throw new BusinessException("SQL 参数仅支持标量值");
-            }
             if ("date-range".equalsIgnoreCase(meta == null ? "" : meta.type())) {
                 throw new BusinessException("SQL 参数不支持 date-range，请拆成两个标量参数");
             }
-            Object scalar = scalarValue(value);
+            // 多选/数组压成逗号串，供 FIND_IN_SET / 等值过滤使用
+            Object scalar = toSqlScalar(value);
             if (byName) {
                 namedParameters.put(binding.parameterName().trim(), scalar);
                 continue;
@@ -461,6 +459,39 @@ public class QueryParameterApplier {
                 return parts;
             }
             return List.of(scalarValue(value));
+        }
+        return scalarValue(value);
+    }
+
+    /**
+     * SQL 绑定值：集合/数组压成逗号分隔字符串，其余走 {@link #scalarValue}。
+     *
+     * @param value 运行时参数值
+     * @return JDBC 可用的标量（多为 String / Number）
+     */
+    private Object toSqlScalar(Object value) {
+        if (value instanceof Collection<?> collection) {
+            return collection.stream()
+                    .map(this::scalarValue)
+                    .filter(item -> item != null && !String.valueOf(item).isBlank())
+                    .map(String::valueOf)
+                    .reduce((left, right) -> left + "," + right)
+                    .orElse("");
+        }
+        if (value != null && value.getClass().isArray()) {
+            int length = java.lang.reflect.Array.getLength(value);
+            StringBuilder joined = new StringBuilder();
+            for (int i = 0; i < length; i++) {
+                Object item = scalarValue(java.lang.reflect.Array.get(value, i));
+                if (item == null || String.valueOf(item).isBlank()) {
+                    continue;
+                }
+                if (joined.length() > 0) {
+                    joined.append(',');
+                }
+                joined.append(item);
+            }
+            return joined.toString();
         }
         return scalarValue(value);
     }

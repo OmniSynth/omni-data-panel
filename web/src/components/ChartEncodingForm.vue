@@ -106,6 +106,16 @@ function seriesType(column: string): 'bar' | 'line' {
   return props.modelValue.seriesTypes?.[column] || 'bar'
 }
 
+/** 组合图 Y 轴：0 左 / 1 右 */
+function seriesAxis(column: string): 0 | 1 {
+  return props.modelValue.seriesAxes?.[column] === 1 ? 1 : 0
+}
+
+/** 组合图数值格式 */
+function seriesFormat(column: string): 'number' | 'percent' {
+  return props.modelValue.seriesFormats?.[column] === 'percent' ? 'percent' : 'number'
+}
+
 /** 更新组合图数值列的柱/线类型 */
 function setSeriesType(column: string, type: 'bar' | 'line') {
   emit('update:modelValue', {
@@ -114,6 +124,35 @@ function setSeriesType(column: string, type: 'bar' | 'line') {
       ...(props.modelValue.seriesTypes || {}),
       [column]: type,
     },
+  })
+}
+
+/** 更新组合图数值列所绑 Y 轴 */
+function setSeriesAxis(column: string, axis: 0 | 1) {
+  emit('update:modelValue', {
+    ...props.modelValue,
+    seriesAxes: {
+      ...(props.modelValue.seriesAxes || {}),
+      [column]: axis,
+    },
+  })
+}
+
+/** 更新组合图数值列展示格式 */
+function setSeriesFormat(column: string, format: 'number' | 'percent') {
+  emit('update:modelValue', {
+    ...props.modelValue,
+    seriesFormats: {
+      ...(props.modelValue.seriesFormats || {}),
+      [column]: format,
+    },
+  })
+}
+
+function setShowLabels(show: boolean) {
+  emit('update:modelValue', {
+    ...props.modelValue,
+    showLabels: show || undefined,
   })
 }
 </script>
@@ -197,7 +236,33 @@ function setSeriesType(column: string, type: 'bar' | 'line') {
               <el-option :label="t('encoding.bar')" value="bar" />
               <el-option :label="t('encoding.line')" value="line" />
             </el-select>
+            <el-select
+              class="series-axis"
+              :model-value="seriesAxis(column)"
+              @update:model-value="setSeriesAxis(column, $event)"
+            >
+              <el-option :label="t('encoding.axisLeft')" :value="0" />
+              <el-option :label="t('encoding.axisRight')" :value="1" />
+            </el-select>
+            <el-select
+              class="series-format"
+              :model-value="seriesFormat(column)"
+              @update:model-value="setSeriesFormat(column, $event)"
+            >
+              <el-option :label="t('encoding.formatNumber')" value="number" />
+              <el-option :label="t('encoding.formatPercent')" value="percent" />
+            </el-select>
           </div>
+          <label class="labels-row">
+            <el-switch
+              :model-value="!!modelValue.showLabels"
+              @update:model-value="setShowLabels(!!$event)"
+            />
+            <span>
+              {{ t('encoding.showLabels') }}
+              <span class="hint-inline">{{ t('encoding.showLabelsHint') }}</span>
+            </span>
+          </label>
         </div>
       </div>
     </div>
@@ -263,8 +328,8 @@ function setSeriesType(column: string, type: 'bar' | 'line') {
 }
 .series-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 72px 80px 88px;
+  gap: 6px;
   align-items: center;
 }
 .series-name {
@@ -274,8 +339,27 @@ function setSeriesType(column: string, type: 'bar' | 'line') {
   font-size: 13px;
   color: var(--el-text-color-secondary);
 }
-.series-type {
-  width: 88px;
+.series-type,
+.series-axis,
+.series-format {
+  width: 100%;
+}
+.labels-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+}
+.hint-inline {
+  display: block;
+  margin-top: 2px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
 }
 .drill-field {
   margin-top: 12px;
@@ -292,6 +376,9 @@ function setSeriesType(column: string, type: 'bar' | 'line') {
   .main-grid,
   .map-grid {
     grid-template-columns: 1fr;
+  }
+  .series-row {
+    grid-template-columns: minmax(0, 1fr) 1fr;
   }
 }
 </style>

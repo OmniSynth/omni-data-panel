@@ -62,4 +62,31 @@ class SqlObjectAccessGuardTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("SELECT *");
     }
+
+    @Test
+    void 允许常量UNION查询() {
+        EffectiveDenies denies = EffectiveDenies.none();
+        String sql = """
+                SELECT '玄武' AS supplier, '云盛花' AS sign_name
+                UNION ALL
+                SELECT '鹭源', '云盛花'
+                """;
+        assertThatCode(() -> guard.validate(1L, sql, "demo", denies))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void UNION引用拒绝表时仍拦截() {
+        EffectiveDenies denies = new EffectiveDenies(
+                Set.of(DataSourceObjectAclService.tableKey("demo", "salary")),
+                Set.of(), true);
+        String sql = """
+                SELECT id FROM demo.orders
+                UNION ALL
+                SELECT id FROM demo.salary
+                """;
+        assertThatThrownBy(() -> guard.validate(1L, sql, "demo", denies))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("salary");
+    }
 }

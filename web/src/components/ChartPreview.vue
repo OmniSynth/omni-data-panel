@@ -349,16 +349,87 @@ function render() {
       }
     } else if (props.type === 'combo') {
       const seriesTypes = encoding.value?.seriesTypes || {}
+      const seriesAxes = encoding.value?.seriesAxes || {}
+      const seriesFormats = encoding.value?.seriesFormats || {}
+      const showLabels = !!encoding.value?.showLabels
+      const usesRight = numericSeries.some((item) => seriesAxes[item.name] === 1)
+      const rightIsPercent = numericSeries.some(
+        (item) => seriesAxes[item.name] === 1 && seriesFormats[item.name] === 'percent',
+      )
+      const leftIsPercent = numericSeries.some(
+        (item) => seriesAxes[item.name] !== 1 && seriesFormats[item.name] === 'percent',
+      )
+
+      const formatAxisLabel = (isPercent: boolean) => (value: number) => {
+        if (!Number.isFinite(value)) return ''
+        if (isPercent) {
+          const text = Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '')
+          return `${text}%`
+        }
+        return String(value)
+      }
+
+      const formatSeriesLabel = (name: string, value: unknown) => {
+        const num = Number(value)
+        if (!Number.isFinite(num)) return ''
+        if (seriesFormats[name] === 'percent') {
+          const text = Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.?0+$/, '')
+          return `${text}%`
+        }
+        return Number.isInteger(num) ? String(num) : String(Math.round(num * 100) / 100)
+      }
+
       dataOption = {
-        tooltip: { trigger: 'axis' },
+        tooltip: {
+          trigger: 'axis',
+          formatter: (params: Array<{ seriesName?: string; name?: string; value?: number; marker?: string }>) => {
+            if (!Array.isArray(params) || !params.length) return ''
+            const head = params[0]?.name ?? ''
+            const lines = params.map((item) => {
+              const name = String(item.seriesName || '')
+              return `${item.marker || ''}${name}: ${formatSeriesLabel(name, item.value)}`
+            })
+            return [head, ...lines].join('<br/>')
+          },
+        },
         legend: { data: numericSeries.map((item) => item.name) },
         xAxis: { type: 'category', data: labels },
-        yAxis: { type: 'value' },
-        series: numericSeries.map((item, index) => ({
-          name: item.name,
-          type: seriesTypes[item.name] || (index === 0 ? 'bar' : 'line'),
-          data: item.values,
-        })),
+        yAxis: usesRight
+          ? [
+            {
+              type: 'value',
+              scale: true,
+              axisLabel: { formatter: formatAxisLabel(leftIsPercent) },
+            },
+            {
+              type: 'value',
+              scale: true,
+              splitLine: { show: false },
+              axisLabel: { formatter: formatAxisLabel(rightIsPercent) },
+            },
+          ]
+          : {
+            type: 'value',
+            scale: true,
+            axisLabel: { formatter: formatAxisLabel(leftIsPercent) },
+          },
+        series: numericSeries.map((item, index) => {
+          const type = seriesTypes[item.name] || (index === 0 ? 'bar' : 'line')
+          const yAxisIndex = seriesAxes[item.name] === 1 ? 1 : 0
+          return {
+            name: item.name,
+            type,
+            yAxisIndex: usesRight ? yAxisIndex : 0,
+            data: item.values,
+            label: showLabels
+              ? {
+                show: true,
+                position: 'top',
+                formatter: (params: { value?: number }) => formatSeriesLabel(item.name, params.value),
+              }
+              : undefined,
+          }
+        }),
       }
     } else {
       const seriesType = props.type === 'area' ? 'line' : props.type === 'line' ? 'line' : 'bar'
@@ -393,9 +464,11 @@ function render() {
     xAxis: dataOption.xAxis && typeof base.xAxis === 'object'
       ? { ...(base.xAxis as object), ...(dataOption.xAxis as object) }
       : dataOption.xAxis,
-    yAxis: dataOption.yAxis && typeof base.yAxis === 'object'
-      ? { ...(base.yAxis as object), ...(dataOption.yAxis as object) }
-      : dataOption.yAxis,
+    yAxis: Array.isArray(dataOption.yAxis) || Array.isArray(base.yAxis)
+      ? dataOption.yAxis
+      : dataOption.yAxis && typeof base.yAxis === 'object'
+        ? { ...(base.yAxis as object), ...(dataOption.yAxis as object) }
+        : dataOption.yAxis,
     series: mergedSeries,
   }, themeStore.isDark), true)
 }

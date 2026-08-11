@@ -1,7 +1,6 @@
 package com.omni.panel.query;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -93,16 +92,18 @@ class QueryParameterApplierTest {
     }
 
     @Test
-    void SQL拒绝集合参数() {
+    void SQL多选压成逗号串() {
         QueryService.QuerySubmission submission =
-                new QueryService.QuerySubmission(3L, "SELECT * FROM t WHERE a=?", List.of(), null);
+                new QueryService.QuerySubmission(3L,
+                        "SELECT * FROM t WHERE FIND_IN_SET(name, :channel) > 0", List.of(), null);
         List<QueryParameterApplier.Binding> bindings = List.of(
-                new QueryParameterApplier.Binding("a", "sql", null, null, 0));
+                new QueryParameterApplier.Binding("ch", "sql", null, null, null, "channel"));
 
-        assertThatThrownBy(() -> applier.apply(submission, bindings,
-                Map.of("a", List.of("1", "2")),
-                Map.of("a", new QueryParameterApplier.ParameterMeta("a", "multi-select", false))))
-                .hasMessageContaining("标量");
+        QueryService.QuerySubmission applied = applier.apply(submission, bindings,
+                Map.of("ch", List.of("渠道A", "渠道B")),
+                Map.of("ch", new QueryParameterApplier.ParameterMeta("ch", "multi-select", false)));
+
+        assertThat(applied.namedParameters()).containsEntry("channel", "渠道A,渠道B");
     }
 
     @Test

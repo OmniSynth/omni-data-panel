@@ -103,12 +103,15 @@ type NavTreeNode = {
   id: string
   name: string
   label: string
-  kind: 'COLLECTION' | ResourceType
+  kind: 'COLLECTION' | 'TYPE_GROUP' | ResourceType
   resourceId: Id
   personal?: boolean
   childCollections?: Collection[]
   isLeaf?: boolean
 }
+
+/** 侧栏集合内资源展示顺序 */
+const RESOURCE_TYPE_ORDER: ResourceType[] = ['DASHBOARD', 'QUESTION', 'MODEL', 'METRIC']
 
 const flatCollections = computed(() => flattenCollections(collections.value))
 
@@ -154,6 +157,40 @@ function toResourceNode(item: CollectionItem): NavTreeNode {
   }
 }
 
+/**
+ * 按类型分段：段标题 + 条目（仪表盘 → 图表 → 模型 → 指标），同层展示无需再展开。
+ *
+ * @param collectionId 所属集合，用于稳定 node-key
+ * @param items        集合条目
+ */
+function toGroupedResourceNodes(collectionId: Id, items: CollectionItem[]): NavTreeNode[] {
+  const buckets = new Map<ResourceType, CollectionItem[]>()
+  for (const item of items) {
+    if (!RESOURCE_TYPE_ORDER.includes(item.type)) continue
+    const list = buckets.get(item.type) || []
+    list.push(item)
+    buckets.set(item.type, list)
+  }
+  const nodes: NavTreeNode[] = []
+  for (const type of RESOURCE_TYPE_ORDER) {
+    const groupItems = buckets.get(type)
+    if (!groupItems?.length) continue
+    const label = resourceTypeLabel(type)
+    nodes.push({
+      id: `type-group:${collectionId}:${type}`,
+      name: label,
+      label,
+      kind: 'TYPE_GROUP',
+      resourceId: collectionId,
+      isLeaf: true,
+    })
+    for (const item of groupItems) {
+      nodes.push(toResourceNode(item))
+    }
+  }
+  return nodes
+}
+
 async function loadTreeNode(
   node: { level: number; data: NavTreeNode },
   resolve: (data: NavTreeNode[]) => void,
@@ -171,7 +208,7 @@ async function loadTreeNode(
     const items = await collectionApi.items(data.resourceId)
     resolve([
       ...(data.childCollections || []).map(toCollectionNode),
-      ...items.map(toResourceNode),
+      ...toGroupedResourceNodes(data.resourceId, items),
     ])
   } catch {
     resolve((data.childCollections || []).map(toCollectionNode))
@@ -396,6 +433,7 @@ async function submitCreate() {
 }
 
 function onNavNodeClick(data: NavTreeNode) {
+  if (data.kind === 'TYPE_GROUP') return
   if (data.kind === 'COLLECTION') {
     router.push(`/collections/${data.resourceId}`)
     return
@@ -518,9 +556,12 @@ onMounted(loadShell)
               <template #default="{ data }">
                 <span
                   class="tree-node"
-                  :class="{ personal: data.personal, resource: data.kind !== 'COLLECTION' }"
+                  :class="{
+                    personal: data.personal,
+                    resource: data.kind !== 'COLLECTION' && data.kind !== 'TYPE_GROUP',
+                    'type-group': data.kind === 'TYPE_GROUP',
+                  }"
                 >
-                  <span v-if="data.kind !== 'COLLECTION'" class="node-type">{{ resourceTypeLabel(data.kind) }}</span>
                   {{ data.name }}
                 </span>
               </template>
@@ -931,6 +972,13 @@ onMounted(loadShell)
 }
 .tree-node.personal { font-weight: 600; color: var(--omni-accent-strong); }
 .tree-node.resource { font-weight: 400; color: var(--omni-text); }
+.tree-node.type-group {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--omni-muted);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
 .node-type {
   flex: 0 0 auto;
   font-size: 11px;
