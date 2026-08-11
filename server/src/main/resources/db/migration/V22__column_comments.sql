@@ -1,0 +1,355 @@
+-- 业务表字段 COMMENT（不改写历史迁移；不含 QRTZ_*）
+-- MySQL 需 MODIFY 列定义才能改 COMMENT，类型/空值/默认值与现网迁移保持一致
+
+-- ========== sys_user ==========
+ALTER TABLE sys_user
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN username VARCHAR(64) NOT NULL COMMENT '登录用户名',
+    MODIFY COLUMN password_hash VARCHAR(100) NOT NULL COMMENT '密码哈希（BCrypt）',
+    MODIFY COLUMN display_name VARCHAR(100) NOT NULL COMMENT '显示名称',
+    MODIFY COLUMN email VARCHAR(255) NULL COMMENT '邮箱',
+    MODIFY COLUMN enabled BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    MODIFY COLUMN activated BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否已激活',
+    MODIFY COLUMN activated_at DATETIME NULL COMMENT '激活时间',
+    MODIFY COLUMN totp_enabled BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否启用 TOTP 双因素',
+    MODIFY COLUMN totp_secret VARCHAR(255) NULL COMMENT 'TOTP 密钥（已启用）',
+    MODIFY COLUMN totp_pending_secret VARCHAR(255) NULL COMMENT 'TOTP 待确认密钥',
+    MODIFY COLUMN auth_source VARCHAR(20) NOT NULL DEFAULT 'LOCAL' COMMENT '认证来源：LOCAL/OIDC 等',
+    MODIFY COLUMN idp_subject VARCHAR(255) NULL COMMENT 'IdP 主体标识（OIDC sub）',
+    MODIFY COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间';
+
+-- ========== sys_role ==========
+ALTER TABLE sys_role
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN code VARCHAR(64) NOT NULL COMMENT '角色编码',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '角色名称',
+    MODIFY COLUMN description VARCHAR(500) NULL COMMENT '角色描述',
+    MODIFY COLUMN enabled BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    MODIFY COLUMN built_in BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否系统内置角色';
+
+-- ========== sys_permission ==========
+ALTER TABLE sys_permission
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN code VARCHAR(100) NOT NULL COMMENT '权限编码（如 query:execute）',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '权限名称';
+
+-- ========== sys_user_role ==========
+ALTER TABLE sys_user_role
+    MODIFY COLUMN user_id BIGINT NOT NULL COMMENT '用户 ID',
+    MODIFY COLUMN role_id BIGINT NOT NULL COMMENT '角色 ID';
+
+-- ========== sys_role_permission ==========
+ALTER TABLE sys_role_permission
+    MODIFY COLUMN role_id BIGINT NOT NULL COMMENT '角色 ID',
+    MODIFY COLUMN permission_id BIGINT NOT NULL COMMENT '权限 ID';
+
+-- ========== sys_login_audit ==========
+ALTER TABLE sys_login_audit
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN username VARCHAR(64) NOT NULL COMMENT '尝试登录的用户名',
+    MODIFY COLUMN user_id BIGINT NULL COMMENT '匹配到的用户 ID（失败时可空）',
+    MODIFY COLUMN success BOOLEAN NOT NULL COMMENT '是否登录成功',
+    MODIFY COLUMN message VARCHAR(255) NOT NULL COMMENT '结果说明/失败原因',
+    MODIFY COLUMN client_ip VARCHAR(64) NULL COMMENT '客户端 IP',
+    MODIFY COLUMN user_agent VARCHAR(512) NULL COMMENT 'User-Agent',
+    MODIFY COLUMN logged_at DATETIME NOT NULL COMMENT '登录时间';
+
+-- ========== sys_user_token ==========
+ALTER TABLE sys_user_token
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN user_id BIGINT NOT NULL COMMENT '用户 ID',
+    MODIFY COLUMN token_hash VARCHAR(64) NOT NULL COMMENT '令牌哈希',
+    MODIFY COLUMN purpose VARCHAR(32) NOT NULL COMMENT '用途（激活/重置密码等）',
+    MODIFY COLUMN expires_at DATETIME NOT NULL COMMENT '过期时间',
+    MODIFY COLUMN used_at DATETIME NULL COMMENT '使用时间',
+    MODIFY COLUMN created_at DATETIME NOT NULL COMMENT '创建时间';
+
+-- ========== sys_user_totp_backup_code ==========
+ALTER TABLE sys_user_totp_backup_code
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN user_id BIGINT NOT NULL COMMENT '用户 ID',
+    MODIFY COLUMN code_hash VARCHAR(64) NOT NULL COMMENT '备用码哈希',
+    MODIFY COLUMN used_at DATETIME NULL COMMENT '使用时间',
+    MODIFY COLUMN created_at DATETIME NOT NULL COMMENT '创建时间';
+
+-- ========== bi_data_source ==========
+ALTER TABLE bi_data_source
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '数据源名称',
+    MODIFY COLUMN host VARCHAR(255) NULL COMMENT '主机地址',
+    MODIFY COLUMN port INT NULL COMMENT '端口',
+    MODIFY COLUMN default_database VARCHAR(128) NULL COMMENT '默认库/命名空间',
+    MODIFY COLUMN jdbc_url VARCHAR(1000) NOT NULL COMMENT 'JDBC 连接串',
+    MODIFY COLUMN dialect VARCHAR(32) NOT NULL DEFAULT 'MYSQL' COMMENT 'SQL 方言',
+    MODIFY COLUMN username VARCHAR(128) NOT NULL COMMENT '连接用户名',
+    MODIFY COLUMN encrypted_password TEXT NOT NULL COMMENT '加密后的密码',
+    MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '所有者用户 ID',
+    MODIFY COLUMN status VARCHAR(32) NOT NULL COMMENT '状态',
+    MODIFY COLUMN created_at DATETIME NOT NULL COMMENT '创建时间',
+    MODIFY COLUMN updated_at DATETIME NOT NULL COMMENT '更新时间';
+
+-- ========== bi_meta_schema ==========
+ALTER TABLE bi_meta_schema
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN data_source_id BIGINT NOT NULL COMMENT '数据源 ID',
+    MODIFY COLUMN schema_name VARCHAR(128) NOT NULL COMMENT '库/Schema 名';
+
+-- ========== bi_meta_table ==========
+ALTER TABLE bi_meta_table
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN data_source_id BIGINT NOT NULL COMMENT '数据源 ID',
+    MODIFY COLUMN schema_name VARCHAR(128) NOT NULL COMMENT '库/Schema 名',
+    MODIFY COLUMN table_name VARCHAR(128) NOT NULL COMMENT '表名',
+    MODIFY COLUMN table_comment VARCHAR(500) NULL COMMENT '源库表注释缓存';
+
+-- ========== bi_meta_column ==========
+ALTER TABLE bi_meta_column
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN data_source_id BIGINT NOT NULL COMMENT '数据源 ID',
+    MODIFY COLUMN schema_name VARCHAR(128) NOT NULL COMMENT '库/Schema 名',
+    MODIFY COLUMN table_name VARCHAR(128) NOT NULL COMMENT '表名',
+    MODIFY COLUMN column_name VARCHAR(128) NOT NULL COMMENT '列名',
+    MODIFY COLUMN data_type INT NOT NULL COMMENT 'JDBC 类型码',
+    MODIFY COLUMN type_name VARCHAR(128) NOT NULL COMMENT '源库类型名',
+    MODIFY COLUMN column_size INT NULL COMMENT '列长度',
+    MODIFY COLUMN decimal_digits INT NULL COMMENT '小数位数',
+    MODIFY COLUMN nullable BOOLEAN NOT NULL COMMENT '是否可空',
+    MODIFY COLUMN primary_key BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否主键列',
+    MODIFY COLUMN foreign_key BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否外键列',
+    MODIFY COLUMN fk_table_name VARCHAR(128) NULL COMMENT '外键引用表名',
+    MODIFY COLUMN fk_column_name VARCHAR(128) NULL COMMENT '外键引用列名',
+    MODIFY COLUMN ordinal_position INT NOT NULL COMMENT '列序号（从 1 起）',
+    MODIFY COLUMN column_comment VARCHAR(500) NULL COMMENT '源库列注释缓存';
+
+-- ========== bi_dataset ==========
+ALTER TABLE bi_dataset
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '模型名称',
+    MODIFY COLUMN description VARCHAR(500) NULL COMMENT '模型描述',
+    MODIFY COLUMN model_type VARCHAR(20) NOT NULL DEFAULT 'TABLE' COMMENT '模型类型：TABLE/SQL 等',
+    MODIFY COLUMN data_source_id BIGINT NOT NULL COMMENT '数据源 ID',
+    MODIFY COLUMN schema_name VARCHAR(128) NULL COMMENT '物理表所在库/Schema',
+    MODIFY COLUMN table_name VARCHAR(128) NULL COMMENT '物理表名',
+    MODIFY COLUMN definition_sql TEXT NULL COMMENT 'SQL 模型定义',
+    MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '所有者用户 ID',
+    MODIFY COLUMN collection_id BIGINT NULL COMMENT '所属集合 ID',
+    MODIFY COLUMN created_at DATETIME NOT NULL COMMENT '创建时间',
+    MODIFY COLUMN updated_at DATETIME NOT NULL COMMENT '更新时间',
+    MODIFY COLUMN deleted_at DATETIME NULL COMMENT '软删除时间';
+
+-- ========== bi_dataset_field ==========
+ALTER TABLE bi_dataset_field
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN dataset_id BIGINT NOT NULL COMMENT '模型 ID',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '字段显示名',
+    MODIFY COLUMN column_name VARCHAR(128) NOT NULL COMMENT '物理列名/表达式名',
+    MODIFY COLUMN field_type VARCHAR(20) NOT NULL COMMENT '字段类型（维度/度量等）',
+    MODIFY COLUMN aggregation VARCHAR(20) NULL COMMENT '默认聚合方式';
+
+-- ========== bi_dataset_audit ==========
+ALTER TABLE bi_dataset_audit
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN dataset_id BIGINT NULL COMMENT '模型 ID（删除后可空）',
+    MODIFY COLUMN dataset_name VARCHAR(200) NOT NULL COMMENT '操作时模型名称快照',
+    MODIFY COLUMN action VARCHAR(32) NOT NULL COMMENT '操作类型',
+    MODIFY COLUMN operator_id BIGINT NULL COMMENT '操作人用户 ID',
+    MODIFY COLUMN detail VARCHAR(1000) NULL COMMENT '变更详情',
+    MODIFY COLUMN created_at DATETIME NOT NULL COMMENT '记录时间';
+
+-- ========== bi_metric ==========
+ALTER TABLE bi_metric
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '指标名称',
+    MODIFY COLUMN description VARCHAR(500) NULL COMMENT '指标描述',
+    MODIFY COLUMN model_id BIGINT NOT NULL COMMENT '关联模型 ID',
+    MODIFY COLUMN expression_json JSON NOT NULL COMMENT '指标表达式 JSON',
+    MODIFY COLUMN aggregation VARCHAR(20) NOT NULL COMMENT '聚合方式',
+    MODIFY COLUMN collection_id BIGINT NULL COMMENT '所属集合 ID',
+    MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '所有者用户 ID',
+    MODIFY COLUMN deleted_at DATETIME NULL COMMENT '软删除时间',
+    MODIFY COLUMN created_at DATETIME NOT NULL COMMENT '创建时间',
+    MODIFY COLUMN updated_at DATETIME NOT NULL COMMENT '更新时间';
+
+-- ========== bi_collection ==========
+ALTER TABLE bi_collection
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '集合名称',
+    MODIFY COLUMN description VARCHAR(500) NULL COMMENT '集合描述',
+    MODIFY COLUMN parent_id BIGINT NULL COMMENT '父集合 ID',
+    MODIFY COLUMN personal_owner_id BIGINT NULL COMMENT '个人集合所属用户 ID',
+    MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '所有者用户 ID',
+    MODIFY COLUMN archived BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否归档',
+    MODIFY COLUMN created_at DATETIME NOT NULL COMMENT '创建时间',
+    MODIFY COLUMN updated_at DATETIME NOT NULL COMMENT '更新时间';
+
+-- ========== bi_recent_item ==========
+ALTER TABLE bi_recent_item
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN user_id BIGINT NOT NULL COMMENT '用户 ID',
+    MODIFY COLUMN resource_type VARCHAR(32) NOT NULL COMMENT '资源类型',
+    MODIFY COLUMN resource_id BIGINT NOT NULL COMMENT '资源 ID',
+    MODIFY COLUMN visited_at DATETIME NOT NULL COMMENT '最近访问时间';
+
+-- ========== bi_chart ==========
+ALTER TABLE bi_chart
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '图表名称',
+    MODIFY COLUMN description VARCHAR(500) NULL COMMENT '图表描述',
+    MODIFY COLUMN dataset_id BIGINT NULL COMMENT '语义模型 ID（原生 SQL 时可空）',
+    MODIFY COLUMN data_source_id BIGINT NULL COMMENT '数据源 ID（原生 SQL）',
+    MODIFY COLUMN query_json JSON NOT NULL COMMENT '查询定义 JSON',
+    MODIFY COLUMN chart_type VARCHAR(50) NOT NULL COMMENT '图表类型',
+    MODIFY COLUMN config_json JSON NOT NULL COMMENT '图表配置 JSON（含 tableStyle 等）',
+    MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '所有者用户 ID',
+    MODIFY COLUMN collection_id BIGINT NULL COMMENT '所属集合 ID',
+    MODIFY COLUMN deleted_at DATETIME NULL COMMENT '软删除时间',
+    MODIFY COLUMN updated_at DATETIME NULL COMMENT '更新时间';
+
+-- ========== bi_dashboard ==========
+ALTER TABLE bi_dashboard
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '仪表盘名称',
+    MODIFY COLUMN description VARCHAR(500) NULL COMMENT '仪表盘描述',
+    MODIFY COLUMN config_json JSON NOT NULL COMMENT '仪表盘配置 JSON（参数/页签等）',
+    MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '所有者用户 ID',
+    MODIFY COLUMN collection_id BIGINT NULL COMMENT '所属集合 ID',
+    MODIFY COLUMN last_refreshed_at DATETIME NULL COMMENT '上次刷新时间',
+    MODIFY COLUMN deleted_at DATETIME NULL COMMENT '软删除时间',
+    MODIFY COLUMN updated_at DATETIME NULL COMMENT '更新时间';
+
+-- ========== bi_dashboard_card ==========
+ALTER TABLE bi_dashboard_card
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN dashboard_id BIGINT NOT NULL COMMENT '仪表盘 ID',
+    MODIFY COLUMN chart_id BIGINT NOT NULL COMMENT '图表 ID',
+    MODIFY COLUMN title VARCHAR(100) NOT NULL COMMENT '卡片标题',
+    MODIFY COLUMN layout_json JSON NOT NULL COMMENT '布局 JSON（含页签归属）',
+    MODIFY COLUMN bindings_json JSON NULL COMMENT '参数绑定 JSON',
+    MODIFY COLUMN click_action_json JSON NULL COMMENT '点击联动 JSON';
+
+-- ========== bi_public_link ==========
+ALTER TABLE bi_public_link
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN resource_type VARCHAR(32) NOT NULL COMMENT '资源类型：DASHBOARD/QUESTION 等',
+    MODIFY COLUMN resource_id BIGINT NOT NULL COMMENT '资源 ID',
+    MODIFY COLUMN token VARCHAR(64) NOT NULL COMMENT '公开访问令牌',
+    MODIFY COLUMN enabled BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    MODIFY COLUMN created_by BIGINT NOT NULL COMMENT '创建人用户 ID',
+    MODIFY COLUMN created_at DATETIME NOT NULL COMMENT '创建时间',
+    MODIFY COLUMN expires_at DATETIME NULL COMMENT '过期时间（空=永不过期）';
+
+-- ========== bi_setting ==========
+ALTER TABLE bi_setting
+    MODIFY COLUMN setting_key VARCHAR(100) NOT NULL COMMENT '设置键',
+    MODIFY COLUMN setting_value TEXT NOT NULL COMMENT '设置值',
+    MODIFY COLUMN updated_at DATETIME NOT NULL COMMENT '更新时间';
+
+-- ========== bi_role_resource_permission ==========
+ALTER TABLE bi_role_resource_permission
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN role_id BIGINT NOT NULL COMMENT '角色 ID',
+    MODIFY COLUMN resource_type VARCHAR(32) NOT NULL COMMENT '资源类型',
+    MODIFY COLUMN resource_id BIGINT NOT NULL COMMENT '资源 ID',
+    MODIFY COLUMN permission VARCHAR(20) NOT NULL COMMENT '权限级别：READ/WRITE/ADMIN 等';
+
+-- ========== bi_field_permission ==========
+ALTER TABLE bi_field_permission
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN dataset_id BIGINT NOT NULL COMMENT '模型 ID',
+    MODIFY COLUMN user_id BIGINT NOT NULL COMMENT '用户 ID',
+    MODIFY COLUMN field_name VARCHAR(100) NOT NULL COMMENT '字段名',
+    MODIFY COLUMN allowed BOOLEAN NOT NULL COMMENT '是否允许访问';
+
+-- ========== bi_row_rule ==========
+ALTER TABLE bi_row_rule
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN dataset_id BIGINT NOT NULL COMMENT '模型 ID',
+    MODIFY COLUMN user_id BIGINT NULL COMMENT '适用用户 ID（空=规则级配置）',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '规则名称',
+    MODIFY COLUMN rule_json JSON NOT NULL COMMENT '行过滤规则 JSON',
+    MODIFY COLUMN enabled BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用';
+
+-- ========== bi_role_table_deny ==========
+ALTER TABLE bi_role_table_deny
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN role_id BIGINT NOT NULL COMMENT '角色 ID',
+    MODIFY COLUMN data_source_id BIGINT NOT NULL COMMENT '数据源 ID',
+    MODIFY COLUMN schema_name VARCHAR(200) NOT NULL COMMENT '库/Schema 名',
+    MODIFY COLUMN table_name VARCHAR(200) NOT NULL COMMENT '被拒绝的表名';
+
+-- ========== bi_role_column_deny ==========
+ALTER TABLE bi_role_column_deny
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN role_id BIGINT NOT NULL COMMENT '角色 ID',
+    MODIFY COLUMN data_source_id BIGINT NOT NULL COMMENT '数据源 ID',
+    MODIFY COLUMN schema_name VARCHAR(200) NOT NULL COMMENT '库/Schema 名',
+    MODIFY COLUMN table_name VARCHAR(200) NOT NULL COMMENT '表名',
+    MODIFY COLUMN column_name VARCHAR(200) NOT NULL COMMENT '被拒绝的列名';
+
+-- ========== bi_query_audit ==========
+ALTER TABLE bi_query_audit
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN query_id VARCHAR(36) NOT NULL COMMENT '查询任务 ID',
+    MODIFY COLUMN user_id BIGINT NOT NULL COMMENT '执行用户 ID',
+    MODIFY COLUMN data_source_id BIGINT NOT NULL COMMENT '数据源 ID',
+    MODIFY COLUMN sql_text MEDIUMTEXT NOT NULL COMMENT '执行 SQL',
+    MODIFY COLUMN client_ip VARCHAR(64) NULL COMMENT '客户端 IP',
+    MODIFY COLUMN user_agent VARCHAR(512) NULL COMMENT 'User-Agent',
+    MODIFY COLUMN status VARCHAR(20) NOT NULL COMMENT '状态',
+    MODIFY COLUMN row_count INT NULL COMMENT '返回行数',
+    MODIFY COLUMN error_message VARCHAR(1000) NULL COMMENT '错误信息',
+    MODIFY COLUMN duration_ms BIGINT NULL COMMENT '耗时（毫秒）',
+    MODIFY COLUMN result_preview MEDIUMTEXT NULL COMMENT '结果预览',
+    MODIFY COLUMN started_at DATETIME NOT NULL COMMENT '开始时间',
+    MODIFY COLUMN finished_at DATETIME NULL COMMENT '结束时间';
+
+-- ========== bi_export_audit ==========
+ALTER TABLE bi_export_audit
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN user_id BIGINT NOT NULL COMMENT '导出用户 ID',
+    MODIFY COLUMN query_id VARCHAR(36) NULL COMMENT '关联查询 ID',
+    MODIFY COLUMN data_source_id BIGINT NULL COMMENT '数据源 ID',
+    MODIFY COLUMN format VARCHAR(16) NOT NULL COMMENT '导出格式：CSV/XLSX 等',
+    MODIFY COLUMN mode VARCHAR(16) NOT NULL COMMENT '导出方式：同步/异步等',
+    MODIFY COLUMN status VARCHAR(20) NOT NULL COMMENT '状态',
+    MODIFY COLUMN row_count INT NULL COMMENT '导出行数',
+    MODIFY COLUMN byte_size BIGINT NULL COMMENT '文件字节数',
+    MODIFY COLUMN task_id VARCHAR(36) NULL COMMENT '异步导出任务 ID',
+    MODIFY COLUMN client_ip VARCHAR(64) NULL COMMENT '客户端 IP',
+    MODIFY COLUMN user_agent VARCHAR(512) NULL COMMENT 'User-Agent',
+    MODIFY COLUMN error_message VARCHAR(1000) NULL COMMENT '错误信息',
+    MODIFY COLUMN created_at DATETIME NOT NULL COMMENT '记录时间';
+
+-- ========== bi_export_task ==========
+ALTER TABLE bi_export_task
+    MODIFY COLUMN id VARCHAR(36) NOT NULL COMMENT '任务 ID',
+    MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '发起用户 ID',
+    MODIFY COLUMN query_id VARCHAR(36) NOT NULL COMMENT '关联查询 ID',
+    MODIFY COLUMN format VARCHAR(10) NOT NULL COMMENT '导出格式',
+    MODIFY COLUMN status VARCHAR(20) NOT NULL COMMENT '任务状态',
+    MODIFY COLUMN object_name VARCHAR(500) NULL COMMENT '对象存储文件名/路径',
+    MODIFY COLUMN error_message VARCHAR(1000) NULL COMMENT '错误信息',
+    MODIFY COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    MODIFY COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间';
+
+-- ========== bi_schedule ==========
+ALTER TABLE bi_schedule
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '任务名称',
+    MODIFY COLUMN schedule_type VARCHAR(32) NOT NULL COMMENT '调度类型',
+    MODIFY COLUMN target_id BIGINT NOT NULL COMMENT '目标资源 ID',
+    MODIFY COLUMN cron_expression VARCHAR(100) NOT NULL COMMENT 'Cron 表达式',
+    MODIFY COLUMN payload_json JSON NULL COMMENT '任务载荷 JSON',
+    MODIFY COLUMN enabled BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '所有者用户 ID',
+    MODIFY COLUMN last_run_at DATETIME NULL COMMENT '上次执行时间';
+
+-- ========== bi_subscription ==========
+ALTER TABLE bi_subscription
+    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT '订阅名称',
+    MODIFY COLUMN dashboard_id BIGINT NOT NULL COMMENT '仪表盘 ID',
+    MODIFY COLUMN cron_expression VARCHAR(100) NOT NULL COMMENT 'Cron 表达式',
+    MODIFY COLUMN recipients TEXT NOT NULL COMMENT '收件人列表',
+    MODIFY COLUMN enabled BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否启用',
+    MODIFY COLUMN owner_id BIGINT NOT NULL COMMENT '所有者用户 ID';

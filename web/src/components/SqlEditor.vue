@@ -49,6 +49,12 @@ async function onToggleFullscreen() {
 }
 
 const completionTheme = EditorView.theme({
+  '&': {
+    height: '100%',
+  },
+  '.cm-scroller': {
+    overflow: 'auto',
+  },
   '.cm-tooltip.cm-tooltip-autocomplete': {
     border: '1px solid var(--omni-border)',
     borderRadius: '10px',
@@ -205,6 +211,14 @@ function insertText(text: string): boolean {
   return true
 }
 
+/** 主选区文本；无选区时返回空串。 */
+function getSelectedText(): string {
+  if (!editor) return ''
+  const { from, to } = editor.state.selection.main
+  if (from === to) return ''
+  return editor.state.sliceDoc(from, to)
+}
+
 onMounted(() => {
   editor = new EditorView({
     parent: host.value,
@@ -286,6 +300,7 @@ onBeforeUnmount(() => editor?.destroy())
 defineExpose({
   format: formatDocument,
   insertText,
+  getSelectedText,
   requestMeasure: () => editor?.requestMeasure(),
 })
 </script>
@@ -317,6 +332,7 @@ defineExpose({
   display: flex;
   flex-direction: column;
   min-height: 280px;
+  max-height: 100%;
   background: var(--omni-editor-bg);
   border-radius: inherit;
 }
@@ -342,11 +358,14 @@ defineExpose({
 .sql-editor {
   flex: 1;
   min-height: 280px;
+  max-height: 100%;
+  overflow: hidden;
   background: var(--omni-editor-bg);
 }
 :deep(.cm-editor) {
   min-height: 280px;
   height: 100%;
+  max-height: 100%;
   font-size: 14px;
   font-family: Consolas, "Courier New", "PingFang SC", monospace;
   color: var(--omni-editor-fg);
@@ -359,6 +378,7 @@ defineExpose({
   font-family: inherit;
   line-height: 1.55;
   padding: 8px 0;
+  overflow: auto !important;
 }
 :deep(.cm-content) {
   padding: 4px 14px;

@@ -15,9 +15,10 @@ export function parseDashboardConfig(configJson?: string): DashboardConfig {
       return { parameters: [], tabs: [] }
     }
     const config = parsed as DashboardConfig
+    const tabs = normalizeTabs(config.tabs)
     return {
-      parameters: Array.isArray(config.parameters) ? config.parameters : [],
-      tabs: normalizeTabs(config.tabs),
+      parameters: normalizeParameters(config.parameters, tabs),
+      tabs,
     }
   } catch {
     return { parameters: [], tabs: [] }
@@ -26,8 +27,9 @@ export function parseDashboardConfig(configJson?: string): DashboardConfig {
 
 export function serializeDashboardConfig(config: DashboardConfig): string {
   const tabs = normalizeTabs(config.tabs)
+  const parameters = normalizeParameters(config.parameters, tabs)
   const payload: DashboardConfig = {
-    parameters: config.parameters || [],
+    parameters,
   }
   if (tabs.length) payload.tabs = tabs
   return JSON.stringify(payload)
@@ -47,6 +49,49 @@ export function normalizeTabs(tabs?: DashboardTab[] | null): DashboardTab[] {
     result.push({ id, name })
   }
   return result
+}
+
+/** 规范化参数列表；剔除无效 tabIds（无对应页签时清空为全页签可见）。 */
+export function normalizeParameters(
+  parameters?: DashboardParameter[] | null,
+  tabs: DashboardTab[] = [],
+): DashboardParameter[] {
+  if (!Array.isArray(parameters)) return []
+  const tabIdSet = new Set(tabs.map((item) => item.id))
+  const result: DashboardParameter[] = []
+  for (const parameter of parameters) {
+    if (!parameter || typeof parameter !== 'object' || !parameter.id) continue
+    const next: DashboardParameter = { ...parameter }
+    if (!Array.isArray(parameter.tabIds) || !parameter.tabIds.length || !tabs.length) {
+      delete next.tabIds
+    } else {
+      const tabIds = [...new Set(
+        parameter.tabIds.map((id) => String(id || '').trim()).filter((id) => tabIdSet.has(id)),
+      )]
+      if (tabIds.length) next.tabIds = tabIds
+      else delete next.tabIds
+    }
+    result.push(next)
+  }
+  return result
+}
+
+/**
+ * 按当前页签过滤参数栏展示项。
+ * 无页签、或参数未配置 tabIds → 全部可见。
+ */
+export function filterParametersByTab(
+  parameters: DashboardParameter[],
+  tabId: string | undefined,
+  tabs: DashboardTab[],
+): DashboardParameter[] {
+  if (!tabs.length) return parameters
+  const active = tabId && tabs.some((item) => item.id === tabId) ? tabId : tabs[0]?.id
+  return parameters.filter((parameter) => {
+    const ids = parameter.tabIds
+    if (!ids?.length) return true
+    return !!active && ids.includes(active)
+  })
 }
 
 export function createDashboardTab(name: string, existing: DashboardTab[] = []): DashboardTab {
@@ -287,6 +332,8 @@ export type TableColumnFormat = 'auto' | 'text' | 'number' | 'percent' | 'dateti
 
 /** 单列样式 */
 export interface TableColumnStyle {
+  /** 表头展示名称；空则用字段名 */
+  label?: string
   format?: TableColumnFormat
   align?: 'left' | 'center' | 'right'
   /** 单元格文字色 */
@@ -334,6 +381,9 @@ export function normalizeTableStyle(raw: unknown): TableStyle | undefined {
       if (!name || !style || typeof style !== 'object' || Array.isArray(style)) continue
       const item = style as Record<string, unknown>
       const next: TableColumnStyle = {}
+      if (typeof item.label === 'string' && item.label.trim()) {
+        next.label = item.label.trim()
+      }
       if (typeof item.format === 'string' && COLUMN_FORMATS.includes(item.format as TableColumnFormat)) {
         next.format = item.format as TableColumnFormat
       }
@@ -348,7 +398,7 @@ export function normalizeTableStyle(raw: unknown): TableStyle | undefined {
       } else if (typeof item.fixed === 'string' && (COLUMN_FIXEDS as readonly string[]).includes(item.fixed)) {
         next.fixed = item.fixed as TableColumnStyle['fixed']
       }
-      if (next.format || next.align || next.color || next.fixed) columns[name] = next
+      if (next.label || next.format || next.align || next.color || next.fixed) columns[name] = next
     }
   }
   const rowRules: TableRowRule[] = []

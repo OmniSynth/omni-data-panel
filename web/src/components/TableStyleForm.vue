@@ -51,17 +51,19 @@ const rowRules = computed(() => props.modelValue.rowRules || [])
 
 const customizedCount = computed(() =>
   columnEntries.value.filter((entry) =>
-    entry.style.format || entry.style.align || entry.style.color || entry.style.fixed).length)
+    entry.style.label || entry.style.format || entry.style.align || entry.style.color || entry.style.fixed).length)
 
 /** 更新单列样式；空配置时删除该列键 */
 function patchColumn(name: string, patch: Partial<TableColumnStyle>) {
   const columns = { ...(props.modelValue.columns || {}) }
   const next: TableColumnStyle = { ...(columns[name] || {}), ...patch }
+  if (!next.label?.trim()) delete next.label
+  else next.label = next.label.trim()
   if (!next.format || next.format === 'auto') delete next.format
   if (!next.align || next.align === 'left') delete next.align
   if (!next.color) delete next.color
   if (!next.fixed) delete next.fixed
-  if (!next.format && !next.align && !next.color && !next.fixed) {
+  if (!next.label && !next.format && !next.align && !next.color && !next.fixed) {
     delete columns[name]
   } else {
     columns[name] = next
@@ -98,7 +100,7 @@ function removeRowRule(index: number) {
 }
 
 function isCustomized(style: TableColumnStyle) {
-  return !!(style.format || style.align || style.color || style.fixed)
+  return !!(style.label || style.format || style.align || style.color || style.fixed)
 }
 
 /** 固定列下拉值：none 表示不固定 */
@@ -127,6 +129,7 @@ function patchFixed(name: string, value: string) {
       <div class="col-table">
         <div class="col-head" aria-hidden="true">
           <span>{{ t('tableStyle.colName') }}</span>
+          <span>{{ t('tableStyle.colLabel') }}</span>
           <span>{{ t('tableStyle.colFormat') }}</span>
           <span>{{ t('tableStyle.colAlign') }}</span>
           <span>{{ t('tableStyle.colFixed') }}</span>
@@ -139,6 +142,14 @@ function patchFixed(name: string, value: string) {
           :class="{ customized: isCustomized(entry.style) }"
         >
           <code class="col-name" :title="entry.name">{{ entry.name }}</code>
+          <el-input
+            class="ctrl"
+            size="small"
+            :model-value="entry.style.label || ''"
+            :placeholder="entry.name"
+            clearable
+            @update:model-value="(v: string) => patchColumn(entry.name, { label: v || undefined })"
+          />
           <el-select
             :model-value="entry.style.format || 'auto'"
             class="ctrl"
@@ -323,7 +334,7 @@ function patchFixed(name: string, value: string) {
 .col-head,
 .col-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 104px 88px 88px 40px;
+  grid-template-columns: minmax(100px, 0.9fr) minmax(100px, 1fr) 96px 80px 80px 40px;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;

@@ -421,6 +421,11 @@ export interface DashboardParameter {
   options?: DashboardParameterOption[]
   optionsFrom?: ParameterOptionsFrom
   required?: boolean
+  /**
+   * 参数栏可见页签；空或缺省表示所有页签可见。
+   * 仅影响查看态参数栏展示，不影响已保存的参数值。
+   */
+  tabIds?: string[]
 }
 
 export interface DashboardConfig {

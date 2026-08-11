@@ -15,6 +15,7 @@ import {
   cardGridStyle,
   defaultParameterValues,
   filterCardsByTab,
+  filterParametersByTab,
   parseClickAction,
   parseDashboardConfig,
 } from '@/dashboard/config'
@@ -45,6 +46,8 @@ const canSubscribe = computed(() => userStore.hasPermission('subscription:manage
 const dashboardConfig = computed(() => parseDashboardConfig(dashboard.value?.configJson))
 const tabs = computed(() => dashboardConfig.value.tabs || [])
 const parameters = computed(() => dashboardConfig.value.parameters || [])
+const visibleParameters = computed(() =>
+  filterParametersByTab(parameters.value, activeTabId.value, tabs.value))
 const visibleCards = computed(() => {
   if (!dashboard.value) return [] as DashboardRenderCard[]
   if (exporting.value || !tabs.value.length) return dashboard.value.cards
@@ -289,9 +292,9 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <DashboardParameterBar
-      v-if="dashboard"
+      v-if="dashboard && visibleParameters.length"
       v-model="parameterValues"
-      :parameters="parameters"
+      :parameters="visibleParameters"
       @apply="applyParameters"
     />
     <el-empty v-if="!loading && dashboard && !dashboard.cards.length" :description="t('dashboard.noCards')" />

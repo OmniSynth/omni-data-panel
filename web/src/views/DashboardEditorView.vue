@@ -29,6 +29,7 @@ import {
   DATE_PRESET_LAST7DAYS,
   DATE_PRESET_TODAY,
   filterCardsByTab,
+  filterParametersByTab,
   parseBindings,
   parseClickAction,
   parseDashboardConfig,
@@ -78,6 +79,8 @@ const selectedCard = computed(() =>
 
 const visibleCards = computed(() =>
   filterCardsByTab(cards.value, activeTabId.value, tabs.value))
+const visibleParameters = computed(() =>
+  filterParametersByTab(parameters.value, activeTabId.value, tabs.value))
 
 const parameterTypeOptions = computed(() => [
   { value: 'text' as DashboardParameterType, label: t('dashboard.typeText') },
@@ -204,6 +207,11 @@ async function removeTab(index: number) {
       Object.assign(card, updated)
     }))
     tabs.value = remaining
+    for (const parameter of parameters.value) {
+      if (!parameter.tabIds?.length) continue
+      parameter.tabIds = parameter.tabIds.filter((id) => id !== removed.id)
+      if (!parameter.tabIds.length) delete parameter.tabIds
+    }
     const configJson = serializeDashboardConfig({
       parameters: parameters.value,
       tabs: tabs.value,
@@ -605,67 +613,116 @@ onBeforeUnmount(() => {
         </div>
       </template>
       <el-empty v-if="!parameters.length" :description="t('dashboard.noParameters')" />
-      <div v-for="(parameter, index) in parameters" :key="parameterRowKey(parameter)" class="param-block">
-        <div class="param-row">
-          <el-input v-model="parameter.id" placeholder="ID" style="width:140px" />
-          <el-input v-model="parameter.label" :placeholder="t('dashboard.label')" style="width:140px" />
-          <el-select v-model="parameter.type" style="width:140px" @change="onParameterTypeChange(parameter)">
-            <el-option
-              v-for="option in parameterTypeOptions"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-            />
-          </el-select>
-          <template v-if="parameter.type === 'date'">
-            <el-select
-              :model-value="dateDefaultMode(parameter)"
-              style="width:120px"
-              @update:model-value="setDateDefaultMode(parameter, String($event))"
-            >
-              <el-option :label="t('dashboard.defaultNone')" value="none" />
-              <el-option :label="t('dashboard.defaultToday')" value="today" />
-              <el-option :label="t('dashboard.defaultFixed')" value="fixed" />
-            </el-select>
-            <el-date-picker
-              v-if="dateDefaultMode(parameter) === 'fixed'"
-              :model-value="fixedDateDefault(parameter)"
-              type="date"
-              value-format="YYYY-MM-DD"
-              :placeholder="t('dashboard.defaultValue')"
-              style="width:160px"
-              @update:model-value="parameter.defaultValue = $event || undefined"
-            />
-          </template>
-          <template v-else-if="parameter.type === 'date-range'">
-            <el-select
-              :model-value="dateDefaultMode(parameter)"
-              style="width:120px"
-              @update:model-value="setDateDefaultMode(parameter, String($event))"
-            >
-              <el-option :label="t('dashboard.defaultNone')" value="none" />
-              <el-option :label="t('dashboard.defaultLast7Days')" value="last7days" />
-              <el-option :label="t('dashboard.defaultFixed')" value="fixed" />
-            </el-select>
-            <el-date-picker
-              v-if="dateDefaultMode(parameter) === 'fixed'"
-              :model-value="rangeDefaultValue(parameter)"
-              type="daterange"
-              value-format="YYYY-MM-DD"
-              :start-placeholder="t('common.start')"
-              :end-placeholder="t('common.end')"
-              style="width:260px"
-              @update:model-value="setRangeDefaultValue(parameter, $event as [string, string] | null)"
-            />
-          </template>
-          <el-input
-            v-else
-            v-model="parameter.defaultValue as string"
-            :placeholder="t('dashboard.defaultValue')"
-            style="width:160px"
-          />
-          <el-switch v-model="parameter.required" inline-prompt :active-text="t('common.required')" :inactive-text="t('common.optional')" />
+      <div v-for="(parameter, index) in parameters" :key="parameterRowKey(parameter)" class="param-card">
+        <div class="param-card-head">
+          <span class="param-card-title">{{ parameter.label || parameter.id || t('dashboard.paramN', { n: index + 1 }) }}</span>
           <el-button link type="danger" @click="removeParameter(index)">{{ t('common.delete') }}</el-button>
+        </div>
+        <div class="param-grid" :class="{ 'has-tabs': tabs.length }">
+          <label class="param-field">
+            <span class="param-field-label">ID</span>
+            <el-input v-model="parameter.id" placeholder="ID" />
+          </label>
+          <label class="param-field">
+            <span class="param-field-label">{{ t('dashboard.label') }}</span>
+            <el-input v-model="parameter.label" :placeholder="t('dashboard.label')" />
+          </label>
+          <label class="param-field">
+            <span class="param-field-label">{{ t('dashboard.paramType') }}</span>
+            <el-select v-model="parameter.type" class="full-width" @change="onParameterTypeChange(parameter)">
+              <el-option
+                v-for="option in parameterTypeOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </label>
+          <div class="param-field">
+            <span class="param-field-label">{{ t('dashboard.defaultValue') }}</span>
+            <template v-if="parameter.type === 'date'">
+              <div class="param-field-inline">
+                <el-select
+                  :model-value="dateDefaultMode(parameter)"
+                  class="full-width"
+                  @update:model-value="setDateDefaultMode(parameter, String($event))"
+                >
+                  <el-option :label="t('dashboard.defaultNone')" value="none" />
+                  <el-option :label="t('dashboard.defaultToday')" value="today" />
+                  <el-option :label="t('dashboard.defaultFixed')" value="fixed" />
+                </el-select>
+                <el-date-picker
+                  v-if="dateDefaultMode(parameter) === 'fixed'"
+                  :model-value="fixedDateDefault(parameter)"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  :placeholder="t('dashboard.defaultValue')"
+                  class="full-width"
+                  @update:model-value="parameter.defaultValue = $event || undefined"
+                />
+              </div>
+            </template>
+            <template v-else-if="parameter.type === 'date-range'">
+              <div class="param-field-inline">
+                <el-select
+                  :model-value="dateDefaultMode(parameter)"
+                  class="full-width"
+                  @update:model-value="setDateDefaultMode(parameter, String($event))"
+                >
+                  <el-option :label="t('dashboard.defaultNone')" value="none" />
+                  <el-option :label="t('dashboard.defaultLast7Days')" value="last7days" />
+                  <el-option :label="t('dashboard.defaultFixed')" value="fixed" />
+                </el-select>
+                <el-date-picker
+                  v-if="dateDefaultMode(parameter) === 'fixed'"
+                  :model-value="rangeDefaultValue(parameter)"
+                  type="daterange"
+                  value-format="YYYY-MM-DD"
+                  :start-placeholder="t('common.start')"
+                  :end-placeholder="t('common.end')"
+                  class="full-width"
+                  @update:model-value="setRangeDefaultValue(parameter, $event as [string, string] | null)"
+                />
+              </div>
+            </template>
+            <el-input
+              v-else
+              v-model="parameter.defaultValue as string"
+              :placeholder="t('dashboard.defaultValue')"
+            />
+          </div>
+          <label v-if="tabs.length" class="param-field param-field-tabs">
+            <span class="param-field-label">{{ t('dashboard.paramTabs') }}</span>
+            <el-select
+              :model-value="parameter.tabIds || []"
+              multiple
+              clearable
+              collapse-tags
+              collapse-tags-tooltip
+              :placeholder="t('dashboard.paramTabsAll')"
+              class="full-width"
+              @update:model-value="(ids: string[]) => {
+                if (!ids?.length) delete parameter.tabIds
+                else parameter.tabIds = ids
+              }"
+            >
+              <el-option
+                v-for="tab in tabs"
+                :key="tab.id"
+                :label="tab.name"
+                :value="tab.id"
+              />
+            </el-select>
+          </label>
+          <div class="param-field param-field-required">
+            <span class="param-field-label">{{ t('common.required') }}</span>
+            <el-switch
+              v-model="parameter.required"
+              inline-prompt
+              :active-text="t('common.required')"
+              :inactive-text="t('common.optional')"
+            />
+          </div>
         </div>
         <div v-if="isSelectParameter(parameter.type)" class="param-options">
           <el-radio-group
@@ -682,15 +739,15 @@ onBeforeUnmount(() => {
             type="textarea"
             :rows="3"
             :placeholder="t('dashboard.optionsHint')"
-            style="margin-top:8px;max-width:480px"
+            class="param-options-text"
             @update:model-value="setStaticOptionsText(parameter, $event)"
           />
-          <div v-else class="param-row" style="margin-top:8px">
+          <div v-else class="param-options-dataset">
             <el-select
               :model-value="parameter.optionsFrom?.datasetId"
               :placeholder="t('dashboard.selectModel')"
               filterable
-              style="width:220px"
+              class="full-width"
               @update:model-value="parameter.optionsFrom = {
                 datasetId: $event,
                 field: '',
@@ -708,7 +765,7 @@ onBeforeUnmount(() => {
               :model-value="parameter.optionsFrom?.field"
               :placeholder="t('dashboard.selectField')"
               filterable
-              style="width:180px"
+              class="full-width"
               @update:model-value="parameter.optionsFrom = {
                 datasetId: parameter.optionsFrom?.datasetId || '',
                 field: $event,
@@ -727,7 +784,6 @@ onBeforeUnmount(() => {
               :min="1"
               :max="2000"
               controls-position="right"
-              style="width:140px"
               @update:model-value="parameter.optionsFrom = {
                 datasetId: parameter.optionsFrom?.datasetId || '',
                 field: parameter.optionsFrom?.field || '',
@@ -738,9 +794,9 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <DashboardParameterBar
-        v-if="parameters.length"
+        v-if="visibleParameters.length"
         v-model="parameterValues"
-        :parameters="parameters"
+        :parameters="visibleParameters"
         @apply="refresh()"
       />
     </el-card>
@@ -917,8 +973,97 @@ onBeforeUnmount(() => {
   align-items: center;
   margin-bottom: 8px;
 }
-.param-block { margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--el-border-color-lighter); }
-.param-options { margin: 0 0 8px 4px; }
+.param-card {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--omni-border, var(--el-border-color-lighter));
+  border-radius: var(--omni-radius-sm, 8px);
+  background: var(--omni-surface, var(--el-fill-color-blank));
+}
+.param-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.param-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--omni-text, var(--el-text-color-primary));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+.param-grid.has-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+.param-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--omni-muted, var(--el-text-color-secondary));
+  line-height: 1.2;
+}
+.param-field-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.param-field-tabs {
+  grid-column: span 2;
+}
+.param-field-required {
+  justify-content: flex-end;
+}
+.param-field-required .param-field-label {
+  margin-bottom: 2px;
+}
+.param-field :deep(.full-width),
+.param-field .full-width,
+.full-width {
+  width: 100%;
+}
+.param-options {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--omni-border, var(--el-border-color-extra-light));
+}
+.param-options-text {
+  margin-top: 8px;
+  max-width: 560px;
+}
+.param-options-dataset {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 140px;
+  gap: 8px;
+  align-items: center;
+  max-width: 720px;
+}
+@media (max-width: 960px) {
+  .param-grid,
+  .param-grid.has-tabs {
+    grid-template-columns: 1fr 1fr;
+  }
+  .param-field-tabs {
+    grid-column: 1 / -1;
+  }
+  .param-options-dataset {
+    grid-template-columns: 1fr;
+  }
+}
 .toolbar { margin-bottom: 12px; }
 .toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .editor-tabs { margin-bottom: 8px; }

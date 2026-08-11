@@ -180,16 +180,19 @@ function onDocClick(event: MouseEvent) {
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--el-fill-color);
+  color: var(--el-text-color-primary);
   font-family: Consolas, "Courier New", monospace;
   font-size: 12.5px;
 }
+/* 跟随主题前景色；勿用 el-color-white + fill-color-dark（白天模式几乎无对比度） */
 .guide-body :deep(pre) {
   margin: 0 0 16px;
   padding: 12px 14px;
   overflow: auto;
   border-radius: 8px;
-  background: var(--el-fill-color-dark);
-  color: var(--el-color-white);
+  border: 1px solid var(--el-border-color);
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
 }
 .guide-body :deep(pre code) {
   padding: 0;
@@ -214,7 +217,8 @@ function onDocClick(event: MouseEvent) {
   border-top: 1px solid var(--el-border-color-lighter);
 }
 .guide-body :deep(.mermaid-fallback) {
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-regular);
+  border-left: 3px solid var(--el-color-primary-light-5);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

@@ -38,7 +38,7 @@ const sources = ref<DataSource[]>([])
 const collections = ref<Collection[]>([])
 const sourceId = ref<Id>()
 const sql = ref('')
-const sqlEditorRef = ref<{ format: () => boolean }>()
+const sqlEditorRef = ref<{ format: () => boolean; getSelectedText?: () => string }>()
 const sqlParameters = ref<string[]>([])
 const namedSqlParameters = reactive<Record<string, string>>({})
 const namedParamNames = computed(() => extractNamedPlaceholders(sql.value))
@@ -213,8 +213,8 @@ function syncSqlParameters() {
 
 watch(sql, syncSqlParameters)
 
-function buildNamedPayload(): Record<string, unknown> | undefined {
-  const names = extractNamedPlaceholders(sql.value)
+function buildNamedPayload(sourceSql = sql.value): Record<string, unknown> | undefined {
+  const names = extractNamedPlaceholders(sourceSql)
   if (!names.length) return undefined
   const payload: Record<string, unknown> = {}
   for (const name of names) {
@@ -223,13 +223,19 @@ function buildNamedPayload(): Record<string, unknown> | undefined {
   return payload
 }
 
-function payload(): QuerySubmission {
+/** SQL 模式：有非空选区则用选区，否则全文。 */
+function resolveExecutableSql(): string {
+  const selected = sqlEditorRef.value?.getSelectedText?.()?.trim()
+  return selected || sql.value
+}
+
+function payload(executableSql = sql.value): QuerySubmission {
   return mode.value === 'sql'
     ? {
       sourceId: sourceId.value,
-      sql: sql.value,
-      parameters: alignSqlParameters(sql.value, sqlParameters.value),
-      namedParameters: buildNamedPayload(),
+      sql: executableSql,
+      parameters: alignSqlParameters(executableSql, sqlParameters.value),
+      namedParameters: buildNamedPayload(executableSql),
     }
     : {
       query: {
@@ -240,12 +246,13 @@ function payload(): QuerySubmission {
 }
 
 async function run() {
-  if (mode.value === 'sql' ? (!sourceId.value || !sql.value.trim()) : !definition.datasetId) {
+  const executable = mode.value === 'sql' ? resolveExecutableSql() : ''
+  if (mode.value === 'sql' ? (!sourceId.value || !executable.trim()) : !definition.datasetId) {
     return ElMessage.warning(t('workbench.needConfig'))
   }
   result.value = undefined
   try {
-    const submitted = await queryApi.submit(payload())
+    const submitted = await queryApi.submit(mode.value === 'sql' ? payload(executable) : payload())
     task.value = { queryId: submitted.queryId, status: 'QUEUED', startedAtMs: Date.now() }
     startClock()
     await poll()

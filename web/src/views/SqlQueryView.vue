@@ -49,6 +49,7 @@ const namedParamNames = computed(() => extractNamedPlaceholders(sql.value))
 const sqlEditorRef = ref<{
   format: () => boolean
   insertText: (text: string) => boolean
+  getSelectedText: () => string
   requestMeasure?: () => void
 }>()
 const editorPanelRef = ref<HTMLElement | null>(null)
@@ -170,8 +171,8 @@ async function load() {
   }
 }
 
-function buildNamedPayload(): Record<string, unknown> | undefined {
-  const names = extractNamedPlaceholders(sql.value)
+function buildNamedPayload(sourceSql = sql.value): Record<string, unknown> | undefined {
+  const names = extractNamedPlaceholders(sourceSql)
   if (!names.length) return undefined
   const payload: Record<string, unknown> = {}
   for (const name of names) {
@@ -180,16 +181,23 @@ function buildNamedPayload(): Record<string, unknown> | undefined {
   return payload
 }
 
+/** 有非空选区则执行选中 SQL，否则执行全文。 */
+function resolveExecutableSql(): string {
+  const selected = sqlEditorRef.value?.getSelectedText?.()?.trim()
+  return selected || sql.value
+}
+
 async function run() {
   if (!sourceId.value) return ElMessage.warning(t('sql.needSource'))
-  if (!sql.value.trim()) return ElMessage.warning(t('sql.needSql'))
+  const executable = resolveExecutableSql()
+  if (!executable.trim()) return ElMessage.warning(t('sql.needSql'))
   result.value = undefined
   try {
     const submitted = await queryApi.submit({
       sourceId: sourceId.value,
-      sql: sql.value,
-      parameters: alignSqlParameters(sql.value, sqlParameters.value),
-      namedParameters: buildNamedPayload(),
+      sql: executable,
+      parameters: alignSqlParameters(executable, sqlParameters.value),
+      namedParameters: buildNamedPayload(executable),
     })
     task.value = { queryId: submitted.queryId, status: 'QUEUED', startedAtMs: Date.now() }
     startClock()
@@ -506,7 +514,7 @@ onBeforeUnmount(() => {
             >
               {{ t('sql.convertMetabase') }}
             </el-button>
-            <el-button type="primary" :loading="running" :disabled="!sourceId" @click="run">{{ t('sql.execute') }}</el-button>
+            <el-button type="primary" :loading="running" :disabled="!sourceId" :title="t('sql.executeHint')" @click="run">{{ t('sql.execute') }}</el-button>
             <el-button v-if="running" type="danger" plain @click="cancel">{{ t('common.cancel') }}</el-button>
           </div>
         </div>

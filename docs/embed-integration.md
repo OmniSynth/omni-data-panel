@@ -163,56 +163,535 @@ EMBED_ALLOWED_ORIGINS=https://app.example.com https://portal.example.com:8443
 
 业务系统一般只需拼 **页面 URL** 给 iframe；数据接口由嵌入页自行调用。仪表盘数据响应中的 `parameterValues` 为服务端实际合并后的参数（默认值 + JWT 锁定），嵌入页参数条只读展示该值。
 
-## 4. 对接示例
+## 4. 业务系统完整对接轮子（推荐照抄）
 
-以下将 `OMNI_BASE` 设为 Omni Web 根地址（无尾斜杠），例如 `https://bi.example.com`。API 前缀为 `{OMNI_BASE}/api`。
+目标：业务浏览器**永远拿不到** Omni 服务账号密码与用户 JWT；只拿到当次页面可用的短期 `embedUrl`。
 
-### 4.1 curl
+约定：
 
-```bash
-OMNI_BASE=https://bi.example.com
-# 实际对接请在业务后端实现：先 GET /api/auth/login-challenge，
-# 再按 §3.1 计算 HMAC 后 POST /api/auth/login（下列伪变量仅示意顺序）。
-USER_JWT="<完成挑战登录后的 accessToken>"
+| 变量 | 含义 | 示例 |
+|------|------|------|
+| `OMNI_BASE` | Omni Web 根（无尾斜杠） | `https://bi.example.com` |
+| API | `{OMNI_BASE}/api` | `https://bi.example.com/api` |
+| 服务账号 | 对目标仪表盘有 WRITE | `embed-service` / 环境变量注入密码 |
 
-EMBED_JWT=$(curl -s -X POST "$OMNI_BASE/api/embed/tokens" \
-  -H "Authorization: Bearer $USER_JWT" \
-  -H 'Content-Type: application/json' \
-  -d '{"resourceType":"DASHBOARD","resourceId":123,"parameters":{"dept_id":"华东"}}' \
-  | jq -r '.data.token')
+### 4.0 对接检查清单
 
-echo "$OMNI_BASE/embed/dashboard/$EMBED_JWT"
+1. Omni 管理端开启「允许嵌入」，白名单加入业务 Origin（如 `https://app.example.com`）。
+2. Compose / 网关同步 `EMBED_ALLOWED_ORIGINS`（空格分隔，与白名单一致）。
+3. 创建服务账号，仅对要嵌入的仪表盘/图表授予 WRITE；关闭 MFA（或自动化完成 MFA）。
+4. 仪表盘声明好过滤参数 id（如 `dept_id`）；查询里用 `:dept_id` 等绑定，锁定才有行级效果。
+5. 业务后端实现：挑战登录 → 缓存用户 JWT → 按页签发 embed → 只返回 `embedUrl`。
+6. 业务前端：打开页时调自家 API 取 `embedUrl`，塞进 iframe；约 50 分钟或失败时重新拉取。
+
+### 4.1 完整时序（必须按此落点）
+
+```text
+业务用户浏览器          业务后端                    Omni
+      │                    │                         │
+      │ 打开业务页          │                         │
+      │───────────────────►│                         │
+      │                    │ GET /api/auth/login-challenge
+      │                    │────────────────────────►│
+      │                    │◄── challenge + signKey ─│
+      │                    │ HMAC 后 POST /api/auth/login
+      │                    │────────────────────────►│
+      │                    │◄── accessToken（缓存，勿下发）
+      │                    │                         │
+      │                    │ POST /api/embed/tokens   │
+      │                    │ Authorization: Bearer … │
+      │                    │ body: resourceId + 锁定参数
+      │                    │────────────────────────►│
+      │                    │◄── embedJwt（1h）───────│
+      │◄── { embedUrl } ───│                         │
+      │                    │                         │
+      │ iframe → /embed/dashboard/{embedJwt}         │
+      │─────────────────────────────────────────────►│
+      │ GET /api/embed/dashboards/{embedJwt}（嵌入页自己调）
+      │─────────────────────────────────────────────►│
 ```
 
-### 4.2 Java（业务后端示意）
+### 4.2 Java 完整轮子（Spring Boot 业务后端）
+
+以下为**可直接粘贴改造**的参考实现：挑战登录 + 用户 JWT 缓存 + 签发 + 业务 API。依赖：`java.net.http.HttpClient`（JDK 11+）、Jackson（Spring Boot 自带）。
+
+#### 4.2.1 配置
+
+```yaml
+# application.yml（业务系统）
+omni:
+  base-url: https://bi.example.com
+  username: embed-service
+  password: ${OMNI_EMBED_PASSWORD}   # 切勿写进仓库
+```
 
 ```java
-// 伪代码：登录 token 由服务端缓存；页面接口按需签发 embed URL
-public String buildDashboardEmbedUrl(long dashboardId, Map<String, Object> lockedParams) {
-    String userJwt = omniAuthClient.ensureAccessToken(); // 服务端缓存，401 时重登
-    String embedJwt = omniHttp.post("/api/embed/tokens", userJwt,
-            Map.of("resourceType", "DASHBOARD", "resourceId", dashboardId, "parameters", lockedParams));
-    return omniBaseUrl + "/embed/dashboard/" + embedJwt;
+package com.example.biz.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * Omni 对接配置：Web 根地址与服务账号凭据。
+ *
+ * @param baseUrl  Omni Web 根地址（无尾斜杠），如 https://bi.example.com
+ * @param username 具备目标资源 WRITE 的服务账号
+ * @param password 服务账号密码（仅环境变量注入，勿入库）
+ */
+@ConfigurationProperties(prefix = "omni")
+public record OmniProperties(String baseUrl, String username, String password) {
+    /**
+     * 拼接 Omni API 绝对地址。
+     *
+     * @param path API 路径，如 /auth/login 或 embed/tokens
+     * @return {baseUrl}/api{path}
+     */
+    public String api(String path) {
+        String root = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        return root + "/api" + (path.startsWith("/") ? path : "/" + path);
+    }
+
+    /**
+     * 拼接 Omni 前端页绝对地址（iframe 用）。
+     *
+     * @param path 页面路径，如 /embed/dashboard/{jwt}
+     * @return {baseUrl}{path}
+     */
+    public String web(String path) {
+        String root = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        return root + (path.startsWith("/") ? path : "/" + path);
+    }
 }
 ```
 
-业务 Controller 向本系统前端只返回 `embedUrl`，不返回服务账号密码或用户 JWT。
+启动类加 `@EnableConfigurationProperties(OmniProperties.class)`（或 `@ConfigurationPropertiesScan`）。
+#### 4.2.2 Omni 客户端（核心）
 
-### 4.3 业务前端 iframe
+```java
+package com.example.biz.omni;
 
-```html
-<iframe
-  src="https://bi.example.com/embed/dashboard/eyJhbGciOi..."
-  title="仪表盘"
-  style="width:100%;height:800px;border:0;"
-  allowfullscreen
-></iframe>
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.HexFormat;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.biz.config.OmniProperties;
+import org.springframework.stereotype.Component;
+
+/**
+ * 业务后端专用 Omni 客户端：挑战登录、缓存用户 JWT、签发嵌入 URL。
+ * <p>凭据与用户 JWT 仅留在本进程，不得下发给业务浏览器。
+ */
+@Component
+public class OmniEmbedClient {
+    private final OmniProperties props;
+    private final ObjectMapper mapper;
+    private final HttpClient http = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
+    /** 缓存的 Omni 用户 JWT；签发遇 401 时清空并重登。 */
+    private final AtomicReference<String> accessToken = new AtomicReference<>();
+
+    /**
+     * @param props  Omni 基址与服务账号
+     * @param mapper JSON 序列化（Spring Boot 注入即可）
+     */
+    public OmniEmbedClient(OmniProperties props, ObjectMapper mapper) {
+        this.props = props;
+        this.mapper = mapper;
+    }
+
+    /**
+     * 签发仪表盘嵌入页完整 URL（可带锁定参数做行级过滤）。
+     *
+     * @param dashboardId  Omni 仪表盘主键
+     * @param lockedParams 仅填仪表盘已声明的参数 id；未知 key 会 400；应由业务会话推导，勿信任前端原样传入
+     * @return 形如 {OMNI_BASE}/embed/dashboard/{embedJwt}，有效期约 1 小时
+     */
+    public String buildDashboardEmbedUrl(long dashboardId, Map<String, Object> lockedParams) {
+        String embedJwt = createEmbedToken("DASHBOARD", dashboardId, lockedParams);
+        return props.web("/embed/dashboard/" + embedJwt);
+    }
+
+    /**
+     * 签发图表（QUESTION）嵌入页完整 URL。
+     * <p>图表嵌入不支持锁定参数。
+     *
+     * @param questionId Omni 图表主键
+     * @return 形如 {OMNI_BASE}/embed/question/{embedJwt}
+     */
+    public String buildQuestionEmbedUrl(long questionId) {
+        String embedJwt = createEmbedToken("QUESTION", questionId, null);
+        return props.web("/embed/question/" + embedJwt);
+    }
+
+    /**
+     * 调用 POST /api/embed/tokens；若用户 JWT 失效（401）则清缓存后重试一次。
+     *
+     * @param resourceType DASHBOARD 或 QUESTION
+     * @param resourceId   资源主键
+     * @param parameters   锁定参数；QUESTION 须为 null/空
+     * @return embed JWT 字符串
+     */
+    private String createEmbedToken(String resourceType, long resourceId, Map<String, Object> parameters) {
+        try {
+            return doCreateEmbedToken(resourceType, resourceId, parameters);
+        } catch (OmniHttpException ex) {
+            if (ex.status == 401) {
+                accessToken.set(null);
+                return doCreateEmbedToken(resourceType, resourceId, parameters);
+            }
+            throw ex;
+        }
+    }
+
+    /**
+     * 使用当前用户 JWT 向 Omni 申请嵌入令牌。
+     *
+     * @param resourceType DASHBOARD 或 QUESTION
+     * @param resourceId   资源主键
+     * @param parameters   可选锁定参数
+     * @return embed JWT
+     */
+    private String doCreateEmbedToken(String resourceType, long resourceId, Map<String, Object> parameters) {
+        String userJwt = ensureAccessToken();
+        var body = mapper.createObjectNode();
+        body.put("resourceType", resourceType);
+        body.put("resourceId", resourceId);
+        if (parameters != null && !parameters.isEmpty()) {
+            body.set("parameters", mapper.valueToTree(parameters));
+        }
+        JsonNode data = postJson("/embed/tokens", body, userJwt);
+        String token = text(data, "token");
+        if (token == null || token.isBlank()) {
+            throw new IllegalStateException("签发嵌入令牌失败：响应无 token");
+        }
+        return token;
+    }
+
+    /**
+     * 返回可用的 Omni 用户 JWT；无缓存时走挑战登录，双重检查避免并发重复登录。
+     *
+     * @return Authorization Bearer 用的 accessToken
+     */
+    private String ensureAccessToken() {
+        String cached = accessToken.get();
+        if (cached != null && !cached.isBlank()) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = accessToken.get();
+            if (cached != null && !cached.isBlank()) {
+                return cached;
+            }
+            String fresh = loginWithChallenge();
+            accessToken.set(fresh);
+            return fresh;
+        }
+    }
+
+    /**
+     * 挑战登录：先 GET /auth/login-challenge，再按 Omni 约定做 HMAC-SHA256 后 POST /auth/login。
+     * <p>约定与 Omni {@code LoginChallengeService}、前端 {@code loginSignature.ts} 一致：
+     * {@code HMAC-SHA256(signKey, username + "\\n" + password + "\\n" + nonce + "\\n" + timestamp)}。
+     *
+     * @return 用户 accessToken；服务账号若开启 MFA 将抛错（嵌入场景建议关闭 MFA）
+     */
+    private String loginWithChallenge() {
+        JsonNode challenge = getJson("/auth/login-challenge", null);
+        String challengeId = text(challenge, "challengeId");
+        String nonce = text(challenge, "nonce");
+        String signKey = text(challenge, "signKey");
+        long timestamp = System.currentTimeMillis() / 1000L;
+        String signature = hmacSha256Hex(signKey,
+                props.username() + "\n" + props.password() + "\n" + nonce + "\n" + timestamp);
+
+        var loginBody = mapper.createObjectNode();
+        loginBody.put("username", props.username());
+        loginBody.put("password", props.password());
+        loginBody.put("challengeId", challengeId);
+        loginBody.put("nonce", nonce);
+        loginBody.put("timestamp", timestamp);
+        loginBody.put("signature", signature);
+
+        JsonNode data = postJson("/auth/login", loginBody, null);
+        if (Boolean.TRUE.equals(bool(data, "mfaRequired"))) {
+            throw new IllegalStateException("服务账号启用了 MFA，请关闭 MFA 或在自动化中完成 /auth/mfa/verify");
+        }
+        String token = text(data, "accessToken");
+        if (token == null || token.isBlank()) {
+            throw new IllegalStateException("登录失败：无 accessToken");
+        }
+        return token;
+    }
+
+    /**
+     * 计算登录请求签名（小写十六进制）。
+     *
+     * @param signKeyHex 挑战返回的 signKey（十六进制）
+     * @param message    username\\npassword\\nnonce\\ntimestamp
+     * @return HMAC-SHA256 十六进制串
+     */
+    private static String hmacSha256Hex(String signKeyHex, String message) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(HexFormat.of().parseHex(signKeyHex), "HmacSHA256"));
+            return HexFormat.of().formatHex(mac.doFinal(message.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("登录 HMAC 计算失败", e);
+        }
+    }
+
+    /**
+     * GET Omni API，解析统一包装后的 data。
+     *
+     * @param apiPath 相对于 /api 的路径
+     * @param bearer  可选用户 JWT；登录挑战传 null
+     * @return data 节点
+     */
+    private JsonNode getJson(String apiPath, String bearer) {
+        try {
+            HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(props.api(apiPath)))
+                    .timeout(Duration.ofSeconds(30))
+                    .GET();
+            if (bearer != null) {
+                b.header("Authorization", "Bearer " + bearer);
+            }
+            return readData(http.send(b.build(), HttpResponse.BodyHandlers.ofString()));
+        } catch (OmniHttpException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("调用 Omni GET " + apiPath + " 失败", e);
+        }
+    }
+
+    /**
+     * POST JSON 到 Omni API，解析统一包装后的 data。
+     *
+     * @param apiPath 相对于 /api 的路径
+     * @param body    请求体对象（Jackson 可序列化）
+     * @param bearer  可选用户 JWT；登录传 null
+     * @return data 节点
+     */
+    private JsonNode postJson(String apiPath, Object body, String bearer) {
+        try {
+            byte[] bytes = mapper.writeValueAsBytes(body);
+            HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(props.api(apiPath)))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(bytes));
+            if (bearer != null) {
+                b.header("Authorization", "Bearer " + bearer);
+            }
+            return readData(http.send(b.build(), HttpResponse.BodyHandlers.ofString()));
+        } catch (OmniHttpException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("调用 Omni POST " + apiPath + " 失败", e);
+        }
+    }
+
+    /**
+     * 解析 Omni 统一响应 {@code {code,message,data}}；HTTP/业务 401 抛 {@link OmniHttpException}。
+     *
+     * @param response 原始 HTTP 响应
+     * @return data 节点（可能为空对象）
+     */
+    private JsonNode readData(HttpResponse<String> response) throws Exception {
+        JsonNode root = mapper.readTree(response.body() == null ? "{}" : response.body());
+        int code = root.path("code").asInt(-1);
+        if (response.statusCode() == 401 || code == 401) {
+            throw new OmniHttpException(401, root.path("message").asText("未授权"));
+        }
+        if (response.statusCode() >= 400 || code != 0) {
+            throw new OmniHttpException(response.statusCode(),
+                    root.path("message").asText("Omni 调用失败 HTTP " + response.statusCode()));
+        }
+        return root.path("data");
+    }
+
+    /**
+     * 读取 JSON 字符串字段；缺失或 null 时返回 null。
+     *
+     * @param node  父节点
+     * @param field 字段名
+     * @return 文本值或 null
+     */
+    private static String text(JsonNode node, String field) {
+        JsonNode v = node.get(field);
+        return v == null || v.isNull() ? null : v.asText();
+    }
+
+    /**
+     * 读取 JSON 布尔字段；缺失或 null 时返回 null。
+     *
+     * @param node  父节点
+     * @param field 字段名
+     * @return 布尔值或 null
+     */
+    private static Boolean bool(JsonNode node, String field) {
+        JsonNode v = node.get(field);
+        return v == null || v.isNull() ? null : v.asBoolean();
+    }
+
+    /**
+     * Omni HTTP/业务错误；{@link #status} 为 HTTP 状态或业务码（如 401）。
+     */
+    public static final class OmniHttpException extends RuntimeException {
+        /** HTTP 状态或业务错误码。 */
+        public final int status;
+
+        /**
+         * @param status  状态码
+         * @param message 错误说明
+         */
+        public OmniHttpException(int status, String message) {
+            super(message);
+            this.status = status;
+        }
+    }
+}
 ```
 
-注意：
+#### 4.2.3 业务 API（只把 embedUrl 交给前端）
 
-- `src` 必须由业务后端在当次页面加载时生成（或通过业务 API 拉取），不要写死在仓库或静态配置中。
-- embed JWT 过期后 iframe 会加载失败，需由业务端重新签发并刷新 `src`（可按接近 1 小时或收到错误时刷新）。
+```java
+package com.example.biz.web;
+
+import java.util.Map;
+
+import com.example.biz.omni.OmniEmbedClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 业务侧嵌入入口：按当前登录用户推导锁定参数，只向浏览器返回短期 embedUrl。
+ * <p>切勿把 Omni 服务账号密码、用户 JWT 或前端任意 parameters 透传出去。
+ */
+@RestController
+@RequestMapping("/api/bi")
+public class BiEmbedController {
+    private final OmniEmbedClient omni;
+
+    /**
+     * @param omni Omni 嵌入客户端
+     */
+    public BiEmbedController(OmniEmbedClient omni) {
+        this.omni = omni;
+    }
+
+    /**
+     * 获取仪表盘 iframe 地址。
+     * <p>锁定参数必须由后端根据业务会话计算（示例为部门），不要接收前端随意提交的过滤值。
+     *
+     * @param dashboardId Omni 仪表盘 ID
+     * @return embedUrl（含短期 JWT）与参考过期秒数（Omni 固定约 3600）
+     */
+    @GetMapping("/dashboards/{dashboardId}/embed-url")
+    public Map<String, String> dashboardEmbedUrl(@PathVariable long dashboardId) {
+        String deptId = currentUserDeptId();
+        String embedUrl = omni.buildDashboardEmbedUrl(dashboardId, Map.of("dept_id", deptId));
+        return Map.of("embedUrl", embedUrl, "expiresInSeconds", "3600");
+    }
+
+    /**
+     * 从业务会话取出当前用户部门，用于写入仪表盘锁定参数 {@code dept_id}。
+     *
+     * @return 部门标识；须与仪表盘参数可选值/查询绑定一致
+     */
+    private String currentUserDeptId() {
+        // TODO: 从 SecurityContext / Session 取当前用户部门
+        return "华东";
+    }
+}
+```
+
+要点：
+
+- **锁定参数必须由业务后端根据当前用户算出**，不要接受前端任意 `parameters`（否则等于放开行级过滤）。
+- 响应里**不要**带 `accessToken`、服务账号密码、原始 embed JWT 以外的密钥材料；`embedUrl` 本身含 JWT，仍属敏感短期票据，勿写入日志全文。
+
+#### 4.2.4 业务前端（Vue / 任意框架）
+
+```vue
+<script setup>
+import { onMounted, onUnmounted, ref } from 'vue'
+
+const props = defineProps({ dashboardId: { type: Number, required: true } })
+/** iframe 最终地址，由业务后端签发，勿写死。 */
+const embedUrl = ref('')
+const error = ref('')
+/** 到期前主动换票的定时器。 */
+let refreshTimer
+
+/**
+ * 向业务后端拉取当次 embedUrl，并在约 50 分钟后自动换新（JWT 固定 1h）。
+ */
+async function loadEmbedUrl() {
+  error.value = ''
+  const res = await fetch(`/api/bi/dashboards/${props.dashboardId}/embed-url`, {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    error.value = '获取嵌入地址失败'
+    return
+  }
+  const data = await res.json()
+  embedUrl.value = data.embedUrl
+  clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(loadEmbedUrl, 50 * 60 * 1000)
+}
+
+onMounted(loadEmbedUrl)
+onUnmounted(() => clearTimeout(refreshTimer))
+</script>
+
+<template>
+  <p v-if="error" style="color:#c00">{{ error }}</p>
+  <iframe
+    v-else-if="embedUrl"
+    :src="embedUrl"
+    title="仪表盘"
+    style="width:100%;height:800px;border:0;"
+    allowfullscreen
+  />
+</template>
+```
+
+### 4.3 curl 冒烟（可选）
+
+用于运维快速验证签发链路（仍需自行完成挑战登录；生产请用 §4.2）：
+
+```bash
+OMNI_BASE=https://bi.example.com
+USER_JWT="<业务后端 loginWithChallenge 得到的 accessToken>"
+
+curl -s -X POST "$OMNI_BASE/api/embed/tokens" \
+  -H "Authorization: Bearer $USER_JWT" \
+  -H 'Content-Type: application/json' \
+  -d '{"resourceType":"DASHBOARD","resourceId":123,"parameters":{"dept_id":"华东"}}' \
+  | jq -r '"'"$OMNI_BASE"'/embed/dashboard/\(.data.token)"'
+```
+
+### 4.4 安全落点对照（自检）
+
+| 做法 | 正确 | 错误 |
+|------|------|------|
+| 服务账号密码 | 仅业务后端环境变量 | 写进前端 / 仓库 |
+| Omni 用户 JWT | 业务后端内存/私有缓存 | 下发给浏览器 |
+| embed URL | 打开页时由业务 API 下发 | 写死在静态页 / CDN |
+| 锁定参数 | 后端按登录用户计算 | 前端随便传 `dept_id` |
+| 公开链接 | 仅对外临时分享 | 当业务系统正式嵌入 |
 
 ## 5. 安全要求与当前限制
 

@@ -13,6 +13,7 @@ import {
   cardGridStyle,
   defaultParameterValues,
   filterCardsByTab,
+  filterParametersByTab,
   parseDashboardConfig,
 } from '@/dashboard/config'
 import { exportDashboardPdf, exportDashboardPng } from '@/dashboard/exportDashboard'
@@ -35,6 +36,10 @@ const parameters = computed(() => dashboardConfig.value.parameters || [])
 const tabs = computed(() => dashboardConfig.value.tabs || [])
 const isPrint = computed(() => props.mode === 'print')
 const flattenTabs = computed(() => isPrint.value || exporting.value)
+const visibleParameters = computed(() => {
+  if (flattenTabs.value || !tabs.value.length) return parameters.value
+  return filterParametersByTab(parameters.value, activeTabId.value, tabs.value)
+})
 const visibleCards = computed(() => {
   if (!dashboard.value) return [] as DashboardRenderCard[]
   if (flattenTabs.value || !tabs.value.length) return dashboard.value.cards
@@ -160,9 +165,9 @@ onBeforeUnmount(clearPrintReady)
       </div>
     </div>
     <DashboardParameterBar
-      v-if="parameters.length && !isPrint"
+      v-if="visibleParameters.length && !isPrint"
       v-model="parameterValues"
-      :parameters="parameters"
+      :parameters="visibleParameters"
       readonly
     />
     <el-empty v-if="!loading && dashboard && !dashboard.cards.length" :description="t('dashboard.noCards')" />
