@@ -148,6 +148,7 @@ async function onActiveTabChange(tabId: string | number) {
   activeTabId.value = String(tabId)
   selectedCardId.value = undefined
   await reinitializeGrid()
+  await refresh()
 }
 
 function chartOf(id: Id) {
@@ -516,12 +517,13 @@ async function refresh(version = loadVersion) {
     const rendered = await dashboardApi.render(dashboard.value.id, {
       forceRefresh: true,
       parameterValues: parameterValues.value,
+      tabId: activeTabId.value,
     })
     if (!mounted || version !== loadVersion) return
-    renderedCards.value = Object.fromEntries(rendered.cards.map((card) => [String(card.cardId), card]))
-    results.value = Object.fromEntries(rendered.cards
-      .filter((card) => card.result)
-      .map((card) => [String(card.cardId), card.result!]))
+    for (const card of rendered.cards) {
+      renderedCards.value[String(card.cardId)] = card
+      if (card.result) results.value[String(card.cardId)] = card.result
+    }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : t('dashboard.refreshFailed'))
   }

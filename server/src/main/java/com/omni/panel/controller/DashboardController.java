@@ -114,8 +114,10 @@ public class DashboardController {
             @PathVariable long id,
             @RequestBody(required = false) RenderRequest request) {
         boolean force = request != null && Boolean.TRUE.equals(request.forceRefresh());
+        boolean allTabs = request != null && Boolean.TRUE.equals(request.allTabs());
         var values = request == null ? null : request.parameterValues();
-        return ApiResponse.ok(renderService.render(id, force, values));
+        String tabId = request == null ? null : request.tabId();
+        return ApiResponse.ok(renderService.render(id, force, values, tabId, allTabs));
     }
 
     /**
@@ -242,8 +244,11 @@ public class DashboardController {
      *
      * @param forceRefresh    是否强制刷新查询缓存
      * @param parameterValues 仪表盘参数取值映射
+     * @param tabId           仅渲染该页签卡片；空且 allTabs=false 时取首个页签
+     * @param allTabs         为 true 时渲染全部页签（导出等）
      */
-    public record RenderRequest(Boolean forceRefresh, java.util.Map<String, Object> parameterValues) {
+    public record RenderRequest(Boolean forceRefresh, java.util.Map<String, Object> parameterValues,
+                                String tabId, Boolean allTabs) {
     }
 
     /**

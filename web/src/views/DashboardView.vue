@@ -18,6 +18,7 @@ import {
   filterParametersByTab,
   parseClickAction,
   parseDashboardConfig,
+  resolveCardTabId,
 } from '@/dashboard/config'
 import { exportDashboardPdf, exportDashboardPng } from '@/dashboard/exportDashboard'
 import { DASHBOARD_SKELETON_LAYOUTS, skeletonLayoutStyle } from '@/dashboard/skeletonLayouts'
@@ -63,8 +64,11 @@ const tabSections = computed(() => {
 /** 首屏无数据时用骨架网格；刷新时在各卡片内展示骨架 */
 const showPageSkeleton = computed(() => loading.value && !dashboard.value && !exporting.value)
 const cardsLoading = computed(() => loading.value && !!dashboard.value && !exporting.value)
+/** 已拉取过查询结果的页签；切页签时按需补载 */
+const loadedTabIds = ref(new Set<string>())
 let loadVersion = 0
 let mounted = true
+let switchingTab = false
 
 function dashboardId() {
   return String(route.params.id)
@@ -96,16 +100,70 @@ function chartOption(configJson: string) {
   }
 }
 
-async function load(forceRefresh = false) {
+/**
+ * 将单页签渲染结果合并进已有卡片；全量渲染则直接替换。
+ */
+function mergeRenderedCards(
+  existing: DashboardRenderCard[] | undefined,
+  incoming: DashboardRenderCard[],
+  allTabs: boolean,
+  tabId: string | undefined,
+): DashboardRenderCard[] {
+  if (allTabs || !tabs.value.length) return incoming
+  const active = tabId && tabs.value.some((item) => item.id === tabId)
+    ? tabId
+    : tabs.value[0]?.id
+  if (!active) return incoming
+  const kept = (existing || []).filter((card) =>
+    resolveCardTabId(card.layoutJson, tabs.value) !== active)
+  return [...kept, ...incoming]
+}
+
+function markTabLoaded(tabId: string | undefined, allTabs: boolean) {
+  if (allTabs) {
+    loadedTabIds.value = new Set(tabs.value.map((item) => item.id))
+    return
+  }
+  const active = tabId && tabs.value.some((item) => item.id === tabId)
+    ? tabId
+    : tabs.value[0]?.id
+  if (!active) return
+  const next = new Set(loadedTabIds.value)
+  next.add(active)
+  loadedTabIds.value = next
+}
+
+async function load(options: {
+  forceRefresh?: boolean
+  allTabs?: boolean
+  tabId?: string
+  /** 参数变更后丢弃其他页签缓存，切页时重新查询 */
+  invalidateOtherTabs?: boolean
+} = {}) {
   const version = ++loadVersion
+  const allTabs = !!options.allTabs
+  const tabId = allTabs ? undefined : (options.tabId ?? activeTabId.value)
   loading.value = true
   try {
     const data = await dashboardApi.render(dashboardId(), {
-      forceRefresh,
+      forceRefresh: !!options.forceRefresh,
       parameterValues: parameterValues.value,
+      tabId,
+      allTabs,
     })
     if (!mounted || version !== loadVersion) return
-    dashboard.value = data
+    const mergedCards = mergeRenderedCards(
+      dashboard.value?.cards,
+      data.cards,
+      allTabs,
+      tabId,
+    )
+    dashboard.value = { ...data, cards: mergedCards }
+    if (options.invalidateOtherTabs) {
+      loadedTabIds.value = new Set()
+    }
+    // 先标记已加载，再 syncActiveTab，避免 watch 重复请求当前页签
+    markTabLoaded(tabId, allTabs)
     syncActiveTab()
     if (!Object.keys(parameterValues.value).length) {
       if (data.parameterValues && typeof data.parameterValues === 'object') {
@@ -123,7 +181,7 @@ async function load(forceRefresh = false) {
 }
 
 async function applyParameters() {
-  await load(true)
+  await load({ forceRefresh: true, invalidateOtherTabs: true })
 }
 
 async function onCardClick(cardId: string, label: string) {
@@ -138,7 +196,18 @@ async function onCardClick(cardId: string, label: string) {
     label,
     parameter?.type,
   )
-  await load(true)
+  await load({ forceRefresh: true, invalidateOtherTabs: true })
+}
+
+async function ensureActiveTabLoaded() {
+  const tabId = activeTabId.value
+  if (!tabId || !tabs.value.length || loadedTabIds.value.has(tabId) || switchingTab) return
+  switchingTab = true
+  try {
+    await load({ tabId })
+  } finally {
+    switchingTab = false
+  }
 }
 
 async function loadLinks() {
@@ -208,12 +277,13 @@ async function revokeLink(link: PublicLink) {
 async function onExport(command: string) {
   if (!canExport.value) return ElMessage.warning(t('common.noExportPermission'))
   if (exporting.value || loading.value) return
-  if (!root.value || !dashboard.value?.cards.length) {
-    ElMessage.warning(t('dashboard.exportEmpty'))
-    return
-  }
   exporting.value = true
   try {
+    await load({ allTabs: true })
+    if (!root.value || !dashboard.value?.cards.length) {
+      ElMessage.warning(t('dashboard.exportEmpty'))
+      return
+    }
     await nextTick()
     const name = dashboard.value.name || t('dashboard.title')
     if (command === 'pdf') await exportDashboardPdf(root.value, name)
@@ -225,14 +295,18 @@ async function onExport(command: string) {
   }
 }
 
-onMounted(() => load(false))
+onMounted(() => load())
 watch(() => route.params.id, () => {
   parameterValues.value = {}
   activeTabId.value = undefined
   dashboard.value = undefined
+  loadedTabIds.value = new Set()
   links.value = []
   linksVisible.value = false
-  load(false)
+  load()
+})
+watch(activeTabId, () => {
+  void ensureActiveTabLoaded()
 })
 onBeforeUnmount(() => {
   mounted = false
@@ -250,7 +324,7 @@ onBeforeUnmount(() => {
     <div class="page-header no-export">
       <h1 class="page-title">{{ dashboard?.name || t('dashboard.title') }}</h1>
       <div class="header-actions">
-        <el-button text :loading="loading" @click="load(true)">{{ t('dashboard.refresh') }}</el-button>
+        <el-button text :loading="loading" @click="load({ forceRefresh: true })">{{ t('dashboard.refresh') }}</el-button>
         <el-button text @click="toggleFullscreen">
           {{ isFullscreen ? t('dashboard.exitFullscreen') : t('dashboard.fullscreen') }}
         </el-button>
@@ -297,7 +371,10 @@ onBeforeUnmount(() => {
       :parameters="visibleParameters"
       @apply="applyParameters"
     />
-    <el-empty v-if="!loading && dashboard && !dashboard.cards.length" :description="t('dashboard.noCards')" />
+    <el-empty
+      v-if="!loading && dashboard && !tabs.length && !dashboard.cards.length"
+      :description="t('dashboard.noCards')"
+    />
 
     <div v-if="showPageSkeleton" class="dashboard-grid">
       <DashboardCardShell
@@ -336,7 +413,7 @@ onBeforeUnmount(() => {
       </section>
     </template>
 
-    <template v-else-if="dashboard?.cards.length">
+    <template v-else-if="dashboard && (dashboard.cards.length || tabs.length)">
       <el-tabs v-if="tabs.length" v-model="activeTabId" class="dashboard-tabs">
         <el-tab-pane
           v-for="tab in tabs"
@@ -345,8 +422,17 @@ onBeforeUnmount(() => {
           :name="tab.id"
         />
       </el-tabs>
+      <div v-if="cardsLoading && !visibleCards.length" class="dashboard-grid">
+        <DashboardCardShell
+          v-for="(layout, index) in DASHBOARD_SKELETON_LAYOUTS"
+          :key="`tab-skel-${index}`"
+          class="dashboard-card"
+          :style="skeletonLayoutStyle(layout)"
+          loading
+        />
+      </div>
       <el-empty
-        v-if="tabs.length && !visibleCards.length"
+        v-else-if="tabs.length && !visibleCards.length"
         :description="t('dashboard.noCardsInTab')"
       />
       <div v-if="visibleCards.length" class="dashboard-grid">
@@ -361,7 +447,7 @@ onBeforeUnmount(() => {
           :loading="cardsLoading"
           :fit-content="card.chartType === 'table'"
           show-refresh
-          @refresh="load(true)"
+          @refresh="load({ forceRefresh: true })"
         >
           <ChartPreview
             :type="card.chartType"

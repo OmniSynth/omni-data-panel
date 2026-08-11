@@ -75,12 +75,29 @@ public class DashboardRenderService {
      */
     public RenderedDashboard render(long dashboardId, boolean forceRefresh,
                                     Map<String, Object> parameterValues) {
+        return render(dashboardId, forceRefresh, parameterValues, null, false);
+    }
+
+    /**
+     * 安全渲染仪表盘；可按页签只执行对应卡片查询以加速首屏。
+     *
+     * @param dashboardId     仪表盘标识
+     * @param forceRefresh    为 true 时跳过结果缓存读取
+     * @param parameterValues 运行时参数；为空时使用默认值
+     * @param tabId           目标页签；{@code includeAllTabs=false} 且存在页签时生效
+     * @param includeAllTabs  为 true 时执行全部卡片（导出 / 调度刷新）
+     * @return 不暴露查询定义和数据引用的卡片渲染结果
+     */
+    public RenderedDashboard render(long dashboardId, boolean forceRefresh,
+                                    Map<String, Object> parameterValues,
+                                    String tabId, boolean includeAllTabs) {
         DashboardEntity dashboard = requireDashboard(dashboardId);
         permissionService.require("DASHBOARD", dashboardId, dashboard.getOwnerId(), "READ");
         Map<String, Object> values = mergeDefaults(dashboard.getConfigJson(), parameterValues);
         return new RenderedDashboard(dashboard.getId(), dashboard.getName(), dashboard.getConfigJson(),
                 permissionService.accessLevel("DASHBOARD", dashboardId),
-                values, executeCards(dashboardId, forceRefresh, values, dashboard.getConfigJson()));
+                values, executeCards(dashboardId, forceRefresh, values, dashboard.getConfigJson(),
+                tabId, includeAllTabs));
     }
 
     /**
@@ -109,7 +126,8 @@ public class DashboardRenderService {
             SecurityContextHolder.setContext(ownerContext);
             Map<String, Object> values = mergeDefaults(dashboard.getConfigJson(), lockedParameters);
             return new RenderedDashboard(dashboard.getId(), dashboard.getName(), dashboard.getConfigJson(),
-                    "READ", values, executeCards(dashboardId, false, values, dashboard.getConfigJson()));
+                    "READ", values, executeCards(dashboardId, false, values, dashboard.getConfigJson(),
+                    null, true));
         } finally {
             SecurityContextHolder.setContext(originalContext);
         }
@@ -156,7 +174,7 @@ public class DashboardRenderService {
     public List<RenderedCard> executeCards(long dashboardId) {
         DashboardEntity dashboard = requireDashboard(dashboardId);
         Map<String, Object> values = mergeDefaults(dashboard.getConfigJson(), null);
-        return executeCards(dashboardId, true, values, dashboard.getConfigJson());
+        return executeCards(dashboardId, true, values, dashboard.getConfigJson(), null, true);
     }
 
     /**
@@ -170,10 +188,28 @@ public class DashboardRenderService {
      */
     public List<RenderedCard> executeCards(long dashboardId, boolean forceRefresh,
                                            Map<String, Object> parameterValues, String configJson) {
+        return executeCards(dashboardId, forceRefresh, parameterValues, configJson, null, true);
+    }
+
+    /**
+     * 执行卡片查询；可按页签过滤。
+     *
+     * @param dashboardId     仪表盘标识
+     * @param forceRefresh    为 true 时跳过结果缓存读取
+     * @param parameterValues 运行时参数
+     * @param configJson      仪表盘配置
+     * @param tabId           目标页签 id
+     * @param includeAllTabs  为 true 时忽略页签过滤
+     * @return 卡片渲染结果
+     */
+    public List<RenderedCard> executeCards(long dashboardId, boolean forceRefresh,
+                                           Map<String, Object> parameterValues, String configJson,
+                                           String tabId, boolean includeAllTabs) {
         requireDashboard(dashboardId);
         Map<String, QueryParameterApplier.ParameterMeta> metas = parameterApplier.parseParameterMetas(configJson);
         List<DashboardCardEntity> cards = cardMapper.selectList(Wrappers.<DashboardCardEntity>lambdaQuery()
                 .eq(DashboardCardEntity::getDashboardId, dashboardId).orderByAsc(DashboardCardEntity::getId));
+        cards = filterCardsByTab(cards, configJson, tabId, includeAllTabs);
         if (cards.isEmpty()) {
             return List.of();
         }
@@ -199,6 +235,94 @@ public class DashboardRenderService {
             }
         }
         return List.copyOf(results);
+    }
+
+    /**
+     * 按页签过滤待执行卡片；无页签配置时返回原列表。
+     *
+     * @param cards          全部卡片
+     * @param configJson     仪表盘配置
+     * @param tabId          请求的页签；空则取首个页签
+     * @param includeAllTabs 为 true 时不过滤
+     * @return 过滤后的卡片
+     */
+    private List<DashboardCardEntity> filterCardsByTab(List<DashboardCardEntity> cards, String configJson,
+                                                       String tabId, boolean includeAllTabs) {
+        if (includeAllTabs || cards == null || cards.isEmpty()) {
+            return cards == null ? List.of() : cards;
+        }
+        List<String> tabIds = parseTabIds(configJson);
+        if (tabIds.isEmpty()) {
+            return cards;
+        }
+        String active = tabId != null && !tabId.isBlank() && tabIds.contains(tabId.trim())
+                ? tabId.trim()
+                : tabIds.getFirst();
+        List<DashboardCardEntity> filtered = new ArrayList<>();
+        for (DashboardCardEntity card : cards) {
+            if (active.equals(resolveCardTabId(card.getLayoutJson(), tabIds))) {
+                filtered.add(card);
+            }
+        }
+        return filtered;
+    }
+
+    /**
+     * 从仪表盘配置解析页签 id 列表（保序）。
+     *
+     * @param configJson 配置 JSON
+     * @return 页签 id；无配置时为空列表
+     */
+    private List<String> parseTabIds(String configJson) {
+        if (configJson == null || configJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            var root = objectMapper.readTree(configJson);
+            var tabs = root.get("tabs");
+            if (tabs == null || !tabs.isArray() || tabs.isEmpty()) {
+                return List.of();
+            }
+            List<String> ids = new ArrayList<>();
+            for (var tab : tabs) {
+                if (tab == null || !tab.hasNonNull("id")) {
+                    continue;
+                }
+                String id = tab.get("id").asText("").trim();
+                if (!id.isEmpty() && !ids.contains(id)) {
+                    ids.add(id);
+                }
+            }
+            return List.copyOf(ids);
+        } catch (Exception exception) {
+            return List.of();
+        }
+    }
+
+    /**
+     * 解析卡片所属页签；无匹配时归入首个页签。
+     *
+     * @param layoutJson 布局 JSON
+     * @param tabIds     合法页签 id
+     * @return 页签 id
+     */
+    private String resolveCardTabId(String layoutJson, List<String> tabIds) {
+        String fallback = tabIds.getFirst();
+        if (layoutJson == null || layoutJson.isBlank()) {
+            return fallback;
+        }
+        try {
+            var root = objectMapper.readTree(layoutJson);
+            if (root != null && root.hasNonNull("tabId")) {
+                String tabId = root.get("tabId").asText("").trim();
+                if (!tabId.isEmpty() && tabIds.contains(tabId)) {
+                    return tabId;
+                }
+            }
+        } catch (Exception ignored) {
+            // 布局损坏时归入首个页签
+        }
+        return fallback;
     }
 
     /**

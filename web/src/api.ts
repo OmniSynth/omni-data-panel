@@ -235,14 +235,23 @@ export const dashboardApi = {
   }),
   remove: (id: Id) => request<void>({ url: `/dashboards/${String(id)}`, method: 'DELETE' }),
   cards: (id: Id) => request<DashboardCard[]>({ url: `/dashboards/${String(id)}/cards` }),
-  render: (id: Id, options?: { forceRefresh?: boolean; parameterValues?: Record<string, unknown> }) => {
-    if (options?.parameterValues || options?.forceRefresh) {
+  render: (id: Id, options?: {
+    forceRefresh?: boolean
+    parameterValues?: Record<string, unknown>
+    tabId?: string
+    allTabs?: boolean
+  }) => {
+    const usePost = !!(options?.parameterValues || options?.forceRefresh
+      || options?.tabId || options?.allTabs)
+    if (usePost) {
       return request<DashboardRender>({
         url: `/dashboards/${String(id)}/render`,
         method: 'POST',
         data: {
           forceRefresh: !!options?.forceRefresh,
           parameterValues: options?.parameterValues,
+          tabId: options?.tabId,
+          allTabs: !!options?.allTabs,
         },
       })
     }
