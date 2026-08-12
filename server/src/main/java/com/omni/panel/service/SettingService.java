@@ -39,6 +39,7 @@ public class SettingService {
     static final String MAIL_FROM = "mail.from";
     static final String MAIL_SMTP_AUTH = "mail.smtp.auth";
     static final String MAIL_SMTP_STARTTLS = "mail.smtp.starttls";
+    static final String MAIL_SMTP_SSL = "mail.smtp.ssl";
 
     private static final int DEFAULT_CACHE_TTL_SECONDS = 300;
     private static final int MIN_CACHE_TTL_SECONDS = 30;
@@ -66,7 +67,8 @@ public class SettingService {
             MAIL_PASSWORD,
             MAIL_FROM,
             MAIL_SMTP_AUTH,
-            MAIL_SMTP_STARTTLS);
+            MAIL_SMTP_STARTTLS,
+            MAIL_SMTP_SSL);
     private static final Set<String> ALLOWED = new LinkedHashSet<>(ALLOWED_KEYS);
     private static final Set<String> BOOLEAN_KEYS = Set.of(
             "embed.enabled",
@@ -74,7 +76,8 @@ public class SettingService {
             CACHE_QUERY_ENABLED,
             LOGS_CLEAR_ENABLED,
             MAIL_SMTP_AUTH,
-            MAIL_SMTP_STARTTLS);
+            MAIL_SMTP_STARTTLS,
+            MAIL_SMTP_SSL);
     private static final Map<String, String> DEFAULTS = Map.ofEntries(
             Map.entry("site.name", "全域数据分析"),
             Map.entry("embed.enabled", "true"),
@@ -90,7 +93,8 @@ public class SettingService {
             Map.entry(MAIL_PASSWORD, ""),
             Map.entry(MAIL_FROM, ""),
             Map.entry(MAIL_SMTP_AUTH, "false"),
-            Map.entry(MAIL_SMTP_STARTTLS, "false"));
+            Map.entry(MAIL_SMTP_STARTTLS, "false"),
+            Map.entry(MAIL_SMTP_SSL, "false"));
 
     private final SettingMapper mapper;
     private final CredentialCrypto crypto;

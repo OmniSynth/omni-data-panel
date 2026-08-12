@@ -53,6 +53,8 @@ spring:
           auth: ${MAIL_SMTP_AUTH:false}
           starttls:
             enable: ${MAIL_STARTTLS:false}
+          ssl:
+            enable: ${MAIL_SSL:false}
   jackson:
     default-property-inclusion: non_null
 

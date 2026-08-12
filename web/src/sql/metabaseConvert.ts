@@ -153,10 +153,23 @@ function expandOptionalBlocks(sql: string, warnings: string[]): { sql: string; c
     const after = next.slice(close + 2)
     const needNewline = before.length > 0 && !/\n\s*$/.test(before)
     const prefix = `${needNewline ? '\n' : ''}${OPTIONAL_COMMENT}\n`
-    next = `${before}${prefix}${inner}${after}`
+    next = `${before}${prefix}${ensureOptionalConjunction(inner)}${after}`
     changed = true
   }
   return { sql: next, changed }
+}
+
+/**
+ * Metabase 可选块常写成 `[[col = {{x}}]]`（无 AND）；展开后接到 WHERE 会语法错误。
+ * 已有 AND/OR 或以逗号开头（SELECT 列表）的保持原样。
+ */
+function ensureOptionalConjunction(inner: string): string {
+  const trimmed = inner.replace(/^\s+/, '')
+  if (!trimmed) return inner
+  if (trimmed.startsWith(',')) return inner
+  if (/^(and|or)\b/i.test(trimmed)) return inner
+  const leading = inner.length - trimmed.length
+  return `${inner.slice(0, leading)}AND ${trimmed}`
 }
 
 type TagKind =

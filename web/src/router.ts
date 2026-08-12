@@ -72,6 +72,7 @@ const router = createRouter({
       children: [
         { path: '', redirect: '/admin/settings' },
         { path: 'settings', component: () => import('@/views/admin/SettingsView.vue') },
+        { path: 'metabase-import', component: () => import('@/views/admin/MetabaseImportView.vue') },
         { path: 'databases', component: () => import('@/views/DataSourcesView.vue') },
         { path: 'data-source-health', component: () => import('@/views/admin/DataSourceHealthView.vue') },
         { path: 'query-audits', component: () => import('@/views/admin/QueryAuditsView.vue') },

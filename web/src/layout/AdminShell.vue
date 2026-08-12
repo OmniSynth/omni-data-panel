@@ -15,6 +15,7 @@ const menuGroups = computed(() => [
     label: t('adminShell.system'),
     items: [
       { path: '/admin/settings', label: t('adminShell.settings') },
+      { path: '/admin/metabase-import', label: t('adminShell.metabaseImport') },
       { path: '/admin/users', label: t('adminShell.users') },
       { path: '/admin/roles', label: t('adminShell.roles') },
       { path: '/admin/subscriptions', label: t('adminShell.subscriptions') },

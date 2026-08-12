@@ -31,6 +31,7 @@ public class SystemMailService {
     private final String envPassword;
     private final boolean envAuth;
     private final boolean envStartTls;
+    private final boolean envSsl;
 
     /**
      * 注入系统发信所需依赖与环境变量回退配置。
@@ -43,7 +44,8 @@ public class SystemMailService {
      * @param envUsername            环境 SMTP 用户名
      * @param envPassword            环境 SMTP 密码
      * @param envAuth                环境 SMTP 是否认证
-     * @param envStartTls            环境 SMTP 是否 STARTTLS
+     * @param envStartTls            环境 SMTP 是否 STARTTLS（587）
+     * @param envSsl                 环境 SMTP 是否 SSL（465）
      */
     public SystemMailService(SettingService settingService, CredentialCrypto crypto,
                              SubscriptionProperties subscriptionProperties,
@@ -52,7 +54,8 @@ public class SystemMailService {
                              @Value("${spring.mail.username:}") String envUsername,
                              @Value("${spring.mail.password:}") String envPassword,
                              @Value("${spring.mail.properties.mail.smtp.auth:false}") boolean envAuth,
-                             @Value("${spring.mail.properties.mail.smtp.starttls.enable:false}") boolean envStartTls) {
+                             @Value("${spring.mail.properties.mail.smtp.starttls.enable:false}") boolean envStartTls,
+                             @Value("${spring.mail.properties.mail.smtp.ssl.enable:false}") boolean envSsl) {
         this.settingService = settingService;
         this.crypto = crypto;
         this.subscriptionProperties = subscriptionProperties;
@@ -62,6 +65,7 @@ public class SystemMailService {
         this.envPassword = envPassword == null ? "" : envPassword;
         this.envAuth = envAuth;
         this.envStartTls = envStartTls;
+        this.envSsl = envSsl;
     }
 
     /**
@@ -186,14 +190,15 @@ public class SystemMailService {
             String password = decryptPassword(settingService.get(SettingService.MAIL_PASSWORD));
             boolean auth = Boolean.parseBoolean(settingService.getOrDefault(SettingService.MAIL_SMTP_AUTH));
             boolean startTls = Boolean.parseBoolean(settingService.getOrDefault(SettingService.MAIL_SMTP_STARTTLS));
-            return new MailRuntime(buildSender(dbHost, port, username, password, auth, startTls), dbFrom);
+            boolean ssl = Boolean.parseBoolean(settingService.getOrDefault(SettingService.MAIL_SMTP_SSL));
+            return new MailRuntime(buildSender(dbHost, port, username, password, auth, startTls, ssl), dbFrom);
         }
         String envFrom = subscriptionProperties.getFrom();
         if (envHost.isBlank() || envFrom == null || envFrom.isBlank()) {
             return null;
         }
         return new MailRuntime(
-                buildSender(envHost.trim(), envPort, envUsername, envPassword, envAuth, envStartTls),
+                buildSender(envHost.trim(), envPort, envUsername, envPassword, envAuth, envStartTls, envSsl),
                 envFrom.trim());
     }
 
@@ -234,11 +239,12 @@ public class SystemMailService {
      * @param username 用户名
      * @param password 密码
      * @param auth     是否启用认证
-     * @param startTls 是否启用 STARTTLS
+     * @param startTls 是否启用 STARTTLS（常用 587）
+     * @param ssl      是否启用 SSL/SMTPS（常用 465）
      * @return 配置完成的发送器
      */
-    private static JavaMailSenderImpl buildSender(String host, int port, String username, String password,
-                                                  boolean auth, boolean startTls) {
+    static JavaMailSenderImpl buildSender(String host, int port, String username, String password,
+                                          boolean auth, boolean startTls, boolean ssl) {
         JavaMailSenderImpl sender = new JavaMailSenderImpl();
         sender.setHost(host);
         sender.setPort(port);
@@ -249,13 +255,42 @@ public class SystemMailService {
             sender.setPassword(password);
         }
         Properties props = sender.getJavaMailProperties();
+        props.putAll(smtpProperties(auth, startTls, ssl, port));
+        return sender;
+    }
+
+    /**
+     * 组装 SMTP/SMTPS 会话属性。SSL 与 STARTTLS 互斥，同时开启时优先 SSL（465）。
+     *
+     * @param auth     是否认证
+     * @param startTls 是否 STARTTLS
+     * @param ssl      是否 SSL
+     * @param port     端口（写入 socketFactory）
+     * @return JavaMail 属性
+     */
+    static Properties smtpProperties(boolean auth, boolean startTls, boolean ssl, int port) {
+        boolean useSsl = ssl || (!startTls && port == 465);
+        boolean useStartTls = !useSsl && startTls;
+        Properties props = new Properties();
         props.put("mail.transport.protocol", "smtp");
         props.put("mail.smtp.auth", Boolean.toString(auth));
-        props.put("mail.smtp.starttls.enable", Boolean.toString(startTls));
         props.put("mail.smtp.connectiontimeout", "10000");
         props.put("mail.smtp.timeout", "10000");
         props.put("mail.smtp.writetimeout", "10000");
-        return sender;
+        if (useSsl) {
+            props.put("mail.smtp.ssl.enable", "true");
+            props.put("mail.smtp.ssl.checkserveridentity", "true");
+            props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+            props.put("mail.smtp.socketFactory.port", String.valueOf(port));
+            props.put("mail.smtp.socketFactory.fallback", "false");
+            props.put("mail.smtp.starttls.enable", "false");
+            props.put("mail.smtp.starttls.required", "false");
+        } else {
+            props.put("mail.smtp.ssl.enable", "false");
+            props.put("mail.smtp.starttls.enable", Boolean.toString(useStartTls));
+            props.put("mail.smtp.starttls.required", Boolean.toString(useStartTls));
+        }
+        return props;
     }
 
     /**

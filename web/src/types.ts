@@ -633,6 +633,53 @@ export interface SiteSettings {
   'mail.from'?: string
   'mail.smtp.auth'?: string | boolean
   'mail.smtp.starttls'?: string | boolean
+  'mail.smtp.ssl'?: string | boolean
   'mail.ready'?: string | boolean
   [key: string]: string | boolean | number | undefined
+}
+
+export interface MetabaseDashboardSummary {
+  id: number
+  name: string
+}
+
+export interface MetabaseParameterPreview {
+  id: string
+  label: string
+  type: string
+  bindName: string
+}
+
+export interface MetabaseSkippedCard {
+  metabaseCardId?: number | null
+  name: string
+  reason: string
+}
+
+export interface MetabaseImportableCard {
+  metabaseCardId?: number | null
+  name: string
+  databaseId: number
+  chartType: string
+  col: number
+  row: number
+  sizeX: number
+  sizeY: number
+  parameterNames: string[]
+}
+
+export interface MetabasePreviewResult {
+  name: string
+  databaseIds: number[]
+  importableCards: MetabaseImportableCard[]
+  skippedCards: MetabaseSkippedCard[]
+  parameters: MetabaseParameterPreview[]
+}
+
+export interface MetabaseImportResult {
+  dashboardId: Id
+  dashboardName: string
+  chartIds: Id[]
+  skippedCards: MetabaseSkippedCard[]
+  warnings: string[]
 }

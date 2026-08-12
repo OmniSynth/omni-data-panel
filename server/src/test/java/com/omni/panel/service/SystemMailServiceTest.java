@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.Properties;
+
 import org.junit.jupiter.api.Test;
 import com.omni.panel.common.BusinessException;
 import com.omni.panel.datasource.CredentialCrypto;
@@ -23,6 +25,7 @@ class SystemMailServiceTest {
         when(settingService.getOrDefault(SettingService.MAIL_USERNAME)).thenReturn("user");
         when(settingService.getOrDefault(SettingService.MAIL_SMTP_AUTH)).thenReturn("true");
         when(settingService.getOrDefault(SettingService.MAIL_SMTP_STARTTLS)).thenReturn("true");
+        when(settingService.getOrDefault(SettingService.MAIL_SMTP_SSL)).thenReturn("false");
         when(settingService.get(SettingService.MAIL_PASSWORD)).thenReturn("cipher");
         when(crypto.decrypt("cipher")).thenReturn("secret");
 
@@ -64,6 +67,7 @@ class SystemMailServiceTest {
         when(settingService.getOrDefault(SettingService.MAIL_USERNAME)).thenReturn("");
         when(settingService.getOrDefault(SettingService.MAIL_SMTP_AUTH)).thenReturn("false");
         when(settingService.getOrDefault(SettingService.MAIL_SMTP_STARTTLS)).thenReturn("false");
+        when(settingService.getOrDefault(SettingService.MAIL_SMTP_SSL)).thenReturn("false");
         when(settingService.get(SettingService.MAIL_PASSWORD)).thenReturn(null);
 
         SystemMailService service = newService("", "");
@@ -72,8 +76,39 @@ class SystemMailServiceTest {
                 .hasMessageContaining("测试收件人");
     }
 
+    @Test
+    void ssl属性用于465端口() {
+        Properties props = SystemMailService.smtpProperties(true, false, true, 465);
+        assertThat(props.getProperty("mail.smtp.ssl.enable")).isEqualTo("true");
+        assertThat(props.getProperty("mail.smtp.socketFactory.class"))
+                .isEqualTo("javax.net.ssl.SSLSocketFactory");
+        assertThat(props.getProperty("mail.smtp.socketFactory.port")).isEqualTo("465");
+        assertThat(props.getProperty("mail.smtp.starttls.enable")).isEqualTo("false");
+    }
+
+    @Test
+    void 仅端口465时自动启用ssl() {
+        Properties props = SystemMailService.smtpProperties(true, false, false, 465);
+        assertThat(props.getProperty("mail.smtp.ssl.enable")).isEqualTo("true");
+    }
+
+    @Test
+    void startTls属性用于587端口() {
+        Properties props = SystemMailService.smtpProperties(true, true, false, 587);
+        assertThat(props.getProperty("mail.smtp.ssl.enable")).isEqualTo("false");
+        assertThat(props.getProperty("mail.smtp.starttls.enable")).isEqualTo("true");
+        assertThat(props.getProperty("mail.smtp.starttls.required")).isEqualTo("true");
+    }
+
+    @Test
+    void ssl与startTls同时开时优先ssl() {
+        Properties props = SystemMailService.smtpProperties(true, true, true, 465);
+        assertThat(props.getProperty("mail.smtp.ssl.enable")).isEqualTo("true");
+        assertThat(props.getProperty("mail.smtp.starttls.enable")).isEqualTo("false");
+    }
+
     private SystemMailService newService(String envHost, String ignoredFrom) {
         return new SystemMailService(settingService, crypto, properties,
-                envHost, 25, "", "", false, false);
+                envHost, 25, "", "", false, false, false);
     }
 }

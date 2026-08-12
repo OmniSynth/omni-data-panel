@@ -3,7 +3,8 @@ import { t } from '@/i18n'
 import type {
   AdminUser, AuditCleanupPayload, Chart, Collection, CollectionItem, CompletionSchema, Dashboard, DashboardCard,
   DashboardRender, DataSource, DataSourceHealthOverview, Dataset, DatasetAudit, DashboardAudit, DialectInfo, ExportAudit, ExportTask, FieldPermissionRow,
-  Id, LoginAudit, Metric, MetadataColumn, MetadataTable, PageResult, Permission, PublicLink, PublicQuestion,
+  Id, LoginAudit, Metric, MetadataColumn, MetadataTable, MetabaseDashboardSummary, MetabaseImportResult, MetabasePreviewResult,
+  PageResult, Permission, PublicLink, PublicQuestion,
   PublicResourceType, QueryAudit, QuerySnapshot, QuerySubmission, QuerySubmitResult, RecentItem,
   ResourceType, Role, RoleResourceGrant, RowRule, Schedule, SearchHit, SiteSettings, Subscription, SystemLogEntry,
   SystemLogMeta, TrashItem, User, UserDirectoryItem, DataSourceObjectAcl, ObjectAclColumnRef, ObjectAclTableRef,
@@ -370,6 +371,20 @@ export const dashboardAuditApi = {
   }) => request<PageResult<DashboardAudit>>({ url: '/admin/dashboard-audits', params }),
   cleanup: (data: AuditCleanupPayload) =>
     request<{ deleted: number }>({ url: '/admin/dashboard-audits/cleanup', method: 'POST', data }),
+}
+
+export const metabaseImportApi = {
+  listDashboards: (data: { baseUrl: string; apiKey: string }) =>
+    request<MetabaseDashboardSummary[]>({ url: '/admin/metabase/dashboards', method: 'POST', data }),
+  preview: (data: { baseUrl: string; apiKey: string; metabaseDashboardId: number }) =>
+    request<MetabasePreviewResult>({ url: '/admin/metabase/dashboards/preview', method: 'POST', data }),
+  importDashboard: (data: {
+    baseUrl: string
+    apiKey: string
+    metabaseDashboardId: number
+    databaseMap: Record<string, string>
+    collectionId?: string
+  }) => request<MetabaseImportResult>({ url: '/admin/metabase/dashboards/import', method: 'POST', data }),
 }
 
 export const exportAuditApi = {

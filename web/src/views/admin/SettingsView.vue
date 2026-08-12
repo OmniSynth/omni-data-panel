@@ -31,6 +31,7 @@ const form = ref({
   mailFrom: '',
   mailAuth: false,
   mailStartTls: false,
+  mailSsl: false,
   mailTestTo: '',
 })
 
@@ -81,6 +82,7 @@ async function load() {
       mailFrom: String(settings['mail.from'] || ''),
       mailAuth: asBool(settings['mail.smtp.auth']),
       mailStartTls: asBool(settings['mail.smtp.starttls']),
+      mailSsl: asBool(settings['mail.smtp.ssl']),
       mailTestTo: String(settings['mail.from'] || ''),
     }
     dirty.value = false
@@ -107,6 +109,7 @@ function buildPayload(): SiteSettings {
     'mail.from': form.value.mailFrom.trim(),
     'mail.smtp.auth': form.value.mailAuth ? 'true' : 'false',
     'mail.smtp.starttls': form.value.mailStartTls ? 'true' : 'false',
+    'mail.smtp.ssl': form.value.mailSsl ? 'true' : 'false',
   }
   if (form.value.mailPassword.trim()) {
     payload['mail.password'] = form.value.mailPassword
@@ -250,8 +253,19 @@ onMounted(load)
         <el-form-item :label="t('settings.mailAuth')">
           <el-switch v-model="form.mailAuth" @change="markDirty" />
         </el-form-item>
+        <el-form-item :label="t('settings.mailSsl')">
+          <el-switch
+            v-model="form.mailSsl"
+            @change="(on: boolean) => { if (on) form.mailStartTls = false; markDirty() }"
+          />
+          <span class="hint-inline">{{ t('settings.mailSslHint') }}</span>
+        </el-form-item>
         <el-form-item :label="t('settings.mailStartTls')">
-          <el-switch v-model="form.mailStartTls" @change="markDirty" />
+          <el-switch
+            v-model="form.mailStartTls"
+            @change="(on: boolean) => { if (on) form.mailSsl = false; markDirty() }"
+          />
+          <span class="hint-inline">{{ t('settings.mailStartTlsHint') }}</span>
         </el-form-item>
         <el-form-item :label="t('settings.mailTestTo')">
           <div class="test-row">
@@ -277,6 +291,11 @@ onMounted(load)
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 1.4;
+}
+.hint-inline {
+  margin-left: 10px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 .test-row {
   display: flex;
