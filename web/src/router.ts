@@ -78,6 +78,7 @@ const router = createRouter({
         { path: 'login-audits', component: () => import('@/views/admin/LoginAuditsView.vue') },
         { path: 'system-logs', component: () => import('@/views/admin/SystemLogsView.vue') },
         { path: 'dataset-audits', component: () => import('@/views/admin/DatasetAuditsView.vue') },
+        { path: 'dashboard-audits', component: () => import('@/views/admin/DashboardAuditsView.vue') },
         { path: 'export-audits', component: () => import('@/views/admin/ExportAuditsView.vue') },
         { path: 'users', component: () => import('@/views/UsersView.vue') },
         { path: 'roles', component: () => import('@/views/RolesView.vue') },

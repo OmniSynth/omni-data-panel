@@ -335,6 +335,18 @@ export interface DatasetAudit {
   createdAt?: string
 }
 
+export interface DashboardAudit {
+  id: Id
+  dashboardId?: Id | null
+  dashboardName: string
+  action: string
+  operatorId?: Id | null
+  operatorUsername?: string | null
+  operatorDisplayName?: string | null
+  detail?: string | null
+  createdAt?: string
+}
+
 export interface ExportAudit {
   id: Id
   userId?: Id | null

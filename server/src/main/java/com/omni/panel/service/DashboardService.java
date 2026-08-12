@@ -32,22 +32,25 @@ public class DashboardService {
     private final CollectionService collectionService;
     private final SubscriptionMapper subscriptionMapper;
     private final ScheduleMapper scheduleMapper;
+    private final DashboardAuditService dashboardAuditService;
 
     /**
-     * 注入仪表盘持久化、权限与集合相关依赖。
+     * 注入仪表盘持久化、权限、集合与审计相关依赖。
      *
-     * @param dashboardMapper    仪表盘持久化
-     * @param cardMapper         卡片持久化
-     * @param chartMapper        图表持久化
-     * @param permissionService  资源权限校验
-     * @param collectionService  集合归属解析
-     * @param subscriptionMapper 订阅持久化
-     * @param scheduleMapper     调度持久化
+     * @param dashboardMapper       仪表盘持久化
+     * @param cardMapper            卡片持久化
+     * @param chartMapper           图表持久化
+     * @param permissionService     资源权限校验
+     * @param collectionService     集合归属解析
+     * @param subscriptionMapper    订阅持久化
+     * @param scheduleMapper        调度持久化
+     * @param dashboardAuditService 仪表盘变更审计
      */
     public DashboardService(DashboardMapper dashboardMapper, DashboardCardMapper cardMapper,
                             ChartMapper chartMapper, PermissionService permissionService,
                             @Lazy CollectionService collectionService,
-                            SubscriptionMapper subscriptionMapper, ScheduleMapper scheduleMapper) {
+                            SubscriptionMapper subscriptionMapper, ScheduleMapper scheduleMapper,
+                            DashboardAuditService dashboardAuditService) {
         this.dashboardMapper = dashboardMapper;
         this.cardMapper = cardMapper;
         this.chartMapper = chartMapper;
@@ -55,6 +58,7 @@ public class DashboardService {
         this.collectionService = collectionService;
         this.subscriptionMapper = subscriptionMapper;
         this.scheduleMapper = scheduleMapper;
+        this.dashboardAuditService = dashboardAuditService;
     }
 
     /**
@@ -120,6 +124,7 @@ public class DashboardService {
         dashboard.setCollectionId(resolveCollectionId(collectionId, user.id()));
         dashboard.setUpdatedAt(LocalDateTime.now());
         dashboardMapper.insert(dashboard);
+        dashboardAuditService.record(dashboard, "CREATE", summary(dashboard));
         return dashboard;
     }
 
@@ -145,6 +150,7 @@ public class DashboardService {
         }
         dashboard.setUpdatedAt(LocalDateTime.now());
         dashboardMapper.updateById(dashboard);
+        dashboardAuditService.record(dashboard, "UPDATE", summary(dashboard));
         return dashboard;
     }
 
@@ -159,6 +165,7 @@ public class DashboardService {
         dashboard.setDeletedAt(LocalDateTime.now());
         dashboard.setUpdatedAt(dashboard.getDeletedAt());
         dashboardMapper.updateById(dashboard);
+        dashboardAuditService.record(dashboard, "SOFT_DELETE", summary(dashboard));
     }
 
     /**
@@ -172,6 +179,7 @@ public class DashboardService {
         dashboard.setDeletedAt(null);
         dashboard.setUpdatedAt(LocalDateTime.now());
         dashboardMapper.updateById(dashboard);
+        dashboardAuditService.record(dashboard, "RESTORE", summary(dashboard));
     }
 
     /**
@@ -193,8 +201,10 @@ public class DashboardService {
         if (schedules > 0) {
             throw new BusinessException("仪表盘仍被调度任务引用，无法永久删除");
         }
+        String detail = summary(dashboard);
         permissionService.deleteResource("DASHBOARD", id);
         dashboardMapper.deleteById(dashboard.getId());
+        dashboardAuditService.record(dashboard, "PURGE", detail);
     }
 
     /**
@@ -236,7 +246,7 @@ public class DashboardService {
     @Transactional
     public DashboardCardEntity createCard(long dashboardId, long chartId, String title, String layoutJson,
                                           String bindingsJson, String clickActionJson) {
-        require(dashboardId, "WRITE");
+        DashboardEntity dashboard = require(dashboardId, "WRITE");
         requireChart(chartId);
         DashboardCardEntity card = new DashboardCardEntity();
         card.setDashboardId(dashboardId);
@@ -246,6 +256,7 @@ public class DashboardService {
         card.setBindingsJson(bindingsJson == null || bindingsJson.isBlank() ? "[]" : bindingsJson);
         card.setClickActionJson(blankToNull(clickActionJson));
         cardMapper.insert(card);
+        dashboardAuditService.record(dashboard, "CARD_CREATE", cardSummary(card));
         return card;
     }
 
@@ -265,7 +276,7 @@ public class DashboardService {
     public DashboardCardEntity updateCard(long dashboardId, long cardId, long chartId,
                                           String title, String layoutJson,
                                           String bindingsJson, String clickActionJson) {
-        require(dashboardId, "WRITE");
+        DashboardEntity dashboard = require(dashboardId, "WRITE");
         requireChart(chartId);
         DashboardCardEntity card = requireCard(dashboardId, cardId);
         card.setChartId(chartId);
@@ -278,6 +289,7 @@ public class DashboardService {
             card.setClickActionJson(blankToNull(clickActionJson));
         }
         cardMapper.updateById(card);
+        dashboardAuditService.record(dashboard, "CARD_UPDATE", cardSummary(card));
         return card;
     }
 
@@ -299,8 +311,33 @@ public class DashboardService {
      */
     @Transactional
     public void deleteCard(long dashboardId, long cardId) {
-        require(dashboardId, "WRITE");
-        cardMapper.deleteById(requireCard(dashboardId, cardId));
+        DashboardEntity dashboard = require(dashboardId, "WRITE");
+        DashboardCardEntity card = requireCard(dashboardId, cardId);
+        String detail = cardSummary(card);
+        cardMapper.deleteById(card);
+        dashboardAuditService.record(dashboard, "CARD_DELETE", detail);
+    }
+
+    /**
+     * 仪表盘审计摘要。
+     *
+     * @param dashboard 仪表盘
+     * @return 摘要文本
+     */
+    private static String summary(DashboardEntity dashboard) {
+        return "collectionId=" + dashboard.getCollectionId();
+    }
+
+    /**
+     * 卡片审计摘要。
+     *
+     * @param card 卡片
+     * @return 摘要文本
+     */
+    private static String cardSummary(DashboardCardEntity card) {
+        return "cardId=" + card.getId()
+                + ", chartId=" + card.getChartId()
+                + ", title=" + (card.getTitle() == null ? "" : card.getTitle().trim());
     }
 
     /**

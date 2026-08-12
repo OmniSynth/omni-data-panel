@@ -124,7 +124,7 @@ export function withChartPolish(option: Record<string, unknown>, isDark: boolean
   const gridDefault = {
     left: 12,
     right: 16,
-    top: 36,
+    top: 48,
     bottom: 16,
     containLabel: true,
   }

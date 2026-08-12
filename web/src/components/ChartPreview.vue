@@ -346,7 +346,12 @@ function render() {
     } else if (props.type === 'hbar') {
       dataOption = {
         tooltip: { trigger: 'axis' },
-        legend: { data: numericSeries.map((item) => item.name) },
+        legend: {
+          type: 'scroll',
+          top: 0,
+          left: 'center',
+          data: numericSeries.map((item) => item.name),
+        },
         xAxis: { type: 'value' },
         yAxis: { type: 'category', data: labels },
         series: numericSeries.map((item) => ({
@@ -400,8 +405,14 @@ function render() {
             return [head, ...lines].join('<br/>')
           },
         },
-        legend: { data: numericSeries.map((item) => item.name) },
+        legend: {
+          type: 'scroll',
+          top: 0,
+          left: 'center',
+          data: numericSeries.map((item) => item.name),
+        },
         xAxis: { type: 'category', data: labels },
+        grid: { top: 48, right: usesRight ? 48 : 16, left: 12, bottom: 16, containLabel: true },
         yAxis: usesRight
           ? [
             {
@@ -443,8 +454,14 @@ function render() {
       const seriesType = props.type === 'area' ? 'line' : props.type === 'line' ? 'line' : 'bar'
       dataOption = {
         tooltip: { trigger: 'axis' },
-        legend: { data: numericSeries.map((item) => item.name) },
+        legend: {
+          type: 'scroll',
+          top: 0,
+          left: 'center',
+          data: numericSeries.map((item) => item.name),
+        },
         xAxis: { type: 'category', data: labels },
+        grid: { top: 48, right: 16, left: 12, bottom: 16, containLabel: true },
         yAxis: { type: 'value' },
         series: numericSeries.map((item) => ({
           name: item.name,

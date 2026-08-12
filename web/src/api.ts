@@ -2,7 +2,7 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { t } from '@/i18n'
 import type {
   AdminUser, AuditCleanupPayload, Chart, Collection, CollectionItem, CompletionSchema, Dashboard, DashboardCard,
-  DashboardRender, DataSource, DataSourceHealthOverview, Dataset, DatasetAudit, DialectInfo, ExportAudit, ExportTask, FieldPermissionRow,
+  DashboardRender, DataSource, DataSourceHealthOverview, Dataset, DatasetAudit, DashboardAudit, DialectInfo, ExportAudit, ExportTask, FieldPermissionRow,
   Id, LoginAudit, Metric, MetadataColumn, MetadataTable, PageResult, Permission, PublicLink, PublicQuestion,
   PublicResourceType, QueryAudit, QuerySnapshot, QuerySubmission, QuerySubmitResult, RecentItem,
   ResourceType, Role, RoleResourceGrant, RowRule, Schedule, SearchHit, SiteSettings, Subscription, SystemLogEntry,
@@ -357,6 +357,19 @@ export const datasetAuditApi = {
   }) => request<PageResult<DatasetAudit>>({ url: '/admin/dataset-audits', params }),
   cleanup: (data: AuditCleanupPayload) =>
     request<{ deleted: number }>({ url: '/admin/dataset-audits/cleanup', method: 'POST', data }),
+}
+
+export const dashboardAuditApi = {
+  page: (params: {
+    keyword?: string
+    action?: string
+    fromTime?: string
+    toTime?: string
+    page?: number
+    size?: number
+  }) => request<PageResult<DashboardAudit>>({ url: '/admin/dashboard-audits', params }),
+  cleanup: (data: AuditCleanupPayload) =>
+    request<{ deleted: number }>({ url: '/admin/dashboard-audits/cleanup', method: 'POST', data }),
 }
 
 export const exportAuditApi = {
