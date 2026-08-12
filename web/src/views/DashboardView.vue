@@ -68,7 +68,6 @@ const cardsLoading = computed(() => loading.value && !!dashboard.value && !expor
 const loadedTabIds = ref(new Set<string>())
 let loadVersion = 0
 let mounted = true
-let switchingTab = false
 
 function dashboardId() {
   return String(route.params.id)
@@ -87,8 +86,11 @@ function syncActiveTab() {
     activeTabId.value = undefined
     return
   }
-  if (!activeTabId.value || !tabs.value.some((item) => item.id === activeTabId.value)) {
+  const current = activeTabId.value == null ? '' : String(activeTabId.value)
+  if (!current || !tabs.value.some((item) => item.id === current)) {
     activeTabId.value = tabs.value[0]?.id
+  } else if (activeTabId.value !== current) {
+    activeTabId.value = current
   }
 }
 
@@ -142,7 +144,12 @@ async function load(options: {
 } = {}) {
   const version = ++loadVersion
   const allTabs = !!options.allTabs
-  const tabId = allTabs ? undefined : (options.tabId ?? activeTabId.value)
+  const requestedTabId = allTabs
+    ? undefined
+    : (options.tabId ?? activeTabId.value)
+  const tabId = requestedTabId == null || requestedTabId === ''
+    ? undefined
+    : String(requestedTabId)
   loading.value = true
   try {
     const data = await dashboardApi.render(dashboardId(), {
@@ -200,13 +207,13 @@ async function onCardClick(cardId: string, label: string) {
 }
 
 async function ensureActiveTabLoaded() {
-  const tabId = activeTabId.value
-  if (!tabId || !tabs.value.length || loadedTabIds.value.has(tabId) || switchingTab) return
-  switchingTab = true
-  try {
-    await load({ tabId })
-  } finally {
-    switchingTab = false
+  const tabId = activeTabId.value == null ? '' : String(activeTabId.value)
+  if (!tabId || !tabs.value.length || loadedTabIds.value.has(tabId)) return
+  await load({ tabId })
+  // 加载期间若又切到其他未加载页签，继续补载（避免快速连切丢请求）
+  const current = activeTabId.value == null ? '' : String(activeTabId.value)
+  if (current && current !== tabId && !loadedTabIds.value.has(current)) {
+    await ensureActiveTabLoaded()
   }
 }
 
@@ -305,7 +312,11 @@ watch(() => route.params.id, () => {
   linksVisible.value = false
   load()
 })
-watch(activeTabId, () => {
+watch(activeTabId, (id) => {
+  if (id != null && id !== '' && String(id) !== id) {
+    activeTabId.value = String(id)
+    return
+  }
   void ensureActiveTabLoaded()
 })
 onBeforeUnmount(() => {

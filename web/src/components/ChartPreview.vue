@@ -299,7 +299,15 @@ function render() {
       ? rows.map((row) => String(row[picked.category!] ?? ''))
       : rows.map((_, index) => String(index + 1))
     const numericSeries = picked.values.flatMap((column) => {
-      const values = rows.map((row) => Number(row[column]))
+      const values = rows.map((row) => {
+        const raw = row[column]
+        if (typeof raw === 'number') return raw
+        if (typeof raw === 'string') {
+          const cleaned = raw.trim().replace(/,/g, '').replace(/%$/, '')
+          return Number(cleaned)
+        }
+        return Number(raw)
+      })
       return rows.length && values.every(Number.isFinite) ? [{ name: column, values }] : []
     })
 
@@ -471,6 +479,7 @@ function render() {
         : dataOption.yAxis,
     series: mergedSeries,
   }, themeStore.isDark), true)
+  chart.resize()
 }
 
 function drillTo(index: number) {
@@ -546,8 +555,13 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow: hidden;
 }
+/* 工作台/详情等无固定父高时，避免 height:100% 塌成 0 导致「有配置无图」 */
+.chart-preview:not(.is-table) {
+  min-height: 360px;
+}
 .chart-preview.is-table:not(.table-fill) {
   height: auto;
+  min-height: 0;
   overflow: visible;
 }
 .drill-bar {
@@ -596,7 +610,7 @@ onBeforeUnmount(() => {
   height: auto;
   max-height: none;
 }
-.chart-box { width: 100%; flex: 1; min-height: 0; }
+.chart-box { width: 100%; flex: 1; min-height: 320px; }
 .chart-box.interactive { cursor: pointer; }
 .kpi-box {
   width: 100%;
