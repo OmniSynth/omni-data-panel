@@ -74,7 +74,7 @@ public class ChartResultCache {
         }
         try {
             String json = redis.opsForValue().get(key(chart, bindingsJson, parameterValues));
-            if (json == null || json.isBlank()) {
+            if (json.isBlank()) {
                 return Optional.empty();
             }
             return Optional.of(objectMapper.readValue(json, JdbcQueryExecutor.QueryResult.class));

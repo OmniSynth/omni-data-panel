@@ -110,8 +110,8 @@ public class UserSessionRegistry {
         redis.opsForZSet().add(redisKey, jti, score);
         long minAlive = Instant.now().minus(jwtExpiration).toEpochMilli();
         redis.opsForZSet().removeRangeByScore(redisKey, 0, minAlive);
-        Long size = redis.opsForZSet().zCard(redisKey);
-        if (size != null && size > max) {
+        long size = redis.opsForZSet().zCard(redisKey);
+        if (size > max) {
             redis.opsForZSet().removeRange(redisKey, 0, size - max - 1);
         }
         redis.expire(redisKey, Duration.ofSeconds(ttlSeconds));
