@@ -1,23 +1,28 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref } from 'vue'
+import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { confirmBox, promptBox } from '@/i18n/dialog'
+import { confirmBox } from '@/i18n/dialog'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
-import { dashboardApi, publicLinkApi } from '@/api'
+import { useRoute, useRouter } from 'vue-router'
+import { collectionApi, dashboardApi, publicLinkApi } from '@/api'
 import { displayLabel } from '@/display'
+import { requiredRule, validateForm } from '@/form/rules'
 import { refreshShellNavKey } from '@/nav/shellNav'
 import { useUserStore } from '@/stores/user'
-import type { Dashboard, Id, PublicLink, PublicLinkExpireDays } from '@/types'
+import type { Collection, Dashboard, Id, PublicLink, PublicLinkExpireDays } from '@/types'
 import PublicShareDialog from '@/components/PublicShareDialog.vue'
 import RoleResourcePermissionPanel from '@/components/RoleResourcePermissionPanel.vue'
 import { copyText } from '@/utils/clipboard'
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const refreshShellNav = inject(refreshShellNavKey, async () => {})
+
 const rows = ref<Dashboard[]>([])
+const collections = ref<Collection[]>([])
 const cardCounts = ref<Record<string, number>>({})
 const loading = ref(false)
 const linksLoading = ref(false)
@@ -28,8 +33,120 @@ const links = ref<PublicLink[]>([])
 const permissionVisible = ref(false)
 const permissionDashboard = ref<Dashboard>()
 
-const totalCharts = computed(() =>
-  rows.value.reduce((sum, item) => sum + (cardCounts.value[String(item.id)] || 0), 0))
+const searchText = ref('')
+/** 空字符串表示全部集合 */
+const filterCollectionId = ref('')
+const createVisible = ref(false)
+const createSaving = ref(false)
+const createFormRef = ref<FormInstance>()
+const createForm = reactive<{ name: string; collectionId?: Id }>({
+  name: '',
+  collectionId: undefined,
+})
+
+type DashboardGroup = {
+  key: string
+  collectionId?: Id
+  title: string
+  items: Dashboard[]
+}
+
+const createRules = computed<FormRules>(() => ({
+  name: [requiredRule(t('common.pleaseEnter', { field: t('common.name') }))],
+  collectionId: [requiredRule(t('common.pleaseSelect', { field: t('shell.belongCollection') }), 'change')],
+}))
+
+const flatCollections = computed(() => flattenCollections(collections.value))
+
+const collectionById = computed(() => {
+  const map = new Map<string, Collection>()
+  for (const item of flatCollections.value) {
+    map.set(String(item.id), item)
+  }
+  return map
+})
+
+/** 筛选集合及其全部子孙 id */
+const filterCollectionIds = computed(() => {
+  if (!filterCollectionId.value) return null as Set<string> | null
+  const root = collectionById.value.get(String(filterCollectionId.value))
+  if (!root) return new Set([String(filterCollectionId.value)])
+  const ids = new Set<string>()
+  const walk = (node: Collection) => {
+    ids.add(String(node.id))
+    for (const child of node.children || []) walk(child)
+  }
+  walk(root)
+  return ids
+})
+
+const filteredRows = computed(() => {
+  const q = searchText.value.trim().toLowerCase()
+  const scope = filterCollectionIds.value
+  return rows.value.filter((row) => {
+    if (scope) {
+      const cid = row.collectionId == null || row.collectionId === '' ? '' : String(row.collectionId)
+      if (!cid || !scope.has(cid)) return false
+    }
+    if (!q) return true
+    return row.name.toLowerCase().includes(q)
+      || (row.description || '').toLowerCase().includes(q)
+  })
+})
+
+const groups = computed((): DashboardGroup[] => {
+  const buckets = new Map<string, Dashboard[]>()
+  for (const row of filteredRows.value) {
+    const key = row.collectionId == null || row.collectionId === ''
+      ? ''
+      : String(row.collectionId)
+    const list = buckets.get(key) || []
+    list.push(row)
+    buckets.set(key, list)
+  }
+  const ordered: DashboardGroup[] = []
+  const seen = new Set<string>()
+  const pushGroup = (key: string) => {
+    if (seen.has(key) || !buckets.has(key)) return
+    seen.add(key)
+    const items = buckets.get(key) || []
+    ordered.push({
+      key: key || '__none__',
+      collectionId: key || undefined,
+      title: key ? collectionName(key) : t('dashboard.uncategorized'),
+      items,
+    })
+  }
+  // 按集合树顺序分组，未归档放最后
+  const walk = (nodes: Collection[]) => {
+    for (const node of nodes) {
+      pushGroup(String(node.id))
+      if (node.children?.length) walk(node.children)
+    }
+  }
+  walk(collections.value)
+  for (const key of buckets.keys()) {
+    if (key) pushGroup(key)
+  }
+  pushGroup('')
+  return ordered
+})
+
+const filteredChartCount = computed(() =>
+  filteredRows.value.reduce((sum, item) => sum + (cardCounts.value[String(item.id)] || 0), 0))
+
+function flattenCollections(nodes: Collection[], acc: Collection[] = []): Collection[] {
+  for (const node of nodes) {
+    acc.push(node)
+    if (node.children?.length) flattenCollections(node.children, acc)
+  }
+  return acc
+}
+
+function collectionName(id?: Id) {
+  if (id === undefined || id === null || id === '') return t('dashboard.uncategorized')
+  return collectionById.value.get(String(id))?.name || String(id)
+}
 
 function publicUrl(token: string) {
   return `${location.origin}/public/dashboard/${token}`
@@ -41,28 +158,73 @@ function accessTagType(level: string) {
   return 'info'
 }
 
+function defaultCollectionId(): Id | undefined {
+  if (filterCollectionId.value) return filterCollectionId.value
+  const myUserId = userStore.user?.id
+  const mine = collections.value.find(
+    (item) => item.personalOwnerId != null && String(item.personalOwnerId) === String(myUserId),
+  )
+  return mine?.id
+    ?? collections.value.find((item) => item.personalOwnerId != null)?.id
+    ?? collections.value[0]?.id
+}
+
+function syncFilterFromRoute() {
+  const raw = route.query.collectionId
+  filterCollectionId.value = typeof raw === 'string' ? raw : ''
+}
+
+function onFilterCollectionChange(value: string | null | undefined) {
+  const next = value ? String(value) : ''
+  filterCollectionId.value = next
+  const query = { ...route.query } as Record<string, string | string[] | undefined>
+  if (next) query.collectionId = next
+  else delete query.collectionId
+  void router.replace({ path: '/dashboards', query })
+}
+
 async function load() {
   loading.value = true
   try {
-    rows.value = await dashboardApi.list()
-    const entries = await Promise.all(rows.value.map(async (dashboard) =>
+    const [dashboards, tree] = await Promise.all([
+      dashboardApi.list(),
+      collectionApi.tree(),
+    ])
+    rows.value = dashboards
+    collections.value = tree
+    const entries = await Promise.all(dashboards.map(async (dashboard) =>
       [String(dashboard.id), (await dashboardApi.cards(dashboard.id)).length] as const))
     cardCounts.value = Object.fromEntries(entries)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('dashboard.loadFailed'))
+  } finally {
+    loading.value = false
   }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : t('dashboard.loadFailed')) }
-  finally { loading.value = false }
 }
 
-async function create() {
+function openCreate() {
+  createForm.name = ''
+  createForm.collectionId = defaultCollectionId()
+  createVisible.value = true
+}
+
+async function submitCreate() {
+  if (!(await validateForm(createFormRef.value))) return
+  createSaving.value = true
   try {
-    const { value } = await promptBox(t('dashboard.namePrompt'), t('dashboard.createTitle'), {
-      inputPattern: /\S+/,
-      inputErrorMessage: t('common.nameRequired'),
+    const dashboard = await dashboardApi.create({
+      name: createForm.name.trim(),
+      configJson: '{}',
+      collectionId: createForm.collectionId,
     })
-    const dashboard = await dashboardApi.create({ name: value, configJson: '{}' })
+    createVisible.value = false
     await refreshShellNav()
     await router.push(`/dashboards/${dashboard.id}/edit`)
-  } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.createFailed')) }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : t('common.createFailed'))
+  } finally {
+    createSaving.value = false
+  }
 }
 
 async function remove(id: Id) {
@@ -71,8 +233,9 @@ async function remove(id: Id) {
     await dashboardApi.remove(id)
     await refreshShellNav()
     await load()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed'))
   }
-  catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : t('common.deleteFailed')) }
 }
 
 async function loadLinks() {
@@ -172,7 +335,14 @@ function onMoreCommand(command: string, dashboard: Dashboard) {
   else if (command === 'delete') void remove(dashboard.id)
 }
 
-onMounted(load)
+watch(() => route.query.collectionId, () => {
+  syncFilterFromRoute()
+})
+
+onMounted(() => {
+  syncFilterFromRoute()
+  void load()
+})
 </script>
 
 <template>
@@ -183,12 +353,12 @@ onMounted(load)
         <p class="hero-desc">{{ t('dashboard.subtitle') }}</p>
         <div v-if="rows.length" class="hero-stats">
           <span class="stat">
-            <strong>{{ rows.length }}</strong>
+            <strong>{{ filteredRows.length }}</strong>
             {{ t('dashboard.title') }}
           </span>
           <span class="stat-dot" aria-hidden="true" />
           <span class="stat">
-            <strong>{{ totalCharts }}</strong>
+            <strong>{{ filteredChartCount }}</strong>
             {{ t('dashboard.chartCount') }}
           </span>
         </div>
@@ -198,10 +368,34 @@ onMounted(load)
         type="primary"
         size="large"
         class="create-btn"
-        @click="create"
+        @click="openCreate"
       >
         {{ t('dashboard.create') }}
       </el-button>
+    </div>
+
+    <div v-if="rows.length || !loading" class="toolbar">
+      <el-select
+        :model-value="filterCollectionId || undefined"
+        clearable
+        filterable
+        class="filter-collection"
+        :placeholder="t('dashboard.allCollections')"
+        @update:model-value="onFilterCollectionChange"
+      >
+        <el-option
+          v-for="item in flatCollections"
+          :key="item.id"
+          :label="item.name"
+          :value="String(item.id)"
+        />
+      </el-select>
+      <el-input
+        v-model="searchText"
+        clearable
+        class="filter-search"
+        :placeholder="t('dashboard.searchPlaceholder')"
+      />
     </div>
 
     <div v-if="!loading && !rows.length" class="empty-panel">
@@ -217,67 +411,114 @@ onMounted(load)
       <el-button
         v-if="userStore.hasPermission('dashboard:create')"
         type="primary"
-        @click="create"
+        @click="openCreate"
       >
         {{ t('dashboard.create') }}
       </el-button>
     </div>
 
-    <div v-else class="dash-grid">
-      <article
-        v-for="row in rows"
-        :key="row.id"
-        class="dash-card"
-        @click="openView(row)"
-      >
-        <div class="dash-thumb" aria-hidden="true">
-          <div class="thumb-bars">
-            <span style="height:42%" />
-            <span style="height:68%" />
-            <span style="height:54%" />
-            <span style="height:78%" />
-            <span style="height:46%" />
-          </div>
-          <div class="thumb-glow" />
-        </div>
-        <div class="dash-body">
-          <div class="dash-top">
-            <h2 class="dash-name" :title="row.name">{{ row.name }}</h2>
-            <el-tag size="small" :type="accessTagType(row.accessLevel)" effect="plain">
-              {{ displayLabel(row.accessLevel) }}
-            </el-tag>
-          </div>
-          <p class="dash-meta">
-            {{ t('dashboard.chartCountLabel', { n: cardCounts[String(row.id)] || 0 }) }}
-            <template v-if="row.description"> · {{ row.description }}</template>
-          </p>
-          <div class="dash-actions" @click.stop>
-            <el-button type="primary" plain size="small" @click="openView(row)">
-              {{ t('dashboard.openDashboard') }}
-            </el-button>
-            <el-dropdown
-              v-if="canEdit(row) || canRoleShare(row) || canDelete(row)"
-              trigger="click"
-              @command="(cmd: string) => onMoreCommand(cmd, row)"
-            >
-              <el-button size="small" text>
-                {{ t('dashboard.moreActions') }}
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-if="canEdit(row)" command="edit">{{ t('common.edit') }}</el-dropdown-item>
-                  <el-dropdown-item v-if="canEdit(row)" command="public">{{ t('dashboard.publicShare') }}</el-dropdown-item>
-                  <el-dropdown-item v-if="canRoleShare(row)" command="roles">{{ t('dashboard.roleShare') }}</el-dropdown-item>
-                  <el-dropdown-item v-if="canDelete(row)" command="delete" divided>
-                    <span class="danger-text">{{ t('common.delete') }}</span>
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-        </div>
-      </article>
+    <div v-else-if="!loading && !filteredRows.length" class="empty-panel compact">
+      <strong>{{ t('dashboard.noMatch') }}</strong>
     </div>
+
+    <div v-else class="group-list">
+      <section v-for="group in groups" :key="group.key" class="dash-group">
+        <h2 class="group-title">
+          <span>{{ group.title }}</span>
+          <small>{{ t('dashboard.groupCount', { n: group.items.length }) }}</small>
+        </h2>
+        <div class="dash-grid">
+          <article
+            v-for="row in group.items"
+            :key="row.id"
+            class="dash-card"
+            @click="openView(row)"
+          >
+            <div class="dash-thumb" aria-hidden="true">
+              <div class="thumb-bars">
+                <span style="height:42%" />
+                <span style="height:68%" />
+                <span style="height:54%" />
+                <span style="height:78%" />
+                <span style="height:46%" />
+              </div>
+              <div class="thumb-glow" />
+            </div>
+            <div class="dash-body">
+              <div class="dash-top">
+                <h3 class="dash-name" :title="row.name">{{ row.name }}</h3>
+                <el-tag size="small" :type="accessTagType(row.accessLevel)" effect="plain">
+                  {{ displayLabel(row.accessLevel) }}
+                </el-tag>
+              </div>
+              <p class="dash-collection">{{ collectionName(row.collectionId) }}</p>
+              <p class="dash-meta">
+                {{ t('dashboard.chartCountLabel', { n: cardCounts[String(row.id)] || 0 }) }}
+                <template v-if="row.description"> · {{ row.description }}</template>
+              </p>
+              <div class="dash-actions" @click.stop>
+                <el-button type="primary" plain size="small" @click="openView(row)">
+                  {{ t('dashboard.openDashboard') }}
+                </el-button>
+                <el-dropdown
+                  v-if="canEdit(row) || canRoleShare(row) || canDelete(row)"
+                  trigger="click"
+                  @command="(cmd: string) => onMoreCommand(cmd, row)"
+                >
+                  <el-button size="small" text>
+                    {{ t('dashboard.moreActions') }}
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item v-if="canEdit(row)" command="edit">{{ t('common.edit') }}</el-dropdown-item>
+                      <el-dropdown-item v-if="canEdit(row)" command="public">{{ t('dashboard.publicShare') }}</el-dropdown-item>
+                      <el-dropdown-item v-if="canRoleShare(row)" command="roles">{{ t('dashboard.roleShare') }}</el-dropdown-item>
+                      <el-dropdown-item v-if="canDelete(row)" command="delete" divided>
+                        <span class="danger-text">{{ t('common.delete') }}</span>
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <el-dialog
+      v-model="createVisible"
+      :title="t('dashboard.createTitle')"
+      width="460px"
+      destroy-on-close
+    >
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="90px">
+        <el-form-item :label="t('common.name')" prop="name">
+          <el-input v-model="createForm.name" :placeholder="t('dashboard.namePrompt')" />
+        </el-form-item>
+        <el-form-item :label="t('shell.belongCollection')" prop="collectionId">
+          <el-select
+            v-model="createForm.collectionId"
+            class="full-width"
+            filterable
+            :placeholder="t('shell.selectCollection')"
+          >
+            <el-option
+              v-for="item in flatCollections"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="createSaving" @click="submitCreate">
+          {{ t('common.continue') }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <PublicShareDialog
       v-model="linksVisible"
@@ -313,7 +554,7 @@ onMounted(load)
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   padding: 22px 24px;
   border-radius: 14px;
   border: 1px solid var(--omni-border);
@@ -351,6 +592,20 @@ onMounted(load)
 }
 .create-btn { flex-shrink: 0; }
 
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.filter-collection {
+  width: min(100%, 240px);
+}
+.filter-search {
+  width: min(100%, 280px);
+}
+.full-width { width: 100%; }
+
 .empty-panel {
   display: flex;
   flex-direction: column;
@@ -363,6 +618,9 @@ onMounted(load)
   border-radius: 14px;
   background: var(--omni-surface);
   text-align: center;
+}
+.empty-panel.compact {
+  min-height: 160px;
 }
 .empty-visual {
   color: var(--omni-accent);
@@ -378,6 +636,27 @@ onMounted(load)
   font-size: 13px;
   line-height: 1.5;
   margin-bottom: 8px;
+}
+
+.group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.dash-group { min-width: 0; }
+.group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--omni-text);
+}
+.group-title small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--omni-muted);
 }
 
 .dash-grid {
@@ -436,9 +715,9 @@ onMounted(load)
 .dash-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   padding: 16px 16px 14px;
-  min-height: 132px;
+  min-height: 148px;
 }
 .dash-top {
   display: flex;
@@ -456,6 +735,16 @@ onMounted(load)
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.dash-collection {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--omni-accent-strong);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dash-meta {
   margin: 0;
@@ -484,5 +773,9 @@ onMounted(load)
     align-items: stretch;
   }
   .create-btn { width: 100%; }
+  .filter-collection,
+  .filter-search {
+    width: 100%;
+  }
 }
 </style>
