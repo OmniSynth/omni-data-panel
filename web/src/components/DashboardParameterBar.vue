@@ -281,10 +281,31 @@ watch(
 @media (max-width: 720px) {
   .param-bar {
     align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .param-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .param-fields {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .param-item {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .param-item label {
+    width: 100%;
   }
   .param-apply {
     width: 100%;
     margin-left: 0;
+  }
+  .param-apply :deep(.el-button) {
+    width: 100%;
   }
   .ctrl.text,
   .ctrl.number,
@@ -292,7 +313,9 @@ watch(
   .ctrl.range,
   .ctrl.select,
   .ctrl.multi {
-    width: min(100%, 260px);
+    width: 100%;
+    max-width: none;
+    flex: 1;
   }
 }
 </style>

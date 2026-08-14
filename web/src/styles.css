@@ -118,6 +118,15 @@ body {
   background: var(--omni-bg);
   color: var(--omni-text);
 }
+@media (max-width: 960px) {
+  body {
+    min-width: 0;
+    overflow-x: hidden;
+  }
+  .page {
+    padding: 12px;
+  }
+}
 .page {
   padding: var(--omni-page-pad);
   min-width: 0;

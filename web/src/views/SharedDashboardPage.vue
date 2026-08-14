@@ -15,6 +15,7 @@ import {
   filterCardsByTab,
   filterParametersByTab,
   parseDashboardConfig,
+  sortCardsByLayout,
 } from '@/dashboard/config'
 import { exportDashboardPdf, exportDashboardPng } from '@/dashboard/exportDashboard'
 import { DASHBOARD_SKELETON_LAYOUTS, skeletonLayoutStyle } from '@/dashboard/skeletonLayouts'
@@ -42,14 +43,16 @@ const visibleParameters = computed(() => {
 })
 const visibleCards = computed(() => {
   if (!dashboard.value) return [] as DashboardRenderCard[]
-  if (flattenTabs.value || !tabs.value.length) return dashboard.value.cards
-  return filterCardsByTab(dashboard.value.cards, activeTabId.value, tabs.value)
+  const cards = flattenTabs.value || !tabs.value.length
+    ? dashboard.value.cards
+    : filterCardsByTab(dashboard.value.cards, activeTabId.value, tabs.value)
+  return sortCardsByLayout(cards)
 })
 const tabSections = computed(() => {
   if (!dashboard.value || !tabs.value.length) return []
   return tabs.value.map((tab) => ({
     tab,
-    cards: filterCardsByTab(dashboard.value!.cards, tab.id, tabs.value),
+    cards: sortCardsByLayout(filterCardsByTab(dashboard.value!.cards, tab.id, tabs.value)),
   }))
 })
 const showPageSkeleton = computed(() => loading.value && !dashboard.value && !exporting.value)
@@ -303,6 +306,33 @@ onBeforeUnmount(clearPrintReady)
 .dashboard-card { min-width: 0; min-height: 0; }
 .dashboard-card.is-table { min-height: 0; }
 @media (max-width: 900px) {
-  .dashboard-card { grid-column: 1 / -1 !important; }
+  .standalone:not(.print) {
+    padding: 12px;
+  }
+  .page-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .dashboard-tabs {
+    overflow-x: auto;
+  }
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .dashboard-card {
+    grid-column: unset !important;
+    grid-row: unset !important;
+    width: 100%;
+    height: min(50vh, 280px);
+    min-height: 240px;
+    align-self: stretch;
+  }
+  .dashboard-card.is-table {
+    height: auto;
+    min-height: 0;
+    overflow-x: auto;
+  }
 }
 </style>

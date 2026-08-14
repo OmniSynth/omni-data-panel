@@ -19,6 +19,7 @@ import {
   parseClickAction,
   parseDashboardConfig,
   resolveCardTabId,
+  sortCardsByLayout,
 } from '@/dashboard/config'
 import { exportDashboardPdf, exportDashboardPng } from '@/dashboard/exportDashboard'
 import { DASHBOARD_SKELETON_LAYOUTS, skeletonLayoutStyle } from '@/dashboard/skeletonLayouts'
@@ -51,14 +52,16 @@ const visibleParameters = computed(() =>
   filterParametersByTab(parameters.value, activeTabId.value, tabs.value))
 const visibleCards = computed(() => {
   if (!dashboard.value) return [] as DashboardRenderCard[]
-  if (exporting.value || !tabs.value.length) return dashboard.value.cards
-  return filterCardsByTab(dashboard.value.cards, activeTabId.value, tabs.value)
+  const cards = exporting.value || !tabs.value.length
+    ? dashboard.value.cards
+    : filterCardsByTab(dashboard.value.cards, activeTabId.value, tabs.value)
+  return sortCardsByLayout(cards)
 })
 const tabSections = computed(() => {
   if (!dashboard.value || !tabs.value.length) return []
   return tabs.value.map((tab) => ({
     tab,
-    cards: filterCardsByTab(dashboard.value!.cards, tab.id, tabs.value),
+    cards: sortCardsByLayout(filterCardsByTab(dashboard.value!.cards, tab.id, tabs.value)),
   }))
 })
 /** 首屏无数据时用骨架网格；刷新时在各卡片内展示骨架 */
@@ -302,6 +305,28 @@ async function onExport(command: string) {
   }
 }
 
+function onMoreAction(command: string) {
+  if (command === 'fullscreen') {
+    toggleFullscreen()
+    return
+  }
+  if (command === 'png' || command === 'pdf') {
+    void onExport(command)
+    return
+  }
+  if (command === 'subscribe') {
+    router.push({ path: '/subscriptions', query: { dashboardId: dashboardId(), create: '1' } })
+    return
+  }
+  if (command === 'share') {
+    void openShareDialog()
+    return
+  }
+  if (command === 'edit') {
+    router.push(`/dashboards/${route.params.id}/edit`)
+  }
+}
+
 onMounted(() => load())
 watch(() => route.params.id, () => {
   parameterValues.value = {}
@@ -334,7 +359,7 @@ onBeforeUnmount(() => {
   >
     <div class="page-header no-export">
       <h1 class="page-title">{{ dashboard?.name || t('dashboard.title') }}</h1>
-      <div class="header-actions">
+      <div class="header-actions header-actions-desktop">
         <el-button text :loading="loading" @click="load({ forceRefresh: true })">{{ t('dashboard.refresh') }}</el-button>
         <el-button text @click="toggleFullscreen">
           {{ isFullscreen ? t('dashboard.exitFullscreen') : t('dashboard.fullscreen') }}
@@ -374,6 +399,30 @@ onBeforeUnmount(() => {
         >
           {{ t('common.edit') }}
         </el-button>
+      </div>
+      <div class="header-actions header-actions-mobile">
+        <el-button text :loading="loading" @click="load({ forceRefresh: true })">{{ t('dashboard.refresh') }}</el-button>
+        <el-dropdown trigger="click" :disabled="exporting || loading" @command="onMoreAction">
+          <el-button text>{{ t('dashboard.moreActions') }}</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="fullscreen">
+                {{ isFullscreen ? t('dashboard.exitFullscreen') : t('dashboard.fullscreen') }}
+              </el-dropdown-item>
+              <el-dropdown-item v-if="canExport" command="png">{{ t('dashboard.exportPng') }}</el-dropdown-item>
+              <el-dropdown-item v-if="canExport" command="pdf">{{ t('dashboard.exportPdf') }}</el-dropdown-item>
+              <el-dropdown-item v-if="!isFullscreen && canSubscribe" command="subscribe">
+                {{ t('dashboard.subscribe') }}
+              </el-dropdown-item>
+              <el-dropdown-item v-if="!isFullscreen && canEdit" command="share">
+                {{ t('dashboard.publicShare') }}
+              </el-dropdown-item>
+              <el-dropdown-item v-if="!isFullscreen && canEdit" divided command="edit">
+                {{ t('common.edit') }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
     <DashboardParameterBar
@@ -539,7 +588,37 @@ onBeforeUnmount(() => {
 }
 .dashboard-card { min-width: 0; min-height: 0; }
 .dashboard-card.is-table { min-height: 0; }
+.header-actions-mobile { display: none; }
 @media (max-width: 900px) {
-  .dashboard-card { grid-column: 1 / -1 !important; }
+  .dashboard-view {
+    padding: 12px;
+  }
+  .page-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .header-actions-desktop { display: none; }
+  .header-actions-mobile { display: flex; }
+  .dashboard-tabs {
+    overflow-x: auto;
+  }
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .dashboard-card {
+    grid-column: unset !important;
+    grid-row: unset !important;
+    width: 100%;
+    height: min(50vh, 280px);
+    min-height: 240px;
+    align-self: stretch;
+  }
+  .dashboard-card.is-table {
+    height: auto;
+    min-height: 0;
+    overflow-x: auto;
+  }
 }
 </style>

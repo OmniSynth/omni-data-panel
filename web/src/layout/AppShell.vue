@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, provide, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import QRCode from 'qrcode'
@@ -18,6 +18,7 @@ import type { Collection, CollectionItem, Id, ResourceType, SiteSettings } from 
 import { copyText } from '@/utils/clipboard'
 
 const SIDEBAR_COLLAPSED_KEY = 'omni.sidebarCollapsed'
+const NARROW_MQ = '(max-width: 960px)'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -29,6 +30,8 @@ const collections = ref<Collection[]>([])
 const treeKey = ref(0)
 const defaultExpandedKeys = ref<string[]>([])
 const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1')
+const isNarrow = ref(false)
+const mobileNavOpen = ref(false)
 const searchText = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const passwordVisible = ref(false)
 const passwordSaving = ref(false)
@@ -240,8 +243,32 @@ async function loadShell() {
 }
 
 function toggleSidebar() {
+  if (isNarrow.value) {
+    mobileNavOpen.value = !mobileNavOpen.value
+    return
+  }
   sidebarCollapsed.value = !sidebarCollapsed.value
   localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed.value ? '1' : '0')
+}
+
+function closeMobileNav() {
+  mobileNavOpen.value = false
+}
+
+function goHome() {
+  closeMobileNav()
+  router.push('/')
+}
+
+function onNavNodeClick(data: NavTreeNode) {
+  if (data.kind === 'TYPE_GROUP') return
+  if (data.kind === 'COLLECTION') {
+    router.push(`/collections/${data.resourceId}`)
+    closeMobileNav()
+    return
+  }
+  router.push(resourcePath(data.kind, data.resourceId))
+  closeMobileNav()
 }
 
 function logout() {
@@ -359,6 +386,7 @@ async function disableMfa() {
 
 function goSearch() {
   const q = searchText.value.trim()
+  closeMobileNav()
   router.push(q ? { path: '/search', query: { q } } : '/search')
 }
 
@@ -432,15 +460,6 @@ async function submitCreate() {
   }
 }
 
-function onNavNodeClick(data: NavTreeNode) {
-  if (data.kind === 'TYPE_GROUP') return
-  if (data.kind === 'COLLECTION') {
-    router.push(`/collections/${data.resourceId}`)
-    return
-  }
-  router.push(resourcePath(data.kind, data.resourceId))
-}
-
 function onUserMenu(command: string) {
   if (command === 'admin') router.push('/admin')
   else if (command === 'trash') router.push('/trash')
@@ -454,16 +473,51 @@ watch(() => route.query.q, (value) => {
   if (typeof value === 'string') searchText.value = value
 })
 
+watch(() => route.fullPath, () => {
+  closeMobileNav()
+})
+
 provide(refreshShellNavKey, loadShell)
-onMounted(loadShell)
+
+let narrowMedia: MediaQueryList | null = null
+function syncNarrow() {
+  isNarrow.value = !!narrowMedia?.matches
+  if (!isNarrow.value) mobileNavOpen.value = false
+}
+
+onMounted(() => {
+  narrowMedia = window.matchMedia(NARROW_MQ)
+  syncNarrow()
+  narrowMedia.addEventListener('change', syncNarrow)
+  void loadShell()
+})
+onBeforeUnmount(() => {
+  narrowMedia?.removeEventListener('change', syncNarrow)
+})
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'mobile-nav-open': mobileNavOpen }">
     <header class="topbar">
-      <div class="brand" @click="$router.push('/')">
-        <img class="brand-logo" src="/favicon.png" alt="" width="28" height="28" />
-        <span>{{ siteName }}</span>
+      <div class="topbar-leading">
+        <button
+          type="button"
+          class="menu-btn"
+          :aria-label="mobileNavOpen ? t('shell.collapseSidebar') : t('shell.expandSidebar')"
+          :aria-expanded="mobileNavOpen"
+          @click="toggleSidebar"
+        >
+          <svg class="menu-btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M4 7a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1zm0 5a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1zm1 4a1 1 0 1 0 0 2h14a1 1 0 1 0 0-2H5z"
+            />
+          </svg>
+        </button>
+        <div class="brand" @click="goHome">
+          <img class="brand-logo" src="/favicon.png" alt="" width="28" height="28" />
+          <span>{{ siteName }}</span>
+        </div>
       </div>
       <div class="search-wrap">
         <el-input
@@ -478,9 +532,10 @@ onMounted(loadShell)
         </el-input>
       </div>
       <div class="top-actions">
-        <ThemeSwitcher size="small" />
-        <FontSizeSwitcher size="small" />
-        <LanguageSwitcher size="small" />
+        <el-button class="search-icon-btn" text @click="goSearch">{{ t('common.search') }}</el-button>
+        <span class="desktop-only-switch"><ThemeSwitcher size="small" /></span>
+        <span class="desktop-only-switch"><FontSizeSwitcher size="small" /></span>
+        <span class="desktop-only-switch"><LanguageSwitcher size="small" /></span>
         <el-dropdown trigger="click" @command="openCreate">
           <el-button type="primary">{{ t('shell.create') }}</el-button>
           <template #dropdown>
@@ -496,7 +551,19 @@ onMounted(loadShell)
       </div>
     </header>
     <div class="body">
-      <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <div
+        v-show="mobileNavOpen"
+        class="nav-backdrop"
+        aria-hidden="true"
+        @click="closeMobileNav"
+      />
+      <aside
+        class="sidebar"
+        :class="{
+          collapsed: sidebarCollapsed && !isNarrow,
+          'mobile-open': mobileNavOpen,
+        }"
+      >
         <div class="sidebar-toolbar">
           <el-tooltip
             :content="sidebarCollapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')"
@@ -527,17 +594,19 @@ onMounted(loadShell)
         </div>
         <div class="sidebar-content">
           <nav class="nav-block">
-            <router-link class="nav-link" to="/" :class="{ active: route.path === '/' }">{{ t('shell.home') }}</router-link>
+            <router-link class="nav-link" to="/" :class="{ active: route.path === '/' }" @click="closeMobileNav">{{ t('shell.home') }}</router-link>
             <router-link
               class="nav-link"
               to="/dashboards"
               :class="{ active: route.path === '/dashboards' || route.path.startsWith('/dashboards/') }"
+              @click="closeMobileNav"
             >{{ t('shell.dashboards') }}</router-link>
             <router-link
               v-if="userStore.hasPermission('subscription:manage')"
               class="nav-link"
               to="/subscriptions"
               :class="{ active: route.path.startsWith('/subscriptions') }"
+              @click="closeMobileNav"
             >{{ t('shell.subscriptions') }}</router-link>
           </nav>
           <div class="nav-block">
@@ -569,15 +638,16 @@ onMounted(loadShell)
           </div>
           <div class="nav-block">
             <div class="nav-group">{{ t('shell.data') }}</div>
-            <router-link class="nav-link" to="/databases" :class="{ active: route.path.startsWith('/databases') }">{{ t('shell.dataSources') }}</router-link>
+            <router-link class="nav-link" to="/databases" :class="{ active: route.path.startsWith('/databases') }" @click="closeMobileNav">{{ t('shell.dataSources') }}</router-link>
             <router-link
               v-if="userStore.hasPermission('query:raw')"
               class="nav-link"
               to="/sql"
               :class="{ active: route.path.startsWith('/sql') }"
+              @click="closeMobileNav"
             >{{ t('shell.sqlQuery') }}</router-link>
-            <router-link class="nav-link" to="/models" :class="{ active: route.path.startsWith('/models') }">{{ t('shell.models') }}</router-link>
-            <router-link class="nav-link" to="/metrics" :class="{ active: route.path.startsWith('/metrics') }">{{ t('shell.metrics') }}</router-link>
+            <router-link class="nav-link" to="/models" :class="{ active: route.path.startsWith('/models') }" @click="closeMobileNav">{{ t('shell.models') }}</router-link>
+            <router-link class="nav-link" to="/metrics" :class="{ active: route.path.startsWith('/metrics') }" @click="closeMobileNav">{{ t('shell.metrics') }}</router-link>
           </div>
         </div>
         <div class="nav-footer">
@@ -1002,5 +1072,100 @@ onMounted(loadShell)
 :deep(.el-tree-node.is-current > .el-tree-node__content) {
   background: var(--omni-accent-soft);
   color: var(--omni-accent-strong);
+}
+.menu-btn {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--omni-text);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.menu-btn:hover {
+  background: var(--omni-accent-soft);
+}
+.menu-btn-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+.topbar-leading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.search-icon-btn {
+  display: none;
+}
+.nav-backdrop {
+  display: none;
+}
+@media (max-width: 960px) {
+  .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 0 12px;
+  }
+  .menu-btn { display: inline-flex; }
+  .search-wrap { display: none; }
+  .search-icon-btn { display: inline-flex; }
+  .desktop-only-switch { display: none; }
+  .brand span {
+    max-width: 42vw;
+  }
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 56px 0 0 0;
+    z-index: 35;
+    background: rgba(15, 23, 42, 0.45);
+  }
+  .sidebar {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    bottom: 0;
+    z-index: 40;
+    width: min(280px, 86vw) !important;
+    padding: 8px 10px 12px !important;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    box-shadow: 8px 0 24px rgba(15, 23, 42, 0.12);
+  }
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+  .sidebar .sidebar-toolbar {
+    display: none;
+  }
+  .sidebar .sidebar-content {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    visibility: visible !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: auto !important;
+    overflow: auto !important;
+  }
+  .sidebar .nav-footer {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    visibility: visible !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding-top: 12px;
+    border-top: 1px solid var(--omni-border);
+  }
+  .content {
+    min-width: 0;
+    width: 100%;
+  }
 }
 </style>

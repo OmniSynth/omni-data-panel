@@ -182,6 +182,16 @@ export function filterCardsByTab<T extends { layoutJson: string }>(
   return cards.filter((card) => resolveCardTabId(card.layoutJson, tabs) === active)
 }
 
+/** 按布局 y 再 x 排序，供窄屏纵向堆叠时保持阅读顺序。 */
+export function sortCardsByLayout<T extends { layoutJson: string }>(cards: T[]): T[] {
+  return [...cards].sort((a, b) => {
+    const left = parseLayoutJson(a.layoutJson)
+    const right = parseLayoutJson(b.layoutJson)
+    if (left.y !== right.y) return left.y - right.y
+    return left.x - right.x
+  })
+}
+
 export function defaultParameterValues(parameters: DashboardParameter[]): Record<string, unknown> {
   const values: Record<string, unknown> = {}
   for (const parameter of parameters) {
